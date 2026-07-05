@@ -28,10 +28,10 @@ type Settings struct {
 	// 默认上传配置
 	MaxFileSize        int    `gorm:"column:max_file_size;default:10485760" json:"max_file_size"` // 文件最大上传大小
 	AllowedTypes       string `gorm:"column:allowed_types;default:'image/jpeg,image/png,image/gif,image/webp,image/svg+xml'" json:"allowed_types"`
-	MainImageQuality   int    `gorm:"column:main_image_quality;default:85" json:"main_image_quality"`                              // 主图WebP质量
-	SkipCompressFormat string `gorm:"column:skip_compress_formats;default:'image/gif,image/svg+xml'" json:"skip_compress_formats"` // 跳过主图压缩/转换的格式
-	DefaultPath        string `gorm:"column:default_path;default:'/uploads/{year}/{moon}'" json:"default_path"`                     // 默认上传路径，魔法变量 {year} 年 {month} 月 {day} 日 {hour} 小时 {minute} 分钟 {random} 随机 {uuid} UUID {role} 角色（1 为管理员, 2 为游客）
-	FileName           string `gorm:"column:file_name;default:'{random}'" json:"file_name"`                                         // 上传文件名称，魔法变量 {random} 随机数 {year} 年 {month} 月 {day} 日 {hour} 小时 {minute} 分钟 {second} 秒
+	MainImageQuality   int    `gorm:"column:main_image_quality;default:85" json:"main_image_quality"`                                         // 主图WebP质量
+	SkipCompressFormat string `gorm:"column:skip_compress_formats;default:'image/gif,image/svg+xml,image/webp'" json:"skip_compress_formats"` // 跳过主图压缩/转换的格式
+	DefaultPath        string `gorm:"column:default_path;default:'/uploads/{year}/{moon}'" json:"default_path"`                               // 默认上传路径，魔法变量 {year} 年 {month} 月 {day} 日 {hour} 小时 {minute} 分钟 {random} 随机 {uuid} UUID {role} 角色（1 为管理员, 2 为游客）
+	FileName           string `gorm:"column:file_name;default:'{random}'" json:"file_name"`                                                   // 上传文件名称，魔法变量 {random} 随机数 {year} 年 {month} 月 {day} 日 {hour} 小时 {minute} 分钟 {second} 秒
 
 	// 图片直链设置
 	PublicImageDomain string `gorm:"column:public_image_domain;default:''" json:"public_image_domain"` // 图片直链域名（用于非本地存储直接访问）

@@ -69,6 +69,7 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	subDir = strings.TrimPrefix(subDir, "/") // S3/R2 key 通常不以 / 开头
 
 	objectKey := PathJoin(subDir, uniqueFileName)
+	thumbnailPath := buildThumbnailPath(subDir, uniqueFileName)
 
 	// 获取R2客户端
 	client, err := s3.NewS3Client(*setting, *bucket)
@@ -93,15 +94,15 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 
 	thumbnailURL := ""
 	// 检查是否上传缩略图
-	if setting.Thumbnail {
+	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
 		_, err = client.PutObject(context.TODO(), &awss3.PutObjectInput{
 			Bucket:      aws.String(storageConfig.R2Bucket),
-			Key:         aws.String(PathJoin(subDir, "thumbnails", uniqueFileName)), // 缩略图存放路径
+			Key:         aws.String(thumbnailPath),
 			Body:        bytes.NewReader(processedImage.ThumbnailBytes),
 			ContentType: aws.String("image/webp"),
 		})
 		if err == nil {
-			thumbnailURL = "/" + PathJoin(subDir, "thumbnails", uniqueFileName)
+			thumbnailURL = ensureLeadingSlash(thumbnailPath)
 		}
 	}
 
@@ -157,6 +158,7 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	subDir = strings.TrimPrefix(subDir, "/") // S3/R2 key 通常不以 / 开头
 
 	objectKey := PathJoin(subDir, uniqueFileName)
+	thumbnailPath := buildThumbnailPath(subDir, uniqueFileName)
 
 	// 获取S3客户端
 	client, err := s3.NewS3Client(*setting, *bucket)
@@ -181,15 +183,15 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 
 	thumbnailURL := ""
 	// 检查是否上传缩略图
-	if setting.Thumbnail {
+	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
 		_, err = client.PutObject(context.TODO(), &awss3.PutObjectInput{
 			Bucket:      aws.String(storageConfig.S3Bucket),
-			Key:         aws.String(PathJoin(subDir, "thumbnails", uniqueFileName)), // 缩略图存放路径
+			Key:         aws.String(thumbnailPath),
 			Body:        bytes.NewReader(processedImage.ThumbnailBytes),
 			ContentType: aws.String("image/webp"),
 		})
 		if err == nil {
-			thumbnailURL = "/" + PathJoin(subDir, "thumbnails", uniqueFileName)
+			thumbnailURL = ensureLeadingSlash(thumbnailPath)
 		}
 	}
 
@@ -249,6 +251,7 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 	}
 
 	objectPath := PathJoin(subDir, uniqueFileName)
+	thumbnailPath := ensureLeadingSlash(buildThumbnailPath(subDir, uniqueFileName))
 
 	// 获取存储配置
 	storageConfig := buckets.ConvertToWebDavBucket(bucket.Config)
@@ -269,10 +272,10 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 
 	// 检查是否上传缩略图
 	thumbnailURL := ""
-	if setting.Thumbnail {
-		err = client.WebDAVUpload(context.TODO(), PathJoin(subDir, "thumbnails", uniqueFileName), bytes.NewReader(processedImage.ThumbnailBytes))
+	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
+		err = client.WebDAVUpload(context.TODO(), thumbnailPath, bytes.NewReader(processedImage.ThumbnailBytes))
 		if err == nil {
-			thumbnailURL = PathJoin(subDir, "thumbnails", uniqueFileName)
+			thumbnailURL = thumbnailPath
 		}
 	}
 
@@ -328,6 +331,7 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 	}
 	subDir := images.ImageSvc.ReplaceMagicVariables(uploadPath, fileHeader.Filename, userRole)
 	objectPath := PathJoin(subDir, uniqueFileName)
+	thumbnailPath := ensureLeadingSlash(buildThumbnailPath(subDir, uniqueFileName))
 
 	// 获取存储配置
 	storageConfig := buckets.ConvertToFTPBucket(bucket.Config)
@@ -352,14 +356,14 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 
 	// 检查是否上传缩略图
 	thumbnailURL := ""
-	if setting.Thumbnail {
+	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
 		err := ftpUtil.UploadImage(
-			PathJoin(subDir, "thumbnails", uniqueFileName),
+			thumbnailPath,
 			processedImage.ThumbnailBytes,
 			"image/webp",
 		)
 		if err == nil {
-			thumbnailURL = "/" + PathJoin(subDir, "thumbnails", uniqueFileName)
+			thumbnailURL = thumbnailPath
 		}
 	}
 
@@ -414,6 +418,7 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 	subDir := images.ImageSvc.ReplaceMagicVariables(uploadPath, fileHeader.Filename, userRole)
 	// 本地存储通常不以 / 开头（相对路径）
 	subDir = strings.TrimPrefix(subDir, "/")
+	thumbnailPath := ensureLeadingSlash(buildThumbnailPath(subDir, uniqueFileName))
 
 	// 确保子目录存在
 	fullSubDir := filepath.Join(".", subDir)
@@ -430,16 +435,15 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 	}
 	thumbnailURL := ""
 	// 检查是否上传缩略图
-	if setting.Thumbnail {
-		if err := ensureUploadDir(filepath.Join(fullSubDir, "thumbnails")); err == nil {
-			// 构建缩略图文件路径
-			thumbFilePath := filepath.Join(fullSubDir, "thumbnails", uniqueFileName)
+	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
+		thumbFilePath := localThumbnailFilePath(thumbnailPath)
+		if err := ensureUploadDir(filepath.Dir(thumbFilePath)); err == nil {
 			// 保存缩略图文件
 			if err := saveFile(thumbFilePath, processedImage.ThumbnailBytes); err != nil {
 				log.Println(err)
 				// 忽略错误
 			}
-			thumbnailURL = "/" + PathJoin(subDir, "thumbnails", uniqueFileName)
+			thumbnailURL = thumbnailPath
 		}
 	}
 
@@ -509,6 +513,7 @@ func (u *TelegramUploader) Upload(c *gin.Context, setting *models.Settings, buck
 	tgClient.Retry = 3
 
 	uniqueFileName := processedImage.UniqueFileName
+	thumbnailPath := ensureLeadingSlash(buildThumbnailPath(subDir, uniqueFileName))
 
 	// 上传主图片
 	fileID, messageID, err := tgClient.UploadPhotoByBytes(
@@ -529,14 +534,14 @@ func (u *TelegramUploader) Upload(c *gin.Context, setting *models.Settings, buck
 		thumbFileID, thumbMessageID, err := tgClient.UploadPhotoByBytes(
 			storageConfig.TGReceivers,
 			processedImage.ThumbnailBytes,
-			fmt.Sprintf("thumbnail_%s", uniqueFileName),
+			fmt.Sprintf("thumbnail_%s", thumbnailFileName(uniqueFileName)),
 			fmt.Sprintf("缩略图: %s", processedImage.UniqueFileName),
 		)
 		if err == nil {
 			// Telegram没有直接的URL，这里存储fileID作为标识
 			thumbFileIDURL = thumbFileID
 			thumbFileMessageID = thumbMessageID
-			thumbnailURL = "/" + PathJoin(subDir, "thumbnails", uniqueFileName)
+			thumbnailURL = thumbnailPath
 		} else {
 			log.Printf("Telegram上传缩略图失败: %v", err)
 		}
@@ -600,6 +605,34 @@ func getProcessingSettings(setting *models.Settings, bucket *models.Buckets) mod
 		processingSettings.WatermarkEnable = false
 	}
 	return processingSettings
+}
+
+func buildThumbnailPath(subDir, uniqueFileName string) string {
+	relDir := strings.Trim(strings.TrimPrefix(strings.Trim(subDir, "/"), "uploads/"), "/")
+	fileName := thumbnailFileName(uniqueFileName)
+	if relDir == "" || relDir == "uploads" {
+		return PathJoin("thumbnails", fileName)
+	}
+	return PathJoin("thumbnails", relDir, fileName)
+}
+
+func thumbnailFileName(fileName string) string {
+	ext := filepath.Ext(fileName)
+	if ext == "" {
+		return fileName + ".webp"
+	}
+	return strings.TrimSuffix(fileName, ext) + ".webp"
+}
+
+func localThumbnailFilePath(thumbnailPath string) string {
+	return filepath.Join(".", "data", strings.TrimPrefix(thumbnailPath, "/"))
+}
+
+func ensureLeadingSlash(path string) string {
+	if path == "" || strings.HasPrefix(path, "/") {
+		return path
+	}
+	return "/" + path
 }
 
 // 辅助函数

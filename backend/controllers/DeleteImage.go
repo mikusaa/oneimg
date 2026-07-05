@@ -135,26 +135,32 @@ func DeleteImage(c *gin.Context) {
 
 // 删除默认存储的图片
 func DeleteDefaultStorageImage(image models.Image) (deleteStatus bool) {
-	relativePath := image.Url
-	relativePath = strings.TrimPrefix(relativePath, "/")
-	relativePath = strings.TrimPrefix(relativePath, "uploads/")
-	// 构建完整文件路径
-	filePath := filepath.Join("./uploads", relativePath)
 	// 删除物理文件
-	if err := os.Remove(filePath); err != nil {
+	if err := os.Remove(defaultStorageImageFilePath(image.Url)); err != nil {
 		// 文件可能已经不存在，记录日志但不阻止删除数据库记录
 	}
 	// 检查是否存在缩略图
 	if image.Thumbnail != "" {
-		relativePath = image.Thumbnail
-		relativePath = strings.TrimPrefix(relativePath, "/")
-		relativePath = strings.TrimPrefix(relativePath, "uploads/")
-		filePath = filepath.Join("./uploads", relativePath)
-		if err := os.Remove(filePath); err != nil {
+		if err := os.Remove(defaultStorageThumbnailFilePath(image.Thumbnail)); err != nil {
 			// 文件可能已经不存在，记录日志但不阻止删除数据库记录
 		}
 	}
 	return true
+}
+
+func defaultStorageImageFilePath(path string) string {
+	relativePath := strings.TrimPrefix(path, "/")
+	relativePath = strings.TrimPrefix(relativePath, "uploads/")
+	return filepath.Join("./uploads", relativePath)
+}
+
+func defaultStorageThumbnailFilePath(path string) string {
+	relativePath := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(path)), "/")
+	if strings.HasPrefix(relativePath, "thumbnails/") {
+		return filepath.Join("./data", relativePath)
+	}
+	relativePath = strings.TrimPrefix(relativePath, "uploads/")
+	return filepath.Join("./uploads", relativePath)
 }
 
 // 删除R2存储的图片

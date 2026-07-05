@@ -735,7 +735,7 @@ const systemSettings = reactive({
     max_file_size: 10485760,
     allowed_types: 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml',
     main_image_quality: 85,
-    skip_compress_formats: 'image/gif,image/svg+xml',
+    skip_compress_formats: 'image/gif,image/svg+xml,image/webp',
     default_path: '/uploads/{year}/{moon}',
     file_name: '{random}',
     public_image_domain: '',
@@ -975,7 +975,7 @@ const handleFieldBlur = (key, value) => {
         value = String(value || '').trim()
         if (value === '') {
             message.warning('跳过压缩格式不能为空')
-            systemSettings.skip_compress_formats = updateSetting.skip_compress_formats || 'image/gif,image/svg+xml'
+            systemSettings.skip_compress_formats = updateSetting.skip_compress_formats || 'image/gif,image/svg+xml,image/webp'
             return
         }
         systemSettings.skip_compress_formats = value

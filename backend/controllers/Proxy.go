@@ -91,9 +91,12 @@ func ImageProxy(c *gin.Context) bool {
 	}
 
 	var imageUrl string
+	mimeType := imageModel.MimeType
+	isThumbnail := imageModel.Thumbnail == cleanPath
 	// 判断当前访问的是缩略图还是原图
-	if imageModel.Thumbnail == cleanPath {
+	if isThumbnail {
 		imageUrl = imageModel.Thumbnail
+		mimeType = "image/webp"
 	} else {
 		imageUrl = imageModel.Url
 	}
@@ -101,10 +104,10 @@ func ImageProxy(c *gin.Context) bool {
 	// 传递水印配置到各个代理函数
 	switch imageModel.Storage {
 	case "default":
-		proxyLocalFile(c, imageUrl, imageModel.MimeType, watermarkCfg)
+		proxyLocalFile(c, imageUrl, mimeType, watermarkCfg)
 
 	case "webdav":
-		proxyWebDAVFile(c, imageUrl, imageModel.MimeType, imageModel.FileSize, bucket, watermarkCfg)
+		proxyWebDAVFile(c, imageUrl, mimeType, imageModel.FileSize, bucket, watermarkCfg)
 	case "r2":
 		// 初始化S3客户端
 		s3Client, err := s3.NewS3Client(setting, bucket)
@@ -112,7 +115,7 @@ func ImageProxy(c *gin.Context) bool {
 			c.JSON(http.StatusInternalServerError, result.Error(500, fmt.Sprintf("R2客户端初始化失败: %v", err)))
 			return true
 		}
-		proxyR2File(c, imageUrl, imageModel.MimeType, imageModel.FileSize, bucket, s3Client, watermarkCfg)
+		proxyR2File(c, imageUrl, mimeType, imageModel.FileSize, bucket, s3Client, watermarkCfg)
 
 	case "s3":
 		// 初始化S3客户端
@@ -122,13 +125,13 @@ func ImageProxy(c *gin.Context) bool {
 			return true
 		}
 		// 代理S3/R2文件
-		proxyS3File(c, imageUrl, imageModel.MimeType, imageModel.FileSize, bucket, s3Client, watermarkCfg)
+		proxyS3File(c, imageUrl, mimeType, imageModel.FileSize, bucket, s3Client, watermarkCfg)
 
 	case "ftp":
-		proxyFTPFile(c, imageUrl, imageModel.MimeType, bucket, watermarkCfg)
+		proxyFTPFile(c, imageUrl, mimeType, bucket, watermarkCfg)
 
 	case "telegram":
-		ProxyTelegramFile(c, imageUrl, imageModel.FileName, imageModel.MimeType, setting, bucket, watermarkCfg)
+		ProxyTelegramFile(c, imageUrl, imageModel.FileName, mimeType, setting, bucket, watermarkCfg)
 
 	default:
 		c.JSON(http.StatusUnprocessableEntity, result.Error(422, fmt.Sprintf("不支持的存储类型: %s", imageModel.Storage)))
@@ -427,7 +430,7 @@ func proxyWebDAVFile(c *gin.Context, relPath, mimeType string, fileSize int64, b
 
 // proxyLocalFile 本地文件代理（添加水印支持）
 func proxyLocalFile(c *gin.Context, realPath string, mimeType string, watermarkCfg watermark.WatermarkConfig) {
-	fullPath := filepath.Join(filepath.Clean(realPath))
+	fullPath := localProxyPath(realPath)
 	// 去除第一个/和\
 	fullPath = strings.TrimPrefix(fullPath, "/")
 	fullPath = strings.TrimPrefix(fullPath, "\\")
@@ -487,6 +490,19 @@ func proxyLocalFile(c *gin.Context, realPath string, mimeType string, watermarkC
 
 	// 流式传输
 	c.File(fullPath)
+}
+
+func localProxyPath(realPath string) string {
+	cleanPath := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(realPath)), "/")
+	if strings.HasPrefix(cleanPath, "thumbnails/") {
+		return filepath.Join(".", "data", cleanPath)
+	}
+	return filepath.Join(cleanPath)
+}
+
+func isThumbnailPath(path string) bool {
+	cleanPath := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(path)), "/")
+	return strings.HasPrefix(cleanPath, "thumbnails/") || strings.Contains(cleanPath, "/thumbnails/")
 }
 
 // FTP代理（添加水印支持）
@@ -638,9 +654,8 @@ func ProxyTelegramFile(c *gin.Context, realPath string, telegramFileName string,
 	}
 
 	// 3. 调用telegram包解析FileId
-	// 检查是否为缩略图（链接格式：/uploads/Y/d/thumbnails/xxxxx.webp）
 	var fileId string
-	if strings.Contains(realPath, "/thumbnails/") && strings.HasSuffix(realPath, ".webp") {
+	if isThumbnailPath(realPath) {
 		fileId = telegram.ParseFileIdFromTelegramPath(telegramModel.TGThumbnailFileId)
 	} else {
 		fileId = telegram.ParseFileIdFromTelegramPath(telegramModel.TGFileId)
