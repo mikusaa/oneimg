@@ -201,7 +201,7 @@ const formatReleaseDate = (dateStr) => {
 // 获取Github最新版本信息
 const getLatestVersion = async () => {
     try {
-        const res = await fetch('https://api.github.com/repos/onexru/oneimg/releases/latest')
+        const res = await fetch('https://api.github.com/repos/mikusaa/oneimg/releases/latest')
         if (res.ok) {
             const data = await res.json()
             latestVersion.value = data

@@ -65,6 +65,29 @@ func BuildForStorage(setting models.Settings, storage string, bucketID int, imag
 	return Build(setting, imagePath)
 }
 
+func BuildCDNForStorage(setting models.Settings, storage string, imagePath string) string {
+	path := strings.TrimSpace(imagePath)
+	if storage != "default" || path == "" || isAbsoluteURL(path) {
+		return imagePath
+	}
+
+	domain, err := NormalizeDomain(setting.CDNDomain)
+	if err != nil || domain == "" {
+		return imagePath
+	}
+
+	cdnPath := strings.TrimPrefix(path, "/")
+	if !strings.HasPrefix(cdnPath, "uploads/") {
+		return imagePath
+	}
+	cdnPath = strings.TrimPrefix(cdnPath, "uploads/")
+	if cdnPath == "" {
+		return imagePath
+	}
+
+	return strings.TrimRight(domain, "/") + "/" + cdnPath
+}
+
 func SupportsStorage(storage string) bool {
 	return storage == "r2" || storage == "s3"
 }

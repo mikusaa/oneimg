@@ -33,6 +33,7 @@ type Settings struct {
 
 	// 图片直链设置
 	PublicImageDomain string `gorm:"column:public_image_domain;default:''" json:"public_image_domain"` // 图片直链域名（用于非本地存储直接访问）
+	CDNDomain         string `gorm:"column:cdn_domain;default:''" json:"cdn_domain"`                   // 本地存储CDN域名（根路径指向uploads目录）
 
 	// 水印设置
 	WatermarkEnable bool    `gorm:"column:watermark_enable;default:false" json:"watermark_enable"`    // 是否启用水印（默认不启用）

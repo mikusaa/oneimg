@@ -4,7 +4,7 @@
 
 ## 开发者
 
-- [onexru](https://github.com/onexru)
+- [mikusaa](https://github.com/mikusaa/oneimg)
 - [雾创岛](https://www.tr0.cn)
 - [打赏赞助](https://www.cv0.cn/donate)
 - [QQ群](https://qm.qq.com/q/lzT9IDkKVG)
@@ -39,7 +39,7 @@ admin
 
 1. **克隆项目**
 ```bash
-git clone https://github.com/onexru/oneimg.git
+git clone https://github.com/mikusaa/oneimg.git
 cd oneimg
 ```
 
@@ -62,7 +62,7 @@ docker run -d \
 -p 8080:8080 \
 -v /data/oneimg:/app/data \
 --restart unless-stopped \
-onexru/oneimg-oneimg
+mikusaa/oneimg
 ```
 
 ### 获取TelegramID

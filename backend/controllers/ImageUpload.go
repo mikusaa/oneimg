@@ -183,7 +183,6 @@ func UploadImages(c *gin.Context) {
 
 		responseResult := *fileResult
 		responseResult.URL = applyPublicImageURL(setting, buckets.Type, bucketID, fileResult.URL)
-		responseResult.ThumbnailURL = applyPublicImageURL(setting, buckets.Type, bucketID, fileResult.ThumbnailURL)
 		uploadResults = append(uploadResults, responseResult)
 
 		if setting.TGNotice {
@@ -701,7 +700,6 @@ func UploadImagesByURL(c *gin.Context) {
 
 	responseResult := *fileResult
 	responseResult.URL = applyPublicImageURL(setting, buckets.Type, bucketID, fileResult.URL)
-	responseResult.ThumbnailURL = applyPublicImageURL(setting, buckets.Type, bucketID, fileResult.ThumbnailURL)
 
 	uc.Success("URL 图片上传成功", map[string]any{
 		"file": responseResult,

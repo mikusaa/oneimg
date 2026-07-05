@@ -10,7 +10,7 @@ import (
 )
 
 func buildImageResponseURL(c *gin.Context, setting models.Settings, storage string, bucketID int, path string) string {
-	publicPath := publicurl.BuildForStorage(setting, storage, bucketID, path)
+	publicPath := applyPublicImageURL(setting, storage, bucketID, path)
 	if publicPath == "" || strings.HasPrefix(publicPath, "http://") || strings.HasPrefix(publicPath, "https://") {
 		return publicPath
 	}
@@ -18,12 +18,15 @@ func buildImageResponseURL(c *gin.Context, setting models.Settings, storage stri
 }
 
 func applyPublicImageURL(setting models.Settings, storage string, bucketID int, path string) string {
+	cdnPath := publicurl.BuildCDNForStorage(setting, storage, path)
+	if cdnPath != path {
+		return cdnPath
+	}
 	return publicurl.BuildForStorage(setting, storage, bucketID, path)
 }
 
 func rewriteImageURLs(setting models.Settings, image *models.Image) {
 	image.Url = applyPublicImageURL(setting, image.Storage, image.BucketId, image.Url)
-	image.Thumbnail = applyPublicImageURL(setting, image.Storage, image.BucketId, image.Thumbnail)
 }
 
 func getRequestBaseURL(c *gin.Context) string {

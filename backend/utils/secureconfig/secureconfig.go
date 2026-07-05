@@ -94,6 +94,7 @@ func SanitizeSettingsForResponse(setting models.Settings) map[string]any {
 		"max_file_size":           setting.MaxFileSize,
 		"allowed_types":           setting.AllowedTypes,
 		"public_image_domain":     setting.PublicImageDomain,
+		"cdn_domain":              setting.CDNDomain,
 		"watermark_enable":        setting.WatermarkEnable,
 		"watermark_text":          setting.WatermarkText,
 		"watermark_pos":           setting.WatermarkPos,

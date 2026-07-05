@@ -241,7 +241,6 @@ func GetImageList(c *gin.Context) {
 	}
 	for i := range images {
 		images[i].Url = applyPublicImageURL(setting, images[i].Storage, images[i].BucketId, images[i].Url)
-		images[i].Thumbnail = applyPublicImageURL(setting, images[i].Storage, images[i].BucketId, images[i].Thumbnail)
 	}
 
 	// 返回结果

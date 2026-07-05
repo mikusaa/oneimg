@@ -75,6 +75,23 @@
                                 </div>
                             </div>
 
+                            <div class="setting-group">
+                                <label class="field-label" for="cdn_domain">
+                                    CDN 域名
+                                </label>
+                                <input
+                                    id="cdn_domain"
+                                    v-model="systemSettings.cdn_domain"
+                                    type="text"
+                                    class="input-modern"
+                                    placeholder="例如 http://localhost:8081"
+                                    @blur="handleFieldBlur('cdn_domain', systemSettings.cdn_domain)"
+                                />
+                                <div class="field-hint">
+                                    用于本地存储主图直链，CDN 根路径需要指向 uploads 目录，返回链接会自动去掉 /uploads 前缀。
+                                </div>
+                            </div>
+
                             <!-- 默认存储路径 -->
                             <div class="setting-group">
                                 <label class="field-label" for="default_path">
@@ -685,7 +702,8 @@ const systemSettings = reactive({
     allowed_types: 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml',
     default_path: '/uploads/{year}/{moon}',
     file_name: '{random}',
-    public_image_domain: ''
+    public_image_domain: '',
+    cdn_domain: ''
 })
 
 const updateSetting = reactive({})
@@ -740,7 +758,7 @@ const disabledByPublicImageDomain = (key) => {
     return hasPublicImageDomain.value && publicDomainAffectedSettings.includes(key)
 }
 
-const normalizePublicImageDomain = (value) => {
+const normalizeDomain = (value) => {
     let domain = String(value || '').trim()
     if (domain === '') {
         return ''
@@ -750,6 +768,8 @@ const normalizePublicImageDomain = (value) => {
     }
     return domain.replace(/\/+$/, '')
 }
+
+const normalizePublicImageDomain = normalizeDomain
 
 // 加载状态
 const isUpdating = ref(false)
@@ -892,12 +912,12 @@ const handleFieldBlur = (key, value) => {
         return
     }
 
-    if (key === 'public_image_domain') {
-        const normalizedValue = normalizePublicImageDomain(value)
-        systemSettings.public_image_domain = normalizedValue
+    if (key === 'public_image_domain' || key === 'cdn_domain') {
+        const normalizedValue = normalizeDomain(value)
+        systemSettings[key] = normalizedValue
         value = normalizedValue
 
-        if (publicImageDomainUnavailable.value && normalizedValue !== '') {
+        if (key === 'public_image_domain' && publicImageDomainUnavailable.value && normalizedValue !== '') {
             message.warning('当前默认存储不支持图片直链域名')
             systemSettings.public_image_domain = updateSetting.public_image_domain || ''
             return
@@ -918,7 +938,7 @@ const handleFieldBlur = (key, value) => {
             }
         }
     }
-    if ((value === '' && key !== 'public_image_domain') || value === updateSetting[key]) {
+    if ((value === '' && key !== 'public_image_domain' && key !== 'cdn_domain') || value === updateSetting[key]) {
         return
     }
     if (key == 'api_token' && value === '') {

@@ -208,6 +208,12 @@ func buildSettingsUpdate(key string, value any, fieldName string, fieldType refl
 			return "", nil, err
 		}
 		return "public_image_domain", domain, nil
+	case "cdn_domain":
+		domain, err := publicurl.NormalizeDomain(fmt.Sprintf("%v", value))
+		if err != nil {
+			return "", nil, err
+		}
+		return "cdn_domain", domain, nil
 	default:
 		convertedValue, convertErr := convertValueToTargetType(key, value, fieldType)
 		if convertErr != nil {
@@ -390,12 +396,15 @@ func validateSettingData(key string, value any) error {
 	}
 
 	switch key {
-	case "public_image_domain":
+	case "public_image_domain", "cdn_domain":
 		domain, err := publicurl.NormalizeDomain(fmt.Sprintf("%v", value))
 		if err != nil {
 			return err
 		}
 		if domain == "" {
+			return nil
+		}
+		if key == "cdn_domain" {
 			return nil
 		}
 		setting, err := settings.GetSettings()
