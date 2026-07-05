@@ -27,7 +27,6 @@ import (
 // 常量定义
 const (
 	DefaultCompressQuality = 85
-	OriginalQuality        = 100
 	ThumbnailMaxWidth      = 300
 	ThumbnailMaxHeight     = 300
 	ThumbnailQuality       = 80
@@ -119,6 +118,10 @@ func (s *ImageService) ProcessImage(
 		"image/heic":    ".heic",
 		"image/heif":    ".heif",
 	}
+	finalExt := outputExt[finalMimeType]
+	if finalExt == "" {
+		finalExt = "." + strings.TrimPrefix(format, ".")
+	}
 
 	// 6. 生成缩略图（SVG单独处理）
 	thumbnailBytes, err := s.generateThumbnail(img, finalFormat, finalMimeType, fileBytes) // 新增原始字节参数
@@ -131,13 +134,14 @@ func (s *ImageService) ProcessImage(
 	// 7. 处理文件名
 	fileName := ""
 	if setting.SaveOriginalName {
-		fileName = originalFileName
+		ext := filepath.Ext(originalFileName)
+		fileName = strings.TrimSuffix(originalFileName, ext) + finalExt
 	} else {
 		pattern := setting.FileName
 		if pattern == "" {
 			pattern = "{random}"
 		}
-		fileName = s.ReplaceMagicVariables(pattern, originalFileName, userRole) + outputExt[finalMimeType]
+		fileName = s.ReplaceMagicVariables(pattern, originalFileName, userRole) + finalExt
 	}
 
 	// 8. 组装返回结果
@@ -149,7 +153,7 @@ func (s *ImageService) ProcessImage(
 		Height:          height,
 		Format:          finalFormat,
 		MimeType:        finalMimeType,
-		OutputExt:       outputExt[finalMimeType],
+		OutputExt:       finalExt,
 		UniqueFileName:  fileName,
 	}, nil
 }
@@ -162,12 +166,16 @@ func (s *ImageService) processMainImage(
 	fileSize int64,
 	setting models.Settings,
 ) ([]byte, string, string, error) {
-	// 特殊格式（GIF/SVG）直接返回原数据，不处理水印和压缩
-	if s.isSpecialFormat(format, mimeType) {
-		if format == "svg" || mimeType == "image/svg+xml" {
-			return fileBytes, "svg", "image/svg+xml", nil
-		}
-		return fileBytes, format, mimeType, nil
+	finalMimeType := normalizeMimeType(format, mimeType)
+
+	// 保存原图优先级最高：不转格式、不压缩、不加水印。
+	if setting.OriginalImage {
+		return fileBytes, format, finalMimeType, nil
+	}
+
+	// 命中跳过格式时，主图保持原文件；缩略图仍按后续流程单独生成。
+	if s.shouldSkipCompression(format, finalMimeType, setting.SkipCompressFormat) {
+		return fileBytes, format, finalMimeType, nil
 	}
 
 	// 添加水印
@@ -188,22 +196,18 @@ func (s *ImageService) processMainImage(
 		}
 	}
 
+	quality := normalizeMainImageQuality(setting.MainImageQuality)
+
 	// WebP格式处理
 	if strings.ToLower(format) == "webp" {
-		if setting.OriginalImage || fileSize <= CompressSizeThreshold {
+		if fileSize <= CompressSizeThreshold {
 			return fileBytes, "webp", "image/webp", nil
 		}
-		compressed, err := s.compressWebP(img, DefaultCompressQuality)
+		compressed, err := s.compressWebP(img, quality)
 		if err != nil {
 			return nil, "", "", fmt.Errorf("compress webp: %w", err)
 		}
 		return compressed, "webp", "image/webp", nil
-	}
-
-	// 其他格式处理
-	quality := OriginalQuality
-	if !setting.OriginalImage && fileSize > CompressSizeThreshold {
-		quality = DefaultCompressQuality
 	}
 
 	// 需要转换为WebP
@@ -216,17 +220,12 @@ func (s *ImageService) processMainImage(
 		return webpData, "webp", "image/webp", nil
 	}
 
-	// 保存原图
-	if setting.OriginalImage {
-		return fileBytes, format, mimeType, nil
-	}
-
 	// 默认进行压缩
-	compressed, err := s.compressWebP(img, DefaultCompressQuality)
+	compressed, err := s.compressWebP(img, quality)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("compress webp: %w", err)
 	}
-	return compressed, format, mimeType, nil
+	return compressed, "webp", "image/webp", nil
 }
 
 // generateThumbnail 生成缩略图（新增SVG处理）
@@ -264,6 +263,81 @@ func (s *ImageService) isSpecialFormat(format, mimeType string) bool {
 	return false
 }
 
+func (s *ImageService) shouldSkipCompression(format, mimeType, skipFormats string) bool {
+	rules := parseFormatList(skipFormats)
+	if len(rules) == 0 {
+		rules = parseFormatList("image/gif,image/svg+xml")
+	}
+
+	format = normalizeFormatToken(format)
+	mimeType = normalizeFormatToken(mimeType)
+	ext := strings.TrimPrefix(format, ".")
+
+	for _, rule := range rules {
+		if rule == "" {
+			continue
+		}
+		if rule == mimeType || rule == format || rule == ext || rule == "."+ext {
+			return true
+		}
+		if strings.HasPrefix(rule, "image/") && strings.TrimPrefix(rule, "image/") == ext {
+			return true
+		}
+	}
+	return false
+}
+
+func parseFormatList(value string) []string {
+	parts := strings.Split(value, ",")
+	formats := make([]string, 0, len(parts))
+	for _, part := range parts {
+		format := normalizeFormatToken(part)
+		if format != "" {
+			formats = append(formats, format)
+		}
+	}
+	return formats
+}
+
+func normalizeFormatToken(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "jpg" {
+		return "jpeg"
+	}
+	if value == ".jpg" {
+		return ".jpeg"
+	}
+	return value
+}
+
+func normalizeMimeType(format, mimeType string) string {
+	mimeType = strings.TrimSpace(mimeType)
+	if mimeType != "" {
+		return mimeType
+	}
+	switch strings.ToLower(strings.TrimPrefix(format, ".")) {
+	case "jpeg", "jpg":
+		return "image/jpeg"
+	case "png":
+		return "image/png"
+	case "gif":
+		return "image/gif"
+	case "webp":
+		return "image/webp"
+	case "svg":
+		return "image/svg+xml"
+	default:
+		return mimeType
+	}
+}
+
+func normalizeMainImageQuality(quality int) int {
+	if quality < 0 || quality > 100 {
+		return DefaultCompressQuality
+	}
+	return quality
+}
+
 // decodeImage 解码图片，支持webp/gif/png/jpeg/SVG等格式
 // 优化点：增加SVG处理，避免解码失败
 func (s *ImageService) decodeImage(reader io.Reader, mimeType string) (image.Image, string, error) {
@@ -275,7 +349,11 @@ func (s *ImageService) decodeImage(reader io.Reader, mimeType string) (image.Ima
 	buf := bytes.NewReader(data)
 
 	// 优先处理SVG（MIME类型判断）
-	if mimeType == "image/svg+xml" || strings.HasPrefix(strings.ToLower(string(data[:100])), "<svg") {
+	prefixLen := len(data)
+	if prefixLen > 100 {
+		prefixLen = 100
+	}
+	if mimeType == "image/svg+xml" || strings.HasPrefix(strings.ToLower(string(data[:prefixLen])), "<svg") {
 		// SVG返回空的image.Image（不解析矢量图），格式标记为svg
 		return image.NewRGBA(image.Rect(0, 0, 0, 0)), "svg", nil
 	}

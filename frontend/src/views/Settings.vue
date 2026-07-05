@@ -367,6 +367,40 @@
                                     @blur="handleFieldBlur('allowed_types', systemSettings.allowed_types)"
                                 />
                             </div>
+                            <div class="setting-group">
+                                <label class="field-label" for="main_image_quality">
+                                    主图压缩质量
+                                </label>
+                                <input
+                                    id="main_image_quality"
+                                    v-model="systemSettings.main_image_quality"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    class="input-modern"
+                                    placeholder="默认 85"
+                                    @blur="handleFieldBlur('main_image_quality', systemSettings.main_image_quality)"
+                                />
+                                <div class="field-hint">
+                                    WebP 编码质量，范围 0-100，数值越高画质越好、体积越大。
+                                </div>
+                            </div>
+                            <div class="setting-group">
+                                <label class="field-label" for="skip_compress_formats">
+                                    跳过压缩格式
+                                </label>
+                                <input
+                                    id="skip_compress_formats"
+                                    v-model="systemSettings.skip_compress_formats"
+                                    type="text"
+                                    class="input-modern"
+                                    placeholder="image/gif,image/svg+xml"
+                                    @blur="handleFieldBlur('skip_compress_formats', systemSettings.skip_compress_formats)"
+                                />
+                                <div class="field-hint">
+                                    逗号分隔，支持 MIME 或扩展名，例如 image/png,gif,svg；命中后主图保持原格式。
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -700,6 +734,8 @@ const systemSettings = reactive({
     default_storage: 1,
     max_file_size: 10485760,
     allowed_types: 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml',
+    main_image_quality: 85,
+    skip_compress_formats: 'image/gif,image/svg+xml',
     default_path: '/uploads/{year}/{moon}',
     file_name: '{random}',
     public_image_domain: '',
@@ -924,6 +960,27 @@ const handleFieldBlur = (key, value) => {
         }
     }
 
+    if (key === 'main_image_quality') {
+        const quality = Number(value)
+        if (!Number.isInteger(quality) || quality < 0 || quality > 100) {
+            message.warning('主图压缩质量必须是 0-100 的整数')
+            systemSettings.main_image_quality = updateSetting.main_image_quality ?? 85
+            return
+        }
+        systemSettings.main_image_quality = quality
+        value = quality
+    }
+
+    if (key === 'skip_compress_formats') {
+        value = String(value || '').trim()
+        if (value === '') {
+            message.warning('跳过压缩格式不能为空')
+            systemSettings.skip_compress_formats = updateSetting.skip_compress_formats || 'image/gif,image/svg+xml'
+            return
+        }
+        systemSettings.skip_compress_formats = value
+    }
+
     if (key == 'tg_bot_token' || key == 'tg_receivers') {
         const isBotTokenEmpty = systemSettings.tg_bot_token === '' || systemSettings.tg_bot_token === null;
         if ((isBotTokenEmpty && !systemSettings.tg_bot_token_configured) || systemSettings.tg_receivers === '') {
@@ -938,7 +995,8 @@ const handleFieldBlur = (key, value) => {
             }
         }
     }
-    if ((value === '' && key !== 'public_image_domain' && key !== 'cdn_domain') || value === updateSetting[key]) {
+    const allowEmptyKeys = ['public_image_domain', 'cdn_domain']
+    if ((value === '' && !allowEmptyKeys.includes(key)) || value === updateSetting[key]) {
         return
     }
     if (key == 'api_token' && value === '') {

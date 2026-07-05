@@ -419,6 +419,24 @@ func validateSettingData(key string, value any) error {
 			return fmt.Errorf("当前默认存储不支持图片直链域名，请先切换到 S3 或 R2 存储")
 		}
 
+	case "main_image_quality":
+		quality, err := settingValueToInt(value)
+		if err != nil {
+			return fmt.Errorf("主图压缩质量必须是整数")
+		}
+		if quality < 0 || quality > 100 {
+			return fmt.Errorf("主图压缩质量必须在0-100之间")
+		}
+
+	case "skip_compress_formats":
+		formats, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("跳过压缩格式必须是字符串类型，实际类型：%T", value)
+		}
+		if strings.TrimSpace(formats) == "" {
+			return fmt.Errorf("跳过压缩格式不能为空")
+		}
+
 	case "watermark_text":
 		// 1. 水印文字长度校验（兼容字符串类型）
 		text, ok := value.(string)

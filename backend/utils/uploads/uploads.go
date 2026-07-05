@@ -77,10 +77,7 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	}
 
 	// 上传文件到R2
-	contentType := "image/webp"
-	if !setting.SaveWebp {
-		contentType = fileHeader.Header.Get("Content-Type")
-	}
+	contentType := processedImage.MimeType
 
 	// 获取Bucket
 	storageConfig := buckets.ConvertToR2Bucket(bucket.Config)
@@ -168,10 +165,7 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	}
 
 	// 上传文件到S3
-	contentType := "image/webp"
-	if !setting.SaveWebp {
-		contentType = fileHeader.Header.Get("Content-Type")
-	}
+	contentType := processedImage.MimeType
 
 	// 获取Bucket
 	storageConfig := buckets.ConvertToS3Bucket(bucket.Config)
