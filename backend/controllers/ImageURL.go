@@ -25,8 +25,13 @@ func applyPublicImageURL(setting models.Settings, storage string, bucketID int, 
 	return publicurl.BuildForStorage(setting, storage, bucketID, path)
 }
 
+func applyThumbnailURL(setting models.Settings, storage string, bucketID int, path string) string {
+	return publicurl.BuildForStorage(setting, storage, bucketID, path)
+}
+
 func rewriteImageURLs(setting models.Settings, image *models.Image) {
 	image.Url = applyPublicImageURL(setting, image.Storage, image.BucketId, image.Url)
+	image.Thumbnail = applyThumbnailURL(setting, image.Storage, image.BucketId, image.Thumbnail)
 }
 
 func getRequestBaseURL(c *gin.Context) string {

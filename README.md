@@ -4,7 +4,7 @@
 
 ## 开发者
 
-- [mikusaa](https://github.com/mikusaa/oneimg)
+- [onexru](https://github.com/onexru)
 - [雾创岛](https://www.tr0.cn)
 - [打赏赞助](https://www.cv0.cn/donate)
 - [QQ群](https://qm.qq.com/q/lzT9IDkKVG)
