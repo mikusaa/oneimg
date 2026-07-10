@@ -65,6 +65,53 @@ type ProcessedImage struct {
 	UniqueFileName  string // 唯一文件名
 }
 
+type OriginalImageInfo struct {
+	Width          int
+	Height         int
+	Format         string
+	MimeType       string
+	ThumbnailBytes []byte
+}
+
+// InspectOriginalImage 只读取原图元数据并生成内部缩略图，不改变主图字节。
+func (s *ImageService) InspectOriginalImage(fileBytes []byte, fileName, mimeType string) (*OriginalImageInfo, error) {
+	mimeType = normalizeMimeType(formatFromFilename(fileName), mimeType)
+	img, format, err := s.decodeImage(bytes.NewReader(fileBytes), mimeType)
+	if err != nil {
+		fileFormat := normalizeFormatToken(formatFromFilename(fileName))
+		normalizedMime := normalizeFormatToken(mimeType)
+		if fileFormat == "webp" || normalizedMime == "image/webp" {
+			return &OriginalImageInfo{
+				Format:   "webp",
+				MimeType: "image/webp",
+			}, nil
+		}
+		return nil, fmt.Errorf("decode image failed: %w", err)
+	}
+
+	var width, height int
+	if format != "svg" {
+		bounds := img.Bounds()
+		width, height = bounds.Dx(), bounds.Dy()
+	}
+
+	thumbnailBytes, err := s.generateThumbnail(img, format, mimeType)
+	if err != nil {
+		if !errors.Is(err, ErrSVGThumbnail) {
+			return nil, fmt.Errorf("generate thumbnail failed: %w", err)
+		}
+		thumbnailBytes = []byte{}
+	}
+
+	return &OriginalImageInfo{
+		Width:          width,
+		Height:         height,
+		Format:         format,
+		MimeType:       normalizeMimeType(format, mimeType),
+		ThumbnailBytes: thumbnailBytes,
+	}, nil
+}
+
 func (s *ImageService) buildSkippedImage(fileBytes []byte, originalFileName, mimeType string, setting models.Settings, userRole int) *ProcessedImage {
 	format := formatFromFilename(originalFileName)
 	if format == "" {
