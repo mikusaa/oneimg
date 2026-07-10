@@ -1,6 +1,7 @@
 services:
   oneimg:
     build: .
+    container_name: oneimg
     ports:
       - "8080:8080"
     volumes:
