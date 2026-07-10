@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/chai2010/webp"
 	"gorm.io/driver/sqlite"
@@ -108,6 +109,100 @@ func TestImageURLFromPath(t *testing.T) {
 	}
 }
 
+func TestCreatedAtFromImageURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want time.Time
+		ok   bool
+	}{
+		{
+			name: "year month day",
+			url:  "/uploads/2026/07/05/a.jpg",
+			want: time.Date(2026, 7, 5, 0, 0, 0, 0, time.Local),
+			ok:   true,
+		},
+		{
+			name: "year month",
+			url:  "/uploads/2026/07/a.jpg",
+			want: time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local),
+			ok:   true,
+		},
+		{
+			name: "invalid date",
+			url:  "/uploads/2026/13/a.jpg",
+			ok:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := createdAtFromImageURL(tt.url)
+			if ok != tt.ok {
+				t.Fatalf("createdAtFromImageURL() ok = %v, want %v", ok, tt.ok)
+			}
+			if ok && !got.Equal(tt.want) {
+				t.Fatalf("createdAtFromImageURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestImportUsesModTimeAsCreatedAtByDefault(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "uploads")
+	path := filepath.Join(root, "2026", "07", "05", "a.png")
+	writeFile(t, path, encodePNG(t))
+	want := time.Date(2024, 3, 2, 1, 2, 3, 0, time.Local)
+	if err := os.Chtimes(path, want, want); err != nil {
+		t.Fatalf("Chtimes() error = %v", err)
+	}
+
+	db := testDB(t)
+	summary, err := NewImporter(db, quietOptions(root, filepath.Join(tmp, "data"))).Run()
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if summary.Imported != 1 {
+		t.Fatalf("summary = %+v, want one imported", summary)
+	}
+
+	var imageModel models.Image
+	if err := db.First(&imageModel).Error; err != nil {
+		t.Fatalf("First() error = %v", err)
+	}
+	if !imageModel.CreatedAt.Equal(want) {
+		t.Fatalf("CreatedAt = %v, want %v", imageModel.CreatedAt, want)
+	}
+}
+
+func TestImportCanUsePathDateWhenConfigured(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "uploads")
+	path := filepath.Join(root, "2026", "07", "05", "a.png")
+	writeFile(t, path, encodePNG(t))
+
+	db := testDB(t)
+	options := quietOptions(root, filepath.Join(tmp, "data"))
+	options.DateSource = "path"
+	summary, err := NewImporter(db, options).Run()
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if summary.Imported != 1 {
+		t.Fatalf("summary = %+v, want one imported", summary)
+	}
+
+	var imageModel models.Image
+	if err := db.First(&imageModel).Error; err != nil {
+		t.Fatalf("First() error = %v", err)
+	}
+	want := time.Date(2026, 7, 5, 0, 0, 0, 0, time.Local)
+	if !imageModel.CreatedAt.Equal(want) {
+		t.Fatalf("CreatedAt = %v, want %v", imageModel.CreatedAt, want)
+	}
+}
+
 func TestImportSkipsExistingImageURL(t *testing.T) {
 	tmp := t.TempDir()
 	root := filepath.Join(tmp, "uploads")
@@ -139,6 +234,48 @@ func TestImportSkipsExistingImageURL(t *testing.T) {
 	db.Model(&models.Image{}).Count(&count)
 	if count != 1 {
 		t.Fatalf("image count = %d, want 1", count)
+	}
+}
+
+func TestImportUpdatesExistingDateWhenEnabled(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "uploads")
+	path := filepath.Join(root, "2026", "07", "05", "a.jpg")
+	writeFile(t, path, encodeJPEG(t))
+
+	oldTime := time.Date(2026, 7, 10, 9, 0, 0, 0, time.Local)
+	db := testDB(t)
+	if err := db.Create(&models.Image{
+		Url:       "/uploads/2026/07/05/a.jpg",
+		FileName:  "a.jpg",
+		FileSize:  1,
+		BucketId:  1,
+		UserId:    1,
+		Storage:   "default",
+		UUID:      "admin",
+		CreatedAt: oldTime,
+	}).Error; err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	options := quietOptions(root, filepath.Join(tmp, "data"))
+	options.UpdateExistingDate = true
+	options.DateSource = "path"
+	summary, err := NewImporter(db, options).Run()
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if summary.Updated != 1 || summary.Imported != 0 {
+		t.Fatalf("summary = %+v, want one updated", summary)
+	}
+
+	var imageModel models.Image
+	if err := db.First(&imageModel).Error; err != nil {
+		t.Fatalf("First() error = %v", err)
+	}
+	want := time.Date(2026, 7, 5, 0, 0, 0, 0, time.Local)
+	if !imageModel.CreatedAt.Equal(want) {
+		t.Fatalf("CreatedAt = %v, want %v", imageModel.CreatedAt, want)
 	}
 }
 

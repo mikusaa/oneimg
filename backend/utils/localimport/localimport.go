@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -19,19 +21,23 @@ import (
 )
 
 type Options struct {
-	Root     string
-	DataRoot string
-	BucketID int
-	UserID   int
-	Username string
-	DryRun   bool
-	Logger   *log.Logger
+	Root               string
+	DataRoot           string
+	BucketID           int
+	UserID             int
+	Username           string
+	DryRun             bool
+	DateSource         string
+	UpdateExistingDate bool
+	Logger             *log.Logger
 }
 
 type Summary struct {
 	Scanned         int
 	Imported        int
 	WouldImport     int
+	Updated         int
+	WouldUpdate     int
 	SkippedExisting int
 	SkippedIgnored  int
 	Failed          int
@@ -44,12 +50,13 @@ type Importer struct {
 
 func DefaultOptions() Options {
 	return Options{
-		Root:     "./uploads",
-		DataRoot: "./data",
-		BucketID: 1,
-		UserID:   1,
-		Username: "admin",
-		Logger:   log.Default(),
+		Root:       "./uploads",
+		DataRoot:   "./data",
+		BucketID:   1,
+		UserID:     1,
+		Username:   "admin",
+		DateSource: "mtime",
+		Logger:     log.Default(),
 	}
 }
 
@@ -60,6 +67,8 @@ func RunCLI(args []string, db *gorm.DB) int {
 	flags.IntVar(&options.BucketID, "bucket-id", options.BucketID, "导入到的存储桶 ID")
 	flags.IntVar(&options.UserID, "user-id", options.UserID, "图片归属用户 ID")
 	flags.StringVar(&options.Username, "username", options.Username, "用于生成权限 MD5/UUID 的用户名")
+	flags.StringVar(&options.DateSource, "date-source", options.DateSource, "导入日期来源：mtime、path、now")
+	flags.BoolVar(&options.UpdateExistingDate, "update-existing-date", false, "更新已入库图片的 created_at")
 	flags.BoolVar(&options.DryRun, "dry-run", false, "只扫描并打印统计，不写入数据库或缩略图")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -73,11 +82,11 @@ func RunCLI(args []string, db *gorm.DB) int {
 	}
 
 	if options.DryRun {
-		options.Logger.Printf("扫描完成 dry-run=true scanned=%d would_import=%d skipped_existing=%d skipped_ignored=%d failed=%d",
-			summary.Scanned, summary.WouldImport, summary.SkippedExisting, summary.SkippedIgnored, summary.Failed)
+		options.Logger.Printf("扫描完成 dry-run=true scanned=%d would_import=%d would_update=%d skipped_existing=%d skipped_ignored=%d failed=%d",
+			summary.Scanned, summary.WouldImport, summary.WouldUpdate, summary.SkippedExisting, summary.SkippedIgnored, summary.Failed)
 	} else {
-		options.Logger.Printf("导入完成 scanned=%d imported=%d skipped_existing=%d skipped_ignored=%d failed=%d",
-			summary.Scanned, summary.Imported, summary.SkippedExisting, summary.SkippedIgnored, summary.Failed)
+		options.Logger.Printf("导入完成 scanned=%d imported=%d updated=%d skipped_existing=%d skipped_ignored=%d failed=%d",
+			summary.Scanned, summary.Imported, summary.Updated, summary.SkippedExisting, summary.SkippedIgnored, summary.Failed)
 	}
 
 	if summary.Failed > 0 {
@@ -102,6 +111,9 @@ func NewImporter(db *gorm.DB, options Options) *Importer {
 	}
 	if options.Username == "" {
 		options.Username = defaults.Username
+	}
+	if options.DateSource == "" {
+		options.DateSource = defaults.DateSource
 	}
 	if options.Logger == nil {
 		options.Logger = defaults.Logger
@@ -176,11 +188,32 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 		return nil
 	}
 
-	var count int64
-	if err := i.db.Model(&models.Image{}).Where("url = ?", imageURL).Count(&count).Error; err != nil {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat file: %w", err)
+	}
+	createdAt, err := i.createdAtForImage(imageURL, fileInfo)
+	if err != nil {
+		return err
+	}
+
+	var existing models.Image
+	err = i.db.Where("url = ?", imageURL).First(&existing).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
 		return fmt.Errorf("check existing image: %w", err)
 	}
-	if count > 0 {
+	if err == nil {
+		if i.options.UpdateExistingDate {
+			if i.options.DryRun {
+				summary.WouldUpdate++
+				return nil
+			}
+			if err := i.db.Model(&existing).Update("created_at", createdAt).Error; err != nil {
+				return fmt.Errorf("update existing created_at: %w", err)
+			}
+			summary.Updated++
+			return nil
+		}
 		summary.SkippedExisting++
 		return nil
 	}
@@ -228,6 +261,7 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 		UserId:    i.options.UserID,
 		MD5:       md5.Md5(i.options.Username + filepath.Base(path)),
 		UUID:      i.options.Username,
+		CreatedAt: createdAt,
 	}
 	if err := i.db.Create(&imageModel).Error; err != nil {
 		return fmt.Errorf("create image record: %w", err)
@@ -245,6 +279,22 @@ func (i *Importer) writeThumbnail(thumbnailURL string, data []byte) error {
 	return os.WriteFile(thumbPath, data, 0644)
 }
 
+func (i *Importer) createdAtForImage(imageURL string, fileInfo os.FileInfo) (time.Time, error) {
+	switch strings.ToLower(strings.TrimSpace(i.options.DateSource)) {
+	case "", "path":
+		if createdAt, ok := createdAtFromImageURL(imageURL); ok {
+			return createdAt, nil
+		}
+		return fallbackModTime(fileInfo), nil
+	case "mtime":
+		return fallbackModTime(fileInfo), nil
+	case "now":
+		return time.Now(), nil
+	default:
+		return time.Time{}, fmt.Errorf("unsupported date source: %s", i.options.DateSource)
+	}
+}
+
 func imageURLFromPath(root, path string) (string, error) {
 	rel, err := filepath.Rel(root, path)
 	if err != nil {
@@ -255,6 +305,48 @@ func imageURLFromPath(root, path string) (string, error) {
 		return "", fmt.Errorf("path is outside root")
 	}
 	return "/uploads/" + strings.TrimPrefix(rel, "/"), nil
+}
+
+func createdAtFromImageURL(imageURL string) (time.Time, bool) {
+	rel := strings.TrimPrefix(strings.TrimPrefix(filepath.ToSlash(imageURL), "/"), "uploads/")
+	parts := strings.Split(rel, "/")
+	if len(parts) < 2 {
+		return time.Time{}, false
+	}
+
+	year, err := strconv.Atoi(parts[0])
+	if err != nil || year < 1970 || year > 9999 {
+		return time.Time{}, false
+	}
+	month, err := strconv.Atoi(parts[1])
+	if err != nil || month < 1 || month > 12 {
+		return time.Time{}, false
+	}
+
+	day := 1
+	if len(parts) >= 3 {
+		parsedDay, err := strconv.Atoi(parts[2])
+		if err == nil {
+			day = parsedDay
+		}
+	}
+	if day < 1 || day > daysInMonth(year, time.Month(month)) {
+		return time.Time{}, false
+	}
+
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local), true
+}
+
+func daysInMonth(year int, month time.Month) int {
+	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.Local).Day()
+}
+
+func fallbackModTime(fileInfo os.FileInfo) time.Time {
+	modTime := fileInfo.ModTime()
+	if modTime.IsZero() {
+		return time.Now()
+	}
+	return modTime
 }
 
 func thumbnailURLFromImageURL(imageURL string) string {
