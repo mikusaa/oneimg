@@ -313,6 +313,9 @@ func TestImportOrdinaryImagesGenerateWebPThumbnails(t *testing.T) {
 			if imageModel.Thumbnail == "" {
 				t.Fatal("thumbnail should not be empty")
 			}
+			if imageModel.ContentHash == "" {
+				t.Fatal("content_hash should not be empty")
+			}
 			thumbPath := filepath.Join(dataRoot, filepath.FromSlash(imageModel.Thumbnail))
 			thumbBytes, err := os.ReadFile(thumbPath)
 			if err != nil {

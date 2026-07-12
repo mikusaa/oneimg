@@ -57,6 +57,9 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
+	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+		return duplicate, nil
+	}
 
 	uniqueFileName := processedImage.UniqueFileName
 
@@ -121,6 +124,7 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
 		Width:         processedImage.Width,
 		Height:        processedImage.Height,
+		ContentHash:   processedImage.ContentHash,
 	}, nil
 }
 
@@ -145,6 +149,9 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
+	}
+	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+		return duplicate, nil
 	}
 
 	uniqueFileName := processedImage.UniqueFileName
@@ -210,6 +217,7 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
 		Width:         processedImage.Width,
 		Height:        processedImage.Height,
+		ContentHash:   processedImage.ContentHash,
 	}, nil
 }
 
@@ -234,6 +242,9 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
+	}
+	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+		return duplicate, nil
 	}
 
 	// 生成唯一文件名
@@ -295,6 +306,7 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 		Width:         processedImage.Width,
 		Height:        processedImage.Height,
 		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
+		ContentHash:   processedImage.ContentHash,
 	}, nil
 }
 
@@ -319,6 +331,9 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
+	}
+	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+		return duplicate, nil
 	}
 
 	// 生成唯一文件名
@@ -382,6 +397,7 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 		Width:         processedImage.Width,
 		Height:        processedImage.Height,
 		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
+		ContentHash:   processedImage.ContentHash,
 	}, nil
 }
 
@@ -406,6 +422,9 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
+	}
+	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+		return duplicate, nil
 	}
 
 	uniqueFileName := processedImage.UniqueFileName
@@ -463,6 +482,7 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 		Width:         processedImage.Width,
 		Height:        processedImage.Height,
 		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
+		ContentHash:   processedImage.ContentHash,
 	}, nil
 }
 
@@ -487,6 +507,9 @@ func (u *TelegramUploader) Upload(c *gin.Context, setting *models.Settings, buck
 	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
+	}
+	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+		return duplicate, nil
 	}
 
 	// 获取存储配置
@@ -576,6 +599,7 @@ func (u *TelegramUploader) Upload(c *gin.Context, setting *models.Settings, buck
 		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
 		Width:         processedImage.Width,
 		Height:        processedImage.Height,
+		ContentHash:   processedImage.ContentHash,
 	}, nil
 }
 
@@ -626,6 +650,50 @@ func thumbnailFileName(fileName string) string {
 
 func localThumbnailFilePath(thumbnailPath string) string {
 	return filepath.Join(".", "data", strings.TrimPrefix(thumbnailPath, "/"))
+}
+
+func findDuplicateUploadResult(bucket *models.Buckets, contentHash string) *interfaces.ImageUploadResult {
+	if strings.TrimSpace(contentHash) == "" || bucket == nil {
+		return nil
+	}
+	log.Println("检查重复图片")
+	db := database.GetDB()
+	if db == nil {
+		return nil
+	}
+
+	var imageModel models.Image
+	result := db.DB.
+		Where("content_hash = ? AND storage = ? AND bucket_id = ?", contentHash, bucket.Type, bucket.Id).
+		Order("id ASC").
+		Limit(1).
+		Find(&imageModel)
+	if result.Error != nil {
+		log.Printf("检查重复图片失败: %v", result.Error)
+		return nil
+	}
+	if result.RowsAffected == 0 {
+		log.Println("未发现重复图片，继续上传")
+		return nil
+	}
+	log.Printf("发现重复图片，跳过上传: %s", imageModel.Url)
+
+	return &interfaces.ImageUploadResult{
+		Success:      true,
+		Message:      "图片已存在",
+		ID:           imageModel.Id,
+		URL:          imageModel.Url,
+		ThumbnailURL: imageModel.Thumbnail,
+		Storage:      imageModel.Storage,
+		FileName:     imageModel.FileName,
+		FileSize:     imageModel.FileSize,
+		MimeType:     imageModel.MimeType,
+		Width:        imageModel.Width,
+		Height:       imageModel.Height,
+		ContentHash:  imageModel.ContentHash,
+		Duplicate:    true,
+		CreatedAt:    imageModel.CreatedAt.Format("2006-01-02 15:04:05"),
+	}
 }
 
 func ensureLeadingSlash(path string) string {

@@ -2,6 +2,9 @@ package images
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -63,6 +66,7 @@ type ProcessedImage struct {
 	MimeType        string // 最终MIME类型
 	OutputExt       string // 输出文件扩展名
 	UniqueFileName  string // 唯一文件名
+	ContentHash     string // 最终主图字节哈希
 }
 
 type OriginalImageInfo struct {
@@ -81,7 +85,10 @@ func (s *ImageService) InspectOriginalImage(fileBytes []byte, fileName, mimeType
 		fileFormat := normalizeFormatToken(formatFromFilename(fileName))
 		normalizedMime := normalizeFormatToken(mimeType)
 		if fileFormat == "webp" || normalizedMime == "image/webp" {
+			width, height := readWebPDimensions(fileBytes)
 			return &OriginalImageInfo{
+				Width:    width,
+				Height:   height,
 				Format:   "webp",
 				MimeType: "image/webp",
 			}, nil
@@ -120,17 +127,22 @@ func (s *ImageService) buildSkippedImage(fileBytes []byte, originalFileName, mim
 	finalMimeType := normalizeMimeType(format, mimeType)
 	finalExt := extensionForImage(format, finalMimeType)
 	fileName := s.buildOutputFileName(originalFileName, finalExt, setting, userRole)
+	width, height := 0, 0
+	if normalizeFormatToken(format) == "webp" || normalizeFormatToken(finalMimeType) == "image/webp" {
+		width, height = readWebPDimensions(fileBytes)
+	}
 
 	return &ProcessedImage{
 		OriginalBytes:   fileBytes,
 		CompressedBytes: fileBytes,
 		ThumbnailBytes:  []byte{},
-		Width:           0,
-		Height:          0,
+		Width:           width,
+		Height:          height,
 		Format:          format,
 		MimeType:        finalMimeType,
 		OutputExt:       finalExt,
 		UniqueFileName:  fileName,
+		ContentHash:     HashBytes(fileBytes),
 	}
 }
 
@@ -199,7 +211,13 @@ func (s *ImageService) ProcessImage(
 		MimeType:        finalMimeType,
 		OutputExt:       finalExt,
 		UniqueFileName:  fileName,
+		ContentHash:     HashBytes(processedBytes),
 	}, nil
+}
+
+func HashBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // processMainImage 处理主图片（拆分逻辑，提高可读性）
@@ -405,6 +423,54 @@ func normalizeMainImageQuality(quality int) int {
 		return DefaultCompressQuality
 	}
 	return quality
+}
+
+func readWebPDimensions(data []byte) (int, int) {
+	if len(data) < 20 || string(data[0:4]) != "RIFF" || string(data[8:12]) != "WEBP" {
+		return 0, 0
+	}
+
+	for offset := 12; offset+8 <= len(data); {
+		chunkType := string(data[offset : offset+4])
+		chunkSize := int(binary.LittleEndian.Uint32(data[offset+4 : offset+8]))
+		chunkStart := offset + 8
+		chunkEnd := chunkStart + chunkSize
+		if chunkSize < 0 || chunkEnd > len(data) {
+			return 0, 0
+		}
+
+		switch chunkType {
+		case "VP8X":
+			if chunkSize >= 10 {
+				width := int(data[chunkStart+4]) | int(data[chunkStart+5])<<8 | int(data[chunkStart+6])<<16
+				height := int(data[chunkStart+7]) | int(data[chunkStart+8])<<8 | int(data[chunkStart+9])<<16
+				return width + 1, height + 1
+			}
+		case "VP8L":
+			if chunkSize >= 5 && data[chunkStart] == 0x2f {
+				packed := binary.LittleEndian.Uint32(data[chunkStart+1 : chunkStart+5])
+				width := int(packed&0x3fff) + 1
+				height := int((packed>>14)&0x3fff) + 1
+				return width, height
+			}
+		case "VP8 ":
+			if chunkSize >= 10 &&
+				data[chunkStart+3] == 0x9d &&
+				data[chunkStart+4] == 0x01 &&
+				data[chunkStart+5] == 0x2a {
+				width := int(binary.LittleEndian.Uint16(data[chunkStart+6:chunkStart+8]) & 0x3fff)
+				height := int(binary.LittleEndian.Uint16(data[chunkStart+8:chunkStart+10]) & 0x3fff)
+				return width, height
+			}
+		}
+
+		offset = chunkEnd
+		if chunkSize%2 == 1 {
+			offset++
+		}
+	}
+
+	return 0, 0
 }
 
 // decodeImage 解码图片，支持webp/gif/png/jpeg/SVG等格式

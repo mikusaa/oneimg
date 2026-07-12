@@ -641,6 +641,32 @@ const validateFiles = (files) => {
   return validFiles;
 };
 
+const showUploadResultMessage = (files = []) => {
+  const duplicateCount = files.filter(file => file?.duplicate).length;
+  const uploadedCount = files.length - duplicateCount;
+
+  if (duplicateCount > 0 && uploadedCount > 0) {
+    Message.warning(`上传完成，已跳过 ${duplicateCount} 张重复图片`, {
+      duration: 3000,
+      position: 'top-right'
+    });
+    return;
+  }
+
+  if (duplicateCount > 0) {
+    Message.warning(`图片已存在，已跳过重复上传`, {
+      duration: 3000,
+      position: 'top-right'
+    });
+    return;
+  }
+
+  Message.success(`上传成功`, {
+    duration: 2000,
+    position: 'top-right'
+  });
+};
+
 /**
  * 文件上传
  */
@@ -687,10 +713,7 @@ const uploadFiles = async (files) => {
     
     if (response.ok && result.code === 200) {
       await loadRecentImages();
-      Message.success(`上传成功`, {
-        duration: 2000,
-        position: 'top-right'
-      });
+      showUploadResultMessage(result.data?.files || []);
     } else {
       throw new Error(result.message || '上传失败');
     }
@@ -1147,7 +1170,7 @@ const postuploadbyurl = async (formData) => {
     const result = await res.json();
     if (res.ok && result.code === 200) {
       await loadRecentImages();
-      Message.success('上传成功');
+      showUploadResultMessage(result.data?.file ? [result.data.file] : []);
     } else {
       throw new Error(result.message || '上传失败');
     }

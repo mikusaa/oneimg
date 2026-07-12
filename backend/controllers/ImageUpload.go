@@ -24,6 +24,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // UploadImages 图片上传主入口
@@ -130,27 +131,32 @@ func UploadImages(c *gin.Context) {
 		}
 
 		// 保存图片信息到数据库
-		imageModel := models.Image{
-			Url:       fileResult.URL,
-			Thumbnail: fileResult.ThumbnailURL,
-			FileName:  fileResult.FileName,
-			FileSize:  fileResult.FileSize,
-			MimeType:  fileResult.MimeType,
-			Width:     fileResult.Width,
-			Height:    fileResult.Height,
-			Storage:   fileResult.Storage,
-			BucketId:  bucketID,
-			UserId:    c.GetInt("user_id"),
-			MD5:       md5.Md5(c.GetString("username") + fileResult.FileName),
-			UUID:      GetUUID(c),
-		}
+		imageModel := models.Image{Id: fileResult.ID}
+		if !fileResult.Duplicate {
+			imageModel = models.Image{
+				Url:         fileResult.URL,
+				Thumbnail:   fileResult.ThumbnailURL,
+				FileName:    fileResult.FileName,
+				FileSize:    fileResult.FileSize,
+				MimeType:    fileResult.MimeType,
+				Width:       fileResult.Width,
+				Height:      fileResult.Height,
+				Storage:     fileResult.Storage,
+				BucketId:    bucketID,
+				UserId:      c.GetInt("user_id"),
+				MD5:         md5.Md5(c.GetString("username") + fileResult.FileName),
+				ContentHash: fileResult.ContentHash,
+				UUID:        GetUUID(c),
+			}
 
-		if db != nil {
-			db.DB.Create(&imageModel)
+			if db != nil {
+				db.DB.Create(&imageModel)
+				fileResult.ID = imageModel.Id
+			}
 		}
 
 		// 保存文件大小至存储
-		if fileResult.Storage != "default" {
+		if !fileResult.Duplicate && fileResult.Storage != "default" {
 			fileSizeUint := uint64(fileResult.FileSize)
 			thumbnailSizeUint := uint64(fileResult.ThumbnailSize)
 			totalSizeUint := fileSizeUint
@@ -169,7 +175,7 @@ func UploadImages(c *gin.Context) {
 		}
 
 		// 上传时关联图片标签
-		if len(existingTags) > 0 {
+		if len(existingTags) > 0 && imageModel.Id > 0 {
 			var imageTagRelations []models.ImageToTags
 			for _, tag := range existingTags {
 				imageTagRelations = append(imageTagRelations, models.ImageToTags{
@@ -178,7 +184,7 @@ func UploadImages(c *gin.Context) {
 				})
 			}
 
-			db.DB.Create(&imageTagRelations)
+			db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&imageTagRelations)
 		}
 
 		responseResult := *fileResult
@@ -186,7 +192,7 @@ func UploadImages(c *gin.Context) {
 		responseResult.ThumbnailURL = applyThumbnailURL(setting, buckets.Type, bucketID, fileResult.ThumbnailURL)
 		uploadResults = append(uploadResults, responseResult)
 
-		if setting.TGNotice {
+		if !fileResult.Duplicate && setting.TGNotice {
 			placeholderData := telegram.PlaceholderData{
 				Username:    c.GetString("username"),
 				Date:        time.Now().Format("2006-01-02 15:04:05"),
@@ -650,23 +656,30 @@ func UploadImagesByURL(c *gin.Context) {
 
 	// 数据库保存
 	imageModel := models.Image{
-		Url:       fileResult.URL,
-		Thumbnail: fileResult.ThumbnailURL,
-		FileName:  fileResult.FileName,
-		FileSize:  fileResult.FileSize,
-		MimeType:  fileResult.MimeType,
-		Width:     fileResult.Width,
-		Height:    fileResult.Height,
-		Storage:   fileResult.Storage,
-		BucketId:  bucketID,
-		UserId:    c.GetInt("user_id"),
-		MD5:       md5.Md5(c.GetString("username") + fileResult.FileName),
-		UUID:      GetUUID(c),
+		Id: fileResult.ID,
 	}
-	db.DB.Create(&imageModel)
+	if !fileResult.Duplicate {
+		imageModel = models.Image{
+			Url:         fileResult.URL,
+			Thumbnail:   fileResult.ThumbnailURL,
+			FileName:    fileResult.FileName,
+			FileSize:    fileResult.FileSize,
+			MimeType:    fileResult.MimeType,
+			Width:       fileResult.Width,
+			Height:      fileResult.Height,
+			Storage:     fileResult.Storage,
+			BucketId:    bucketID,
+			UserId:      c.GetInt("user_id"),
+			MD5:         md5.Md5(c.GetString("username") + fileResult.FileName),
+			ContentHash: fileResult.ContentHash,
+			UUID:        GetUUID(c),
+		}
+		db.DB.Create(&imageModel)
+		fileResult.ID = imageModel.Id
+	}
 
 	// 更新容量
-	if fileResult.Storage != "default" {
+	if !fileResult.Duplicate && fileResult.Storage != "default" {
 		fileSizeUint := uint64(fileResult.FileSize)
 		thumbnailSizeUint := uint64(fileResult.ThumbnailSize)
 		totalSizeUint := fileSizeUint
@@ -679,14 +692,14 @@ func UploadImagesByURL(c *gin.Context) {
 	}
 
 	// 标签
-	if req.Tag != "" && req.Tag != "0" {
+	if req.Tag != "" && req.Tag != "0" && imageModel.Id > 0 {
 		if tagID, err := strconv.Atoi(req.Tag); err == nil {
-			db.DB.Create(&models.ImageToTags{ImageId: imageModel.Id, TagId: tagID})
+			db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.ImageToTags{ImageId: imageModel.Id, TagId: tagID})
 		}
 	}
 
 	// TG通知
-	if setting.TGNotice {
+	if !fileResult.Duplicate && setting.TGNotice {
 		placeholderData := telegram.PlaceholderData{
 			Username:    c.GetString("username"),
 			Date:        time.Now().Format("2006-01-02 15:04:05"),
