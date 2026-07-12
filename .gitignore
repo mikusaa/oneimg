@@ -3,3 +3,6 @@
 /data/
 /uploads/
 docker-compose.yml
+frontend/.pnpm-store/
+frontend/dist/
+frontend/node_modules/

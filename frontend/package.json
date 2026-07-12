@@ -13,18 +13,28 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@vitejs/plugin-vue": "^6.0.1",
-    "axios": "^1.12.0",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "axios": "^1.18.1",
     "scss": "^0.2.4",
     "tailwindcss": "3.4.17",
-    "vite": "^7.1.5",
-    "vue": "^3.5.21",
-    "vue-router": "^4.5.1"
+    "vite": "^7.3.5",
+    "vue": "^3.5.39",
+    "vue-router": "^4.6.3"
   },
   "devDependencies": {
-    "@remixicon/vue": "^4.7.0",
-    "autoprefixer": "^10.4.22",
-    "remixicon": "^4.7.0",
-    "sass-embedded": "^1.92.1"
+    "@remixicon/vue": "^4.9.0",
+    "autoprefixer": "^10.5.2",
+    "remixicon": "^4.9.1",
+    "sass-embedded": "^1.100.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "form-data": "4.0.6",
+      "picomatch@<2.3.2": "2.3.2",
+      "picomatch@>=4.0.0 <4.0.4": "4.0.5",
+      "postcss": "8.5.10",
+      "rollup": "4.59.0",
+      "yaml": "2.8.3"
+    }
   }
 }

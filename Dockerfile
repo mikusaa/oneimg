@@ -1,9 +1,9 @@
 # 阶段1：构建前端
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 # 安装pnpm并构建前端
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
@@ -11,7 +11,7 @@ RUN pnpm run build
 
 
 # 阶段2：构建后端
-FROM golang:1.24-alpine AS backend-builder
+FROM golang:1.25-alpine AS backend-builder
 
 # 安装CGO编译依赖
 RUN apk add --no-cache gcc g++ musl-dev libwebp-dev
@@ -36,7 +36,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o main ./main.go
 
 
 # 阶段3：最终运行环境
-FROM alpine:3.18
+FROM alpine:3.24
 
 # 安装运行时依赖
 RUN apk --no-cache add \
