@@ -250,20 +250,21 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 	}
 
 	imageModel := models.Image{
-		Url:         imageURL,
-		Thumbnail:   thumbnailURL,
-		FileName:    filepath.Base(path),
-		FileSize:    int64(len(fileBytes)),
-		MimeType:    mimeType,
-		Width:       info.Width,
-		Height:      info.Height,
-		Storage:     "default",
-		BucketId:    i.options.BucketID,
-		UserId:      i.options.UserID,
-		MD5:         md5.Md5(i.options.Username + filepath.Base(path)),
-		ContentHash: images.HashBytes(fileBytes),
-		UUID:        i.options.Username,
-		CreatedAt:   createdAt,
+		Url:              imageURL,
+		Thumbnail:        thumbnailURL,
+		FileName:         filepath.Base(path),
+		OriginalFileName: filepath.Base(path),
+		FileSize:         int64(len(fileBytes)),
+		MimeType:         mimeType,
+		Width:            info.Width,
+		Height:           info.Height,
+		Storage:          "default",
+		BucketId:         i.options.BucketID,
+		UserId:           i.options.UserID,
+		MD5:              md5.Md5(i.options.Username + filepath.Base(path)),
+		ContentHash:      images.HashBytes(fileBytes),
+		UUID:             i.options.Username,
+		CreatedAt:        createdAt,
 	}
 	if err := i.db.Create(&imageModel).Error; err != nil {
 		return fmt.Errorf("create image record: %w", err)
@@ -284,6 +285,9 @@ func (i *Importer) updateExistingImage(existing *models.Image, path string, crea
 			return false, fmt.Errorf("read file for content hash: %w", err)
 		}
 		updates["content_hash"] = images.HashBytes(fileBytes)
+	}
+	if strings.TrimSpace(existing.OriginalFileName) == "" {
+		updates["original_filename"] = filepath.Base(path)
 	}
 	if len(updates) == 0 {
 		return false, nil

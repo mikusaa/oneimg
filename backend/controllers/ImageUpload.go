@@ -9,6 +9,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"oneimg/backend/database"
 	"oneimg/backend/interfaces"
 	"oneimg/backend/models"
@@ -134,19 +135,20 @@ func UploadImages(c *gin.Context) {
 		imageModel := models.Image{Id: fileResult.ID}
 		if !fileResult.Duplicate {
 			imageModel = models.Image{
-				Url:         fileResult.URL,
-				Thumbnail:   fileResult.ThumbnailURL,
-				FileName:    fileResult.FileName,
-				FileSize:    fileResult.FileSize,
-				MimeType:    fileResult.MimeType,
-				Width:       fileResult.Width,
-				Height:      fileResult.Height,
-				Storage:     fileResult.Storage,
-				BucketId:    bucketID,
-				UserId:      c.GetInt("user_id"),
-				MD5:         md5.Md5(c.GetString("username") + fileResult.FileName),
-				ContentHash: fileResult.ContentHash,
-				UUID:        GetUUID(c),
+				Url:              fileResult.URL,
+				Thumbnail:        fileResult.ThumbnailURL,
+				FileName:         fileResult.FileName,
+				OriginalFileName: fileResult.OriginalFileName,
+				FileSize:         fileResult.FileSize,
+				MimeType:         fileResult.MimeType,
+				Width:            fileResult.Width,
+				Height:           fileResult.Height,
+				Storage:          fileResult.Storage,
+				BucketId:         bucketID,
+				UserId:           c.GetInt("user_id"),
+				MD5:              md5.Md5(c.GetString("username") + fileResult.FileName),
+				ContentHash:      fileResult.ContentHash,
+				UUID:             GetUUID(c),
 			}
 
 			if db != nil {
@@ -603,10 +605,7 @@ func UploadImagesByURL(c *gin.Context) {
 		return
 	}
 
-	fileName := filepath.Base(req.Urls)
-	if fileName == "/" || fileName == "." || fileName == "" {
-		fileName = fmt.Sprintf("url_image_%d.jpg", time.Now().Unix())
-	}
+	fileName := fileNameFromURL(req.Urls)
 
 	fileBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -660,19 +659,20 @@ func UploadImagesByURL(c *gin.Context) {
 	}
 	if !fileResult.Duplicate {
 		imageModel = models.Image{
-			Url:         fileResult.URL,
-			Thumbnail:   fileResult.ThumbnailURL,
-			FileName:    fileResult.FileName,
-			FileSize:    fileResult.FileSize,
-			MimeType:    fileResult.MimeType,
-			Width:       fileResult.Width,
-			Height:      fileResult.Height,
-			Storage:     fileResult.Storage,
-			BucketId:    bucketID,
-			UserId:      c.GetInt("user_id"),
-			MD5:         md5.Md5(c.GetString("username") + fileResult.FileName),
-			ContentHash: fileResult.ContentHash,
-			UUID:        GetUUID(c),
+			Url:              fileResult.URL,
+			Thumbnail:        fileResult.ThumbnailURL,
+			FileName:         fileResult.FileName,
+			OriginalFileName: fileResult.OriginalFileName,
+			FileSize:         fileResult.FileSize,
+			MimeType:         fileResult.MimeType,
+			Width:            fileResult.Width,
+			Height:           fileResult.Height,
+			Storage:          fileResult.Storage,
+			BucketId:         bucketID,
+			UserId:           c.GetInt("user_id"),
+			MD5:              md5.Md5(c.GetString("username") + fileResult.FileName),
+			ContentHash:      fileResult.ContentHash,
+			UUID:             GetUUID(c),
 		}
 		db.DB.Create(&imageModel)
 		fileResult.ID = imageModel.Id
@@ -719,4 +719,19 @@ func UploadImagesByURL(c *gin.Context) {
 	uc.Success("URL 图片上传成功", map[string]any{
 		"file": responseResult,
 	})
+}
+
+func fileNameFromURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err == nil {
+		name := filepath.Base(parsed.Path)
+		if name != "/" && name != "." && name != "" {
+			return name
+		}
+	}
+	name := filepath.Base(rawURL)
+	if name != "/" && name != "." && name != "" {
+		return name
+	}
+	return fmt.Sprintf("url_image_%d.jpg", time.Now().Unix())
 }

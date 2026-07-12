@@ -112,19 +112,20 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	url := "/" + PathJoin(subDir, uniqueFileName)
 
 	return &interfaces.ImageUploadResult{
-		Success:       true,
-		Message:       "上传成功",
-		FileName:      uniqueFileName,
-		FileSize:      int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize: int64(len(processedImage.ThumbnailBytes)),
-		MimeType:      contentType,
-		URL:           url,
-		ThumbnailURL:  thumbnailURL,
-		Storage:       bucket.Type,
-		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
-		Width:         processedImage.Width,
-		Height:        processedImage.Height,
-		ContentHash:   processedImage.ContentHash,
+		Success:          true,
+		Message:          "上传成功",
+		FileName:         uniqueFileName,
+		OriginalFileName: fileHeader.Filename,
+		FileSize:         int64(len(processedImage.CompressedBytes)),
+		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		MimeType:         contentType,
+		URL:              url,
+		ThumbnailURL:     thumbnailURL,
+		Storage:          bucket.Type,
+		CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
+		Width:            processedImage.Width,
+		Height:           processedImage.Height,
+		ContentHash:      processedImage.ContentHash,
 	}, nil
 }
 
@@ -205,19 +206,20 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	url := "/" + PathJoin(subDir, uniqueFileName)
 
 	return &interfaces.ImageUploadResult{
-		Success:       true,
-		Message:       "上传成功",
-		FileName:      uniqueFileName,
-		FileSize:      int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize: int64(len(processedImage.ThumbnailBytes)),
-		MimeType:      contentType,
-		URL:           url,
-		ThumbnailURL:  thumbnailURL,
-		Storage:       bucket.Type,
-		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
-		Width:         processedImage.Width,
-		Height:        processedImage.Height,
-		ContentHash:   processedImage.ContentHash,
+		Success:          true,
+		Message:          "上传成功",
+		FileName:         uniqueFileName,
+		OriginalFileName: fileHeader.Filename,
+		FileSize:         int64(len(processedImage.CompressedBytes)),
+		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		MimeType:         contentType,
+		URL:              url,
+		ThumbnailURL:     thumbnailURL,
+		Storage:          bucket.Type,
+		CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
+		Width:            processedImage.Width,
+		Height:           processedImage.Height,
+		ContentHash:      processedImage.ContentHash,
 	}, nil
 }
 
@@ -294,19 +296,20 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 	url := PathJoin(subDir, uniqueFileName)
 
 	return &interfaces.ImageUploadResult{
-		Success:       true,
-		Message:       "上传成功",
-		FileName:      uniqueFileName,
-		FileSize:      int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize: int64(len(processedImage.ThumbnailBytes)),
-		MimeType:      processedImage.MimeType,
-		URL:           url,
-		ThumbnailURL:  thumbnailURL,
-		Storage:       bucket.Type,
-		Width:         processedImage.Width,
-		Height:        processedImage.Height,
-		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
-		ContentHash:   processedImage.ContentHash,
+		Success:          true,
+		Message:          "上传成功",
+		FileName:         uniqueFileName,
+		OriginalFileName: fileHeader.Filename,
+		FileSize:         int64(len(processedImage.CompressedBytes)),
+		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		MimeType:         processedImage.MimeType,
+		URL:              url,
+		ThumbnailURL:     thumbnailURL,
+		Storage:          bucket.Type,
+		Width:            processedImage.Width,
+		Height:           processedImage.Height,
+		CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
+		ContentHash:      processedImage.ContentHash,
 	}, nil
 }
 
@@ -385,19 +388,20 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 	url := "/" + PathJoin(subDir, uniqueFileName)
 
 	return &interfaces.ImageUploadResult{
-		Success:       true,
-		Message:       "上传成功",
-		FileName:      uniqueFileName,
-		FileSize:      int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize: int64(len(processedImage.ThumbnailBytes)),
-		MimeType:      processedImage.MimeType,
-		URL:           url,
-		ThumbnailURL:  thumbnailURL,
-		Storage:       bucket.Type,
-		Width:         processedImage.Width,
-		Height:        processedImage.Height,
-		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
-		ContentHash:   processedImage.ContentHash,
+		Success:          true,
+		Message:          "上传成功",
+		FileName:         uniqueFileName,
+		OriginalFileName: fileHeader.Filename,
+		FileSize:         int64(len(processedImage.CompressedBytes)),
+		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		MimeType:         processedImage.MimeType,
+		URL:              url,
+		ThumbnailURL:     thumbnailURL,
+		Storage:          bucket.Type,
+		Width:            processedImage.Width,
+		Height:           processedImage.Height,
+		CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
+		ContentHash:      processedImage.ContentHash,
 	}, nil
 }
 
@@ -470,19 +474,20 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 	fileURL := "/" + PathJoin(subDir, uniqueFileName)
 
 	return &interfaces.ImageUploadResult{
-		Success:       true,
-		Message:       "上传成功",
-		URL:           fileURL,
-		ThumbnailURL:  thumbnailURL,
-		Storage:       bucket.Type,
-		FileName:      uniqueFileName,
-		FileSize:      int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize: int64(len(processedImage.ThumbnailBytes)),
-		MimeType:      processedImage.MimeType,
-		Width:         processedImage.Width,
-		Height:        processedImage.Height,
-		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
-		ContentHash:   processedImage.ContentHash,
+		Success:          true,
+		Message:          "上传成功",
+		URL:              fileURL,
+		ThumbnailURL:     thumbnailURL,
+		Storage:          bucket.Type,
+		FileName:         uniqueFileName,
+		OriginalFileName: fileHeader.Filename,
+		FileSize:         int64(len(processedImage.CompressedBytes)),
+		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		MimeType:         processedImage.MimeType,
+		Width:            processedImage.Width,
+		Height:           processedImage.Height,
+		CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
+		ContentHash:      processedImage.ContentHash,
 	}, nil
 }
 
@@ -587,19 +592,20 @@ func (u *TelegramUploader) Upload(c *gin.Context, setting *models.Settings, buck
 	}
 
 	return &interfaces.ImageUploadResult{
-		Success:       true,
-		Message:       "Telegram上传成功",
-		FileName:      processedImage.UniqueFileName,
-		FileSize:      int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize: int64(len(processedImage.ThumbnailBytes)),
-		MimeType:      processedImage.MimeType,
-		URL:           url,
-		ThumbnailURL:  thumbnailURL,
-		Storage:       bucket.Type, // 存储类型标识
-		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
-		Width:         processedImage.Width,
-		Height:        processedImage.Height,
-		ContentHash:   processedImage.ContentHash,
+		Success:          true,
+		Message:          "Telegram上传成功",
+		FileName:         processedImage.UniqueFileName,
+		OriginalFileName: fileHeader.Filename,
+		FileSize:         int64(len(processedImage.CompressedBytes)),
+		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		MimeType:         processedImage.MimeType,
+		URL:              url,
+		ThumbnailURL:     thumbnailURL,
+		Storage:          bucket.Type, // 存储类型标识
+		CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
+		Width:            processedImage.Width,
+		Height:           processedImage.Height,
+		ContentHash:      processedImage.ContentHash,
 	}, nil
 }
 
@@ -679,20 +685,21 @@ func findDuplicateUploadResult(bucket *models.Buckets, contentHash string) *inte
 	log.Printf("发现重复图片，跳过上传: %s", imageModel.Url)
 
 	return &interfaces.ImageUploadResult{
-		Success:      true,
-		Message:      "图片已存在",
-		ID:           imageModel.Id,
-		URL:          imageModel.Url,
-		ThumbnailURL: imageModel.Thumbnail,
-		Storage:      imageModel.Storage,
-		FileName:     imageModel.FileName,
-		FileSize:     imageModel.FileSize,
-		MimeType:     imageModel.MimeType,
-		Width:        imageModel.Width,
-		Height:       imageModel.Height,
-		ContentHash:  imageModel.ContentHash,
-		Duplicate:    true,
-		CreatedAt:    imageModel.CreatedAt.Format("2006-01-02 15:04:05"),
+		Success:          true,
+		Message:          "图片已存在",
+		ID:               imageModel.Id,
+		URL:              imageModel.Url,
+		ThumbnailURL:     imageModel.Thumbnail,
+		Storage:          imageModel.Storage,
+		FileName:         imageModel.FileName,
+		OriginalFileName: imageModel.OriginalFileName,
+		FileSize:         imageModel.FileSize,
+		MimeType:         imageModel.MimeType,
+		Width:            imageModel.Width,
+		Height:           imageModel.Height,
+		ContentHash:      imageModel.ContentHash,
+		Duplicate:        true,
+		CreatedAt:        imageModel.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 }
 

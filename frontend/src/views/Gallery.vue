@@ -55,6 +55,25 @@
           </select>
             </div>
 
+            <div class="gallery-inline-control gallery-inline-control-select">
+              <span class="gallery-inline-label">搜索</span>
+              <div class="flex w-full gap-1.5 sm:w-72">
+                <input
+                  v-model.trim="searchKeyword"
+                  class="input-modern min-w-0 flex-1"
+                  type="search"
+                  placeholder="原始名 / 文件名 / URL / 哈希"
+                  @keyup.enter="handleSearch"
+                />
+                <button class="soft-button px-2.5" @click="handleSearch" title="搜索">
+                  <i class="ri-search-line"></i>
+                </button>
+                <button v-if="searchKeyword" class="soft-button px-2.5" @click="clearSearch" title="清空">
+                  <i class="ri-close-line"></i>
+                </button>
+              </div>
+            </div>
+
             <div class="gallery-inline-control gallery-inline-control-tags">
               <span class="gallery-inline-label">标签</span>
           <div class="flex flex-wrap gap-1.5">
@@ -157,7 +176,7 @@
               </div>
               <img 
                 :src="image.thumbnail || image.url" 
-                :alt="image.filename"
+                :alt="getImageAltText(image)"
                 class="image-thumbnail h-full w-full object-cover opacity-0"
                 loading="lazy"
                 @load="handleImageLoad"
@@ -166,6 +185,9 @@
             </div>
             <div class="image-info gallery-image-info-compact p-3">
               <p class="image-filename overflow-hidden truncate whitespace-nowrap text-sm font-medium">{{ image.filename }}</p>
+              <p v-if="image.original_filename && image.original_filename !== image.filename" class="gallery-image-card-meta truncate">
+                原始：{{ image.original_filename }}
+              </p>
               <p class="gallery-image-card-meta gallery-image-card-meta-inline">
                 {{ formatFileSize(image.file_size) }} • 
                 {{ image.width }}×{{ image.height }}
@@ -349,6 +371,7 @@ const presetBuckets = ref([]);
 const selectedBucket = ref(null);
 const selectedImages = ref([]); // 选中的图片ID数组
 const selectedTags = ref([]); // 选中的标签ID数组
+const searchKeyword = ref('');
 const selectAll = ref(false); // 全选状态
 const currentPreviewImage = ref(null);
 
@@ -370,6 +393,8 @@ const visiblePages = computed(() => {
   
   return pages;
 });
+
+const getImageAltText = (image) => image?.original_filename || image?.filename || '图片';
 
 // ====================== 监听器 ======================
 /**
@@ -451,6 +476,9 @@ const loadImages = async () => {
       tags: selectedTags.value,
       bucket: selectedBucket.value
     });
+    if (searchKeyword.value) {
+      params.set('search', searchKeyword.value);
+    }
     
     const response = await fetch(`${API_BASE_URL}/api/images?${params}`, {
       headers: {
@@ -644,6 +672,19 @@ const changePage = (page) => {
     loadImages();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+};
+
+const handleSearch = () => {
+  currentPage.value = 1;
+  selectedImages.value = [];
+  selectAll.value = false;
+  loadImages();
+};
+
+const clearSearch = () => {
+  if (!searchKeyword.value) return;
+  searchKeyword.value = '';
+  handleSearch();
 };
 
 /**
@@ -950,6 +991,7 @@ const openPreview = (image) => {
  * @returns {string} HTML字符串
  */
 const generatePreviewContent = (image) => {
+  const altText = getImageAltText(image);
   const roleClass = image.user_id == '1' 
     ? 'background-color: #e0f2fe; color: #0369a1; dark:background-color: #075985; dark:color: #bae6fd;' 
     : 'background-color: #dcfce7; color: #166534; dark:background-color: #14532d; dark:color: #bbf7d0;';
@@ -1013,7 +1055,7 @@ const generatePreviewContent = (image) => {
             </div>
             <img 
               src="${getFullUrl(image.url)}"
-              alt="${image.filename}" 
+              alt="${altText}" 
               class="max-w-full w-fill max-h-[360px] min-h-[260px] object-contain rounded-lg relative z-10 opacity-0 transition-opacity duration-300"
               onload="this.classList.remove('opacity-0'); this.parentElement.classList.remove('animate-pulse'); this.parentElement.querySelector('.loading-svg').classList.add('hidden');"
               onerror="this.parentElement.classList.remove('animate-pulse'); this.classList.remove('opacity-0'); this.src='${errorImg}';"
@@ -1060,6 +1102,10 @@ const generatePreviewContent = (image) => {
           尺寸: ${image.width || '未知'}×${image.height || '未知'}
         </div>
         <div class="flex items-center gap-1.5">
+          <i class="ri-file-text-line w-3.5 text-center"></i>
+          原始: ${image.original_filename || image.filename || '未知'}
+        </div>
+        <div class="flex items-center gap-1.5">
           <i class="ri-image-line w-3.5 text-center"></i>
           大小: ${formatFileSize(image.file_size || 0)}
         </div>
@@ -1087,12 +1133,13 @@ const registerPreviewGlobalFunctions = (modal, imageId) => {
     if (!currentPreviewImage.value) return;
     const image = currentPreviewImage.value;
     const fullUrl = getFullUrl(image.url);
+    const altText = getImageAltText(image);
     let copyText = '';
     
     switch (type) {
       case 'url': copyText = fullUrl; break;
-      case 'html': copyText = `<img src="${fullUrl}" alt="${image.filename}" width="${image.width || ''}" height="${image.height || ''}">`; break;
-      case 'markdown': copyText = `![${image.filename}](${fullUrl})`; break;
+      case 'html': copyText = `<img src="${fullUrl}" alt="${altText}" width="${image.width || ''}" height="${image.height || ''}">`; break;
+      case 'markdown': copyText = `![${altText}](${fullUrl})`; break;
       default: copyText = fullUrl;
     }
     

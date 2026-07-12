@@ -212,14 +212,15 @@ func TestImportSkipsExistingImageURL(t *testing.T) {
 
 	db := testDB(t)
 	if err := db.Create(&models.Image{
-		Url:         "/uploads/2026/07/a.jpg",
-		FileName:    "a.jpg",
-		FileSize:    1,
-		BucketId:    1,
-		UserId:      1,
-		Storage:     "default",
-		ContentHash: "existing-hash",
-		UUID:        "admin",
+		Url:              "/uploads/2026/07/a.jpg",
+		FileName:         "a.jpg",
+		OriginalFileName: "a.jpg",
+		FileSize:         1,
+		BucketId:         1,
+		UserId:           1,
+		Storage:          "default",
+		ContentHash:      "existing-hash",
+		UUID:             "admin",
 	}).Error; err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -273,6 +274,9 @@ func TestImportBackfillsExistingContentHash(t *testing.T) {
 	}
 	if imageModel.ContentHash != images.HashBytes(fileBytes) {
 		t.Fatalf("ContentHash = %q, want %q", imageModel.ContentHash, images.HashBytes(fileBytes))
+	}
+	if imageModel.OriginalFileName != "a.jpg" {
+		t.Fatalf("OriginalFileName = %q, want a.jpg", imageModel.OriginalFileName)
 	}
 }
 
@@ -354,6 +358,9 @@ func TestImportOrdinaryImagesGenerateWebPThumbnails(t *testing.T) {
 			}
 			if imageModel.ContentHash == "" {
 				t.Fatal("content_hash should not be empty")
+			}
+			if imageModel.OriginalFileName != tt.file {
+				t.Fatalf("original_filename = %q, want %q", imageModel.OriginalFileName, tt.file)
 			}
 			thumbPath := filepath.Join(dataRoot, filepath.FromSlash(imageModel.Thumbnail))
 			thumbBytes, err := os.ReadFile(thumbPath)

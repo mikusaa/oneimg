@@ -375,12 +375,14 @@ const getTypeText = (type) => {
   return typeMap[type] || '';
 };
 
+const getImageAltText = (image) => image?.original_filename || image?.filename || '图片';
+
 /**
  * 生成HTML代码
  */
 const getHtmlCode = (image) => {
   const url = getFullUrl(image.url);
-  const alt = image.filename || '图片预览';
+  const alt = getImageAltText(image);
   return `<img src="${url}" alt="${alt}"/>`;
 };
 
@@ -389,7 +391,7 @@ const getHtmlCode = (image) => {
  */
 const getMarkdownCode = (image) => {
   const url = getFullUrl(image.url);
-  const filename = image.filename || '图片';
+  const filename = getImageAltText(image);
   return `![${filename}](${url})`;
 };
 
@@ -812,6 +814,7 @@ const copyImageLink = async (image, type) => {
   if (!image) return;
   
   const fullUrl = getFullUrl(image.url);
+  const altText = getImageAltText(image);
   let copyText = '';
   
   switch (type) {
@@ -819,10 +822,10 @@ const copyImageLink = async (image, type) => {
       copyText = fullUrl;
       break;
     case 'html':
-      copyText = `<img src="${fullUrl}" alt="${image.filename}" width="${image.width || ''}" height="${image.height || ''}">`;
+      copyText = `<img src="${fullUrl}" alt="${altText}" width="${image.width || ''}" height="${image.height || ''}">`;
       break;
     case 'markdown':
-      copyText = `![${image.filename}](${fullUrl})`;
+      copyText = `![${altText}](${fullUrl})`;
       break;
     default:
       copyText = fullUrl;

@@ -12,24 +12,26 @@ import (
 	"oneimg/backend/utils/settings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type ImageWithTags struct {
-	Id        int           `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
-	Url       string        `json:"url" gorm:"column:url"`
-	Thumbnail string        `json:"thumbnail" gorm:"column:thumbnail"`
-	Filename  string        `json:"filename" gorm:"column:file_name"`
-	FileSize  int64         `json:"file_size" gorm:"column:file_size"`
-	MimeType  string        `json:"mimeType" gorm:"column:mime_type"`
-	Width     int           `json:"width" gorm:"column:width"`
-	Height    int           `json:"height" gorm:"column:height"`
-	Storage   string        `json:"storage" gorm:"column:storage"`
-	BucketId  int           `json:"bucket_id" gorm:"column:bucket_id"`
-	UserId    int           `json:"user_id" gorm:"column:user_id"`
-	Md5       string        `json:"md5" gorm:"column:md5"`
-	Uuid      string        `json:"uuid" gorm:"column:uuid"`
-	CreatedAt time.Time     `json:"created_at" gorm:"column:created_at"`
-	Tags      []models.Tags `json:"tags" gorm:"-"`
+	Id               int           `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
+	Url              string        `json:"url" gorm:"column:url"`
+	Thumbnail        string        `json:"thumbnail" gorm:"column:thumbnail"`
+	Filename         string        `json:"filename" gorm:"column:file_name"`
+	OriginalFileName string        `json:"original_filename" gorm:"column:original_filename"`
+	FileSize         int64         `json:"file_size" gorm:"column:file_size"`
+	MimeType         string        `json:"mimeType" gorm:"column:mime_type"`
+	Width            int           `json:"width" gorm:"column:width"`
+	Height           int           `json:"height" gorm:"column:height"`
+	Storage          string        `json:"storage" gorm:"column:storage"`
+	BucketId         int           `json:"bucket_id" gorm:"column:bucket_id"`
+	UserId           int           `json:"user_id" gorm:"column:user_id"`
+	Md5              string        `json:"md5" gorm:"column:md5"`
+	Uuid             string        `json:"uuid" gorm:"column:uuid"`
+	CreatedAt        time.Time     `json:"created_at" gorm:"column:created_at"`
+	Tags             []models.Tags `json:"tags" gorm:"-"`
 }
 
 // 映射到数据库表
@@ -118,9 +120,7 @@ func GetImageList(c *gin.Context) {
 	if c.GetInt("user_role") != 1 || role == "" {
 		idQuery = idQuery.Where("images.uuid = ?", GetUUID(c))
 	}
-	if search != "" {
-		idQuery = idQuery.Where("images.file_name LIKE ?", "%"+search+"%")
-	}
+	idQuery = applyImageSearch(idQuery, search)
 
 	if hasZeroTag || len(filterTagIds) > 0 {
 		idQuery = idQuery.Joins("LEFT JOIN image_to_tags ON images.id = image_to_tags.image_id")
@@ -165,7 +165,7 @@ func GetImageList(c *gin.Context) {
 	// 查询图片详情
 	var images []ImageWithTags
 	if len(imageIds) > 0 {
-		imageFields := "id, url, thumbnail, file_name, file_size, mime_type, width, height, storage, bucket_id, user_id, md5, uuid, created_at"
+		imageFields := "id, url, thumbnail, file_name, original_filename, file_size, mime_type, width, height, storage, bucket_id, user_id, md5, uuid, created_at"
 		if err := db.Model(&ImageWithTags{}).
 			Select(imageFields).
 			Where("id IN (?)", imageIds).
@@ -252,4 +252,15 @@ func GetImageList(c *gin.Context) {
 		"limit":       limit,
 		"total_pages": totalPages,
 	}))
+}
+
+func applyImageSearch(query *gorm.DB, search string) *gorm.DB {
+	if strings.TrimSpace(search) == "" {
+		return query
+	}
+	searchPattern := "%" + strings.TrimSpace(search) + "%"
+	return query.Where(
+		"(images.file_name LIKE ? OR images.original_filename LIKE ? OR images.url LIKE ? OR images.content_hash LIKE ?)",
+		searchPattern, searchPattern, searchPattern, searchPattern,
+	)
 }
