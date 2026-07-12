@@ -17,6 +17,7 @@ import (
 	"gorm.io/gorm"
 
 	"oneimg/backend/models"
+	"oneimg/backend/utils/images"
 )
 
 func testDB(t *testing.T) *gorm.DB {
@@ -211,13 +212,14 @@ func TestImportSkipsExistingImageURL(t *testing.T) {
 
 	db := testDB(t)
 	if err := db.Create(&models.Image{
-		Url:      "/uploads/2026/07/a.jpg",
-		FileName: "a.jpg",
-		FileSize: 1,
-		BucketId: 1,
-		UserId:   1,
-		Storage:  "default",
-		UUID:     "admin",
+		Url:         "/uploads/2026/07/a.jpg",
+		FileName:    "a.jpg",
+		FileSize:    1,
+		BucketId:    1,
+		UserId:      1,
+		Storage:     "default",
+		ContentHash: "existing-hash",
+		UUID:        "admin",
 	}).Error; err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -234,6 +236,43 @@ func TestImportSkipsExistingImageURL(t *testing.T) {
 	db.Model(&models.Image{}).Count(&count)
 	if count != 1 {
 		t.Fatalf("image count = %d, want 1", count)
+	}
+}
+
+func TestImportBackfillsExistingContentHash(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "uploads")
+	path := filepath.Join(root, "2026", "07", "a.jpg")
+	fileBytes := encodeJPEG(t)
+	writeFile(t, path, fileBytes)
+
+	db := testDB(t)
+	if err := db.Create(&models.Image{
+		Url:      "/uploads/2026/07/a.jpg",
+		FileName: "a.jpg",
+		FileSize: 1,
+		BucketId: 1,
+		UserId:   1,
+		Storage:  "default",
+		UUID:     "admin",
+	}).Error; err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	summary, err := NewImporter(db, quietOptions(root, filepath.Join(tmp, "data"))).Run()
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if summary.Updated != 1 || summary.Imported != 0 || summary.SkippedExisting != 0 {
+		t.Fatalf("summary = %+v, want one updated", summary)
+	}
+
+	var imageModel models.Image
+	if err := db.First(&imageModel).Error; err != nil {
+		t.Fatalf("First() error = %v", err)
+	}
+	if imageModel.ContentHash != images.HashBytes(fileBytes) {
+		t.Fatalf("ContentHash = %q, want %q", imageModel.ContentHash, images.HashBytes(fileBytes))
 	}
 }
 

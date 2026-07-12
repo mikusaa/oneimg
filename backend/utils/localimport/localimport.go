@@ -198,20 +198,21 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 	}
 
 	var existing models.Image
-	err = i.db.Where("url = ?", imageURL).First(&existing).Error
-	if err != nil && err != gorm.ErrRecordNotFound {
-		return fmt.Errorf("check existing image: %w", err)
+	result := i.db.Where("url = ?", imageURL).Limit(1).Find(&existing)
+	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+		return fmt.Errorf("check existing image: %w", result.Error)
 	}
-	if err == nil {
-		if i.options.UpdateExistingDate {
+	if result.RowsAffected > 0 {
+		updated, err := i.updateExistingImage(&existing, path, createdAt)
+		if err != nil {
+			return err
+		}
+		if updated {
 			if i.options.DryRun {
 				summary.WouldUpdate++
-				return nil
+			} else {
+				summary.Updated++
 			}
-			if err := i.db.Model(&existing).Update("created_at", createdAt).Error; err != nil {
-				return fmt.Errorf("update existing created_at: %w", err)
-			}
-			summary.Updated++
 			return nil
 		}
 		summary.SkippedExisting++
@@ -270,6 +271,30 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 
 	summary.Imported++
 	return nil
+}
+
+func (i *Importer) updateExistingImage(existing *models.Image, path string, createdAt time.Time) (bool, error) {
+	updates := map[string]interface{}{}
+	if i.options.UpdateExistingDate {
+		updates["created_at"] = createdAt
+	}
+	if strings.TrimSpace(existing.ContentHash) == "" {
+		fileBytes, err := os.ReadFile(path)
+		if err != nil {
+			return false, fmt.Errorf("read file for content hash: %w", err)
+		}
+		updates["content_hash"] = images.HashBytes(fileBytes)
+	}
+	if len(updates) == 0 {
+		return false, nil
+	}
+	if i.options.DryRun {
+		return true, nil
+	}
+	if err := i.db.Model(existing).Updates(updates).Error; err != nil {
+		return false, fmt.Errorf("update existing image: %w", err)
+	}
+	return true, nil
 }
 
 func (i *Importer) writeThumbnail(thumbnailURL string, data []byte) error {
