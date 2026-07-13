@@ -213,6 +213,14 @@
                   <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <span class="result-meta-pill">{{ formatFileSize(image.file_size) }}</span>
                     <span class="result-meta-pill">{{ image.width }}×{{ image.height }}</span>
+                    <span
+                      v-if="getStorageSyncSummary(image).total > 0"
+                      class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5"
+                      :class="getStorageSyncSummary(image).badgeClass"
+                    >
+                      <i :class="getStorageSyncSummary(image).icon"></i>
+                      {{ getStorageSyncSummary(image).label }}
+                    </span>
                   </div>
                 </div>
                 <div class="flex items-center justify-end gap-1.5 sm:self-end lg:justify-end">
@@ -282,6 +290,7 @@
 <script setup>
 import errorImg from '@/assets/images/error.webp';
 import { ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { getStorageSyncSummary } from '@/utils/storageStatus.js'
 
 // ====================== 常量定义 ======================
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -324,6 +333,11 @@ function isGuest() {
   const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
   if(userInfo?.isTourist == true) return true;
   else return false;
+}
+
+function isAdmin() {
+  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+  return Number(userInfo?.role) === 1;
 }
 
 /**
@@ -434,7 +448,11 @@ const getUploadConfig = async () => {
  */
 const loadRecentImages = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/images?limit=12&role=${isGuest() ? 'guest' : 'admin'}`, {
+    const params = new URLSearchParams({ limit: '12' });
+    if (isAdmin()) {
+      params.set('role', isGuest() ? 'guest' : 'admin');
+    }
+    const response = await fetch(`${API_BASE_URL}/api/images?${params}`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }

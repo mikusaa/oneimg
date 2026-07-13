@@ -68,6 +68,15 @@ const routes = [
     }
   },
   {
+    path: '/users',
+    name: 'Users',
+    component: () => import('@/views/Users.vue'),
+    meta: {
+      title: '用户管理',
+      adminOnly: true
+    }
+  },
+  {
     path: '/account',
     name: 'Account',
     component: () => import('@/views/Account.vue'),
@@ -195,6 +204,15 @@ router.beforeEach(async (to, from, next) => {
       localStorage.removeItem('userInfo');
       window.refreshNavItems && window.refreshNavItems();
       return next('/login');
+    }
+    const currentRole = result.data.user_role ?? result.data.role;
+    if (currentRole !== undefined && userInfo.role !== currentRole) {
+      userInfo.role = currentRole;
+      localStorage.setItem('userInfo', JSON.stringify(userInfo));
+      window.refreshNavItems && window.refreshNavItems();
+    }
+    if (to.meta.adminOnly && Number(currentRole) !== 1) {
+      return next('/');
     }
 
     // 所有验证通过，放行

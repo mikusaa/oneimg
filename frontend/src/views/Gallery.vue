@@ -13,7 +13,7 @@
           <div class="gallery-topbar-filters">
             <div v-if="isAdmin" class="gallery-inline-control">
               <span class="gallery-inline-label">角色</span>
-              <div class="role-buttons grid w-full grid-cols-2 overflow-hidden rounded-[16px] border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto">
+              <div class="role-buttons grid w-full grid-cols-3 overflow-hidden rounded-[16px] border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto">
             <button
               @click="changeRole('admin')"
               class="px-3 py-1.5 text-sm transition-all"
@@ -24,6 +24,17 @@
               ]"
             >
               管理员
+            </button>
+            <button
+              @click="changeRole('user')"
+              class="px-3 py-1.5 text-sm transition-all"
+              :class="[
+                roleImage === 'user'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'bg-transparent hover:bg-slate-100 dark:hover:bg-white/10'
+              ]"
+            >
+              用户
             </button>
             <button
               @click="changeRole('guest')"
@@ -148,9 +159,9 @@
               <div class="gallery-card-badges">
                 <span 
                   class="image-role gallery-card-badge"
-                  :class="getRoleTagClass(image.user_id)"
+                  :class="getRoleTagClass(image)"
                 >
-                  {{ image.user_id == '1' ? '管理员' : '游客' }}
+                  {{ getRoleName(image) }}
                 </span>
                 <span class="gallery-card-badge gallery-card-badge-dark">
                   {{ presetBuckets.find(bucket => bucket.id == image.bucket_id)?.name }}
@@ -193,6 +204,15 @@
                 {{ image.width }}×{{ image.height }}
               </p>
               <p class="gallery-image-card-meta">{{ formatDate(image.created_at) }}</p>
+              <div v-if="getStorageSyncSummary(image).total > 0" class="mt-2">
+                <span
+                  class="inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
+                  :class="getStorageSyncSummary(image).badgeClass"
+                >
+                  <i :class="getStorageSyncSummary(image).icon"></i>
+                  <span class="truncate">{{ getStorageSyncSummary(image).label }}</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -238,9 +258,9 @@
         <div class="empty-icon mb-3 text-5xl text-gray-400 dark:text-gray-600">
           <i class="ri-image-ai-line"></i>
         </div>
-        <h3 class="mb-2 text-lg font-bold">暂无{{ roleImage === 'admin' ? '管理员' : '游客' }}图片</h3>
+        <h3 class="mb-2 text-lg font-bold">暂无{{ ROLE_MAP[roleImage] }}图片</h3>
         <p class="mb-4 text-gray-600 dark:text-gray-400">
-          还没有上传任何{{ roleImage === 'admin' ? '管理员' : '游客' }}图片，
+          还没有上传任何{{ ROLE_MAP[roleImage] }}图片，
           <router-link to="/" class="text-primary hover:underline">去上传一些吧</router-link>
         </p>
       </div>
@@ -253,12 +273,14 @@
 import { ref, onMounted, computed, onUnmounted, unref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import errorImg from '@/assets/images/error.webp';
+import { getStorageSyncSummary, renderStorageStatusesHtml } from '@/utils/storageStatus.js';
 
 // ====================== 常量定义 ======================
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const PAGE_SIZE = 20;
 const ROLE_MAP = {
   admin: '管理员',
+  user: '普通用户',
   guest: '游客'
 };
 const STORAGE_MAP = {
@@ -314,10 +336,22 @@ const formatDate = (dateString) => {
  * @param {string|number} userId - 用户ID
  * @returns {string} 样式类字符串
  */
-const getRoleTagClass = (userId) => {
-  return userId == '1' 
-    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
-    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+const getRoleName = (image) => {
+  if (Number(image?.uploader_role) === 1) return '管理员';
+  if (Number(image?.uploader_role) === 3) return '普通用户';
+  if (image?.user_id == '1') return '管理员';
+  return '游客';
+};
+
+const getRoleTagClass = (image) => {
+  const role = Number(image?.uploader_role);
+  if (role === 1 || image?.user_id == '1') {
+    return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+  }
+  if (role === 3) {
+    return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
+  }
+  return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
 };
 
 /**
@@ -472,10 +506,12 @@ const loadImages = async () => {
       limit: PAGE_SIZE,
       sort_by: 'created_at',
       sort_order: 'desc',
-      role: roleImage.value,
       tags: selectedTags.value,
       bucket: selectedBucket.value
     });
+    if (isAdmin.value) {
+      params.set('role', roleImage.value);
+    }
     if (searchKeyword.value) {
       params.set('search', searchKeyword.value);
     }
@@ -992,9 +1028,11 @@ const openPreview = (image) => {
  */
 const generatePreviewContent = (image) => {
   const altText = getImageAltText(image);
-  const roleClass = image.user_id == '1' 
+  const roleClass = getRoleName(image) === '管理员'
     ? 'background-color: #e0f2fe; color: #0369a1; dark:background-color: #075985; dark:color: #bae6fd;' 
-    : 'background-color: #dcfce7; color: #166534; dark:background-color: #14532d; dark:color: #bbf7d0;';
+    : getRoleName(image) === '普通用户'
+      ? 'background-color: #e0e7ff; color: #3730a3;'
+      : 'background-color: #dcfce7; color: #166534; dark:background-color: #14532d; dark:color: #bbf7d0;';
   
   // 生成标签HTML
   const tagsHtml = image.tags?.map(tag => `
@@ -1014,7 +1052,7 @@ const generatePreviewContent = (image) => {
       <div class="preview-header bg-light-50 pb-2 flex justify-between items-center">
         <div class="flex items-center gap-2">
           <span class="text-xs px-2 py-0.5 rounded" style="${roleClass}">
-            ${image.user_id == '1' ? '管理员' : '游客'}
+            ${getRoleName(image)}
           </span>
           <span class="text-xs text-white px-2 py-0.5 rounded bg-success">
             ${presetBuckets.value.find(bucket => bucket.id == image.bucket_id)?.name}
@@ -1045,7 +1083,7 @@ const generatePreviewContent = (image) => {
         <a 
           class="spotlight min-w-full max-w-full min-h-[260px] block" 
           href="${getFullUrl(image.url)}" 
-          data-description="尺寸: ${image.width || '未知'}×${image.height || '未知'} | 大小: ${formatFileSize(image.file_size || 0)} | 上传日期：${formatDate(image.created_at)} | 角色：${image.user_id == '1' ? '管理员' : '游客'}"
+          data-description="尺寸: ${image.width || '未知'}×${image.height || '未知'} | 大小: ${formatFileSize(image.file_size || 0)} | 上传日期：${formatDate(image.created_at)} | 角色：${getRoleName(image)}"
         >
           <div class="relative max-w-full w-fill max-h-[360px] min-h-[260px] rounded-lg overflow-hidden animate-pulse flex items-center justify-center">
             <div class="absolute inset-0 flex items-center justify-center">
@@ -1115,8 +1153,12 @@ const generatePreviewContent = (image) => {
         </div>
         <div class="flex items-center gap-1.5">
           <i class="ri-user-line"></i>
-          角色: ${image.user_id == '1' ? '管理员' : '游客'}
+          角色: ${getRoleName(image)}
         </div>
+      </div>
+      <div class="mt-3 space-y-2">
+        <p class="text-xs font-semibold text-secondary">同步状态</p>
+        ${renderStorageStatusesHtml(image)}
       </div>
     </div>
   `;
@@ -1329,8 +1371,13 @@ onMounted(() => {
   const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
   if (userInfo?.isTourist === true) {
     roleImage.value = "guest";
-  } else {
+    isAdmin.value = false;
+  } else if (Number(userInfo?.role) === 1) {
     isAdmin.value = true;
+    roleImage.value = "admin";
+  } else {
+    isAdmin.value = false;
+    roleImage.value = "user";
   }
   
   // 加载数据

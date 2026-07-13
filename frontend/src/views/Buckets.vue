@@ -202,6 +202,11 @@ const AddBucketModal = () => {
         }
       },
       {
+        text: '测试连接',
+        type: 'default',
+        callback: (_, formData) => testBucketConnection(formData)
+      },
+      {
         text: '确认添加',
         type: 'primary',
         callback: (modal) => {
@@ -278,6 +283,11 @@ const UpdateBucketModal = (bucket) => {
         }
       },
       {
+        text: '测试连接',
+        type: 'default',
+        callback: (_, formData) => testBucketConnection({ ...formData, id: bucket.id, type: bucket.type })
+      },
+      {
         text: '确认更新',
         type: 'primary',
         callback: (modal) => {
@@ -289,6 +299,32 @@ const UpdateBucketModal = (bucket) => {
     ]
   });
   modal.open();
+}
+
+const testBucketConnection = async (formData) => {
+  try {
+    if (!formData.type) {
+      message.warning('请先选择存储类型');
+      return;
+    }
+    const response = await fetch('/api/buckets/test', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+      },
+      body: JSON.stringify(formData)
+    });
+    const result = await response.json();
+    if (response.ok && result.code === 200) {
+      message.success(result.data?.detail || '连接测试成功');
+    } else {
+      message.error(result.message || '连接测试失败');
+    }
+  } catch (error) {
+    console.error('连接测试失败:', error);
+    message.error('连接测试失败，请稍后重试');
+  }
 }
 
 // 删除存储弹窗
