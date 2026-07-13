@@ -89,11 +89,15 @@ func InitDB(cfg *config.Config) {
 	}
 
 	// 自动迁移数据表
+	dropLegacyUserRoleUniqueIndex(db.DB)
 	err = db.DB.AutoMigrate(
 		&models.Tags{},
 		&models.User{},
 		&models.Image{},
+		&models.ImageStorage{},
 		&models.Settings{},
+		&models.ExternalAuthFlow{},
+		&models.ExternalIdentity{},
 		&models.ImageTeleGram{},
 		&models.ImageToTags{},
 		&models.Buckets{},
@@ -102,6 +106,16 @@ func InitDB(cfg *config.Config) {
 		log.Fatalf("❌ 数据库表迁移失败: %v", err)
 	}
 	log.Println("✅ 数据库表迁移完成")
+}
+
+func dropLegacyUserRoleUniqueIndex(gormDB *gorm.DB) {
+	for _, indexName := range []string{"unique_idx", "idx_users_role"} {
+		if gormDB.Migrator().HasIndex(&models.User{}, indexName) {
+			if err := gormDB.Migrator().DropIndex(&models.User{}, indexName); err != nil {
+				log.Printf("⚠️ 删除旧用户角色唯一索引失败(%s): %v", indexName, err)
+			}
+		}
+	}
 }
 
 // initMysqlWithTLS 初始化MySQL

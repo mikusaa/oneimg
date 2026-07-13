@@ -16,22 +16,24 @@ import (
 )
 
 type ImageWithTags struct {
-	Id               int           `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
-	Url              string        `json:"url" gorm:"column:url"`
-	Thumbnail        string        `json:"thumbnail" gorm:"column:thumbnail"`
-	Filename         string        `json:"filename" gorm:"column:file_name"`
-	OriginalFileName string        `json:"original_filename" gorm:"column:original_filename"`
-	FileSize         int64         `json:"file_size" gorm:"column:file_size"`
-	MimeType         string        `json:"mimeType" gorm:"column:mime_type"`
-	Width            int           `json:"width" gorm:"column:width"`
-	Height           int           `json:"height" gorm:"column:height"`
-	Storage          string        `json:"storage" gorm:"column:storage"`
-	BucketId         int           `json:"bucket_id" gorm:"column:bucket_id"`
-	UserId           int           `json:"user_id" gorm:"column:user_id"`
-	Md5              string        `json:"md5" gorm:"column:md5"`
-	Uuid             string        `json:"uuid" gorm:"column:uuid"`
-	CreatedAt        time.Time     `json:"created_at" gorm:"column:created_at"`
-	Tags             []models.Tags `json:"tags" gorm:"-"`
+	Id               int                          `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
+	Url              string                       `json:"url" gorm:"column:url"`
+	Thumbnail        string                       `json:"thumbnail" gorm:"column:thumbnail"`
+	Filename         string                       `json:"filename" gorm:"column:file_name"`
+	OriginalFileName string                       `json:"original_filename" gorm:"column:original_filename"`
+	FileSize         int64                        `json:"file_size" gorm:"column:file_size"`
+	MimeType         string                       `json:"mimeType" gorm:"column:mime_type"`
+	Width            int                          `json:"width" gorm:"column:width"`
+	Height           int                          `json:"height" gorm:"column:height"`
+	Storage          string                       `json:"storage" gorm:"column:storage"`
+	BucketId         int                          `json:"bucket_id" gorm:"column:bucket_id"`
+	UserId           int                          `json:"user_id" gorm:"column:user_id"`
+	Md5              string                       `json:"md5" gorm:"column:md5"`
+	Uuid             string                       `json:"uuid" gorm:"column:uuid"`
+	CreatedAt        time.Time                    `json:"created_at" gorm:"column:created_at"`
+	UploaderRole     int                          `json:"uploader_role" gorm:"-"`
+	Tags             []models.Tags                `json:"tags" gorm:"-"`
+	StorageStatuses  []ImageStorageStatusResponse `json:"storage_statuses" gorm:"-"`
 }
 
 // 映射到数据库表
@@ -56,9 +58,9 @@ func GetImageList(c *gin.Context) {
 	sortBy := c.DefaultQuery("sort_by", "created_at")
 	sortOrder := c.DefaultQuery("sort_order", "desc")
 	fieldMapping := map[string]string{
-		"created_at": "created_at",
-		"file_size":  "file_size",
-		"filename":   "file_name",
+		"created_at": "images.created_at",
+		"file_size":  "images.file_size",
+		"filename":   "images.file_name",
 	}
 	dbSortField := fieldMapping[sortBy]
 	if dbSortField == "" {
@@ -71,7 +73,10 @@ func GetImageList(c *gin.Context) {
 
 	// 搜索/角色参数
 	search := c.Query("search")
-	role := c.Query("role")
+	roleFilter := c.Query("role")
+	roleID := c.GetInt("user_role")
+	userID := c.GetInt("user_id")
+	userUUID := GetUUID(c)
 
 	// 标签参数解析
 	var hasZeroTag bool
@@ -100,25 +105,40 @@ func GetImageList(c *gin.Context) {
 
 	bucket := c.Query("bucket")
 	if bucket != "" && bucket != "all" && bucket != "null" {
-		idQuery = idQuery.Where("images.bucket_id = ?", bucket)
+		idQuery = idQuery.Where(
+			"EXISTS (SELECT 1 FROM image_storages WHERE image_storages.image_id = images.id AND image_storages.bucket_id = ?)",
+			bucket,
+		)
 	}
 
 	// 基础筛选：角色+权限+搜索
-	if c.GetInt("user_role") != 1 && role == "admin" {
-		c.JSON(http.StatusBadRequest, result.Error(400, "无权访问"))
-		return
-	}
-
-	if role != "" {
-		switch role {
-		case "admin":
-			idQuery = idQuery.Where("images.user_id = ?", 1)
-		case "guest":
-			idQuery = idQuery.Where("images.user_id != ?", 1)
+	if roleFilter != "" {
+		if roleID != models.RoleAdmin {
+			c.JSON(http.StatusBadRequest, result.Error(400, "无权限查看全局用户图片"))
+			return
 		}
-	}
-	if c.GetInt("user_role") != 1 || role == "" {
-		idQuery = idQuery.Where("images.uuid = ?", GetUUID(c))
+		switch roleFilter {
+		case "admin":
+			idQuery = idQuery.Joins("LEFT JOIN users ON images.user_id = users.id").
+				Where("users.id IS NOT NULL AND users.role = ?", models.RoleAdmin)
+		case "user":
+			idQuery = idQuery.Joins("LEFT JOIN users ON images.user_id = users.id").
+				Where("users.id IS NOT NULL AND users.role = ?", models.RoleUser)
+		case "guest":
+			idQuery = idQuery.Joins("LEFT JOIN users ON images.user_id = users.id").
+				Where("users.id IS NULL")
+		}
+	} else {
+		switch roleID {
+		case models.RoleAdmin:
+			// 管理员默认查看全部。
+		case models.RoleUser:
+			idQuery = idQuery.Where("images.user_id = ?", userID)
+		case models.RoleGuest:
+			idQuery = idQuery.Where("images.uuid = ?", userUUID)
+		default:
+			idQuery = idQuery.Where("1 = 0")
+		}
 	}
 	idQuery = applyImageSearch(idQuery, search)
 
@@ -153,8 +173,8 @@ func GetImageList(c *gin.Context) {
 	}
 
 	// 统计总数和分页
-	total := int64(len(imageIds))
-	countQuery := idQuery.Offset(-1).Limit(-1)
+	var total int64
+	countQuery := idQuery.Session(&gorm.Session{}).Offset(-1).Limit(-1)
 	if hasZeroTag || len(filterTagIds) > 0 {
 		countQuery.Distinct("images.id").Count(&total)
 	} else {
@@ -243,6 +263,7 @@ func GetImageList(c *gin.Context) {
 		images[i].Url = applyPublicImageURL(setting, images[i].Storage, images[i].BucketId, images[i].Url)
 		images[i].Thumbnail = applyThumbnailURL(setting, images[i].Storage, images[i].BucketId, images[i].Thumbnail)
 	}
+	attachStorageStatuses(db, setting, images)
 
 	// 返回结果
 	c.JSON(http.StatusOK, result.Success("ok", gin.H{
@@ -263,4 +284,51 @@ func applyImageSearch(query *gorm.DB, search string) *gorm.DB {
 		"(images.file_name LIKE ? OR images.original_filename LIKE ? OR images.url LIKE ? OR images.content_hash LIKE ?)",
 		searchPattern, searchPattern, searchPattern, searchPattern,
 	)
+}
+
+func attachStorageStatuses(db *gorm.DB, setting models.Settings, images []ImageWithTags) {
+	if len(images) == 0 {
+		return
+	}
+	ids := make([]int, 0, len(images))
+	imageIndex := make(map[int]int, len(images))
+	for i, img := range images {
+		ids = append(ids, img.Id)
+		imageIndex[img.Id] = i
+	}
+
+	statusMap, err := loadImageStorageStatuses(ids, setting)
+	if err != nil {
+		return
+	}
+	for imageID, statuses := range statusMap {
+		if idx, ok := imageIndex[imageID]; ok {
+			images[idx].StorageStatuses = statuses
+		}
+	}
+
+	userIDs := make([]int, 0, len(images))
+	for _, img := range images {
+		if img.UserId > 0 {
+			userIDs = append(userIDs, img.UserId)
+		}
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+	var users []models.User
+	if err := db.Select("id", "role").Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+		return
+	}
+	roleByUserID := make(map[int]int, len(users))
+	for _, user := range users {
+		roleByUserID[user.ID] = user.Role
+	}
+	for i := range images {
+		if role, ok := roleByUserID[images[i].UserId]; ok {
+			images[i].UploaderRole = role
+		} else {
+			images[i].UploaderRole = models.RoleGuest
+		}
+	}
 }

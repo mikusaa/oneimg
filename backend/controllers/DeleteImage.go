@@ -13,6 +13,7 @@ import (
 
 	"oneimg/backend/database"
 	"oneimg/backend/models"
+	"oneimg/backend/services"
 	"oneimg/backend/utils/buckets"
 	"oneimg/backend/utils/ftp"
 	"oneimg/backend/utils/md5"
@@ -82,22 +83,36 @@ func DeleteImage(c *gin.Context) {
 	}
 
 	var deleteStatus bool
-	// 检查存储
-	switch image.Storage {
-	case "default":
-		deleteStatus = DeleteDefaultStorageImage(image)
-	case "s3":
-		deleteStatus = DeleteS3StorageImage(image, bucket)
-	case "r2":
-		deleteStatus = DeleteR2StorageImage(image, bucket)
-	case "webdav":
-		deleteStatus = DeleteWebDavStorageImage(image, bucket)
-	case "ftp":
-		deleteStatus = DeleteFtpStorageImage(image, bucket)
-	case "telegram":
-		deleteStatus = DeleteTelegramStorageImage(image, bucket)
-	default:
-		deleteStatus = false
+	multiStorageDelete := false
+	setting, settingErr := settings.GetSettings()
+	if settingErr == nil && setting.MultiStorageSync {
+		multiStorageDelete = true
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
+		defer cancel()
+		if err := services.DeleteImageReplicas(ctx, image); err != nil {
+			log.Printf("多存储删除图片失败(image_id=%d): %v", image.Id, err)
+			c.JSON(http.StatusBadGateway, result.Error(502, "物理删除失败，图片记录已保留"))
+			return
+		}
+		deleteStatus = true
+	} else {
+		// 检查存储
+		switch image.Storage {
+		case "default":
+			deleteStatus = DeleteDefaultStorageImage(image)
+		case "s3":
+			deleteStatus = DeleteS3StorageImage(image, bucket)
+		case "r2":
+			deleteStatus = DeleteR2StorageImage(image, bucket)
+		case "webdav":
+			deleteStatus = DeleteWebDavStorageImage(image, bucket)
+		case "ftp":
+			deleteStatus = DeleteFtpStorageImage(image, bucket)
+		case "telegram":
+			deleteStatus = DeleteTelegramStorageImage(image, bucket)
+		default:
+			deleteStatus = false
+		}
 	}
 
 	// 删除数据库记录
@@ -109,8 +124,8 @@ func DeleteImage(c *gin.Context) {
 		return
 	}
 
-	// 对应存储减去存储空间
-	if image.BucketId != 1 {
+	// 对应存储减去存储空间。多存储模式下副本删除流程已按副本扣减容量。
+	if !multiStorageDelete && image.BucketId != 1 {
 		result := db.Model(&models.Buckets{}).
 			Where("id = ? AND usage >= ?", image.BucketId, image.FileSize).
 			UpdateColumn("usage", gorm.Expr("usage - ?", image.FileSize))
@@ -354,11 +369,14 @@ func CheckImageAccessPermission(c *gin.Context, image models.Image) bool {
 	currentUserUUID := GetUUID(c)
 	currentUsername := c.GetString("username")
 	// 如果是管理员直接通过
-	if c.GetInt("user_role") == 1 {
+	if c.GetInt("user_role") == models.RoleAdmin {
+		return true
+	}
+	if c.GetInt("user_role") == models.RoleUser && image.UserId == c.GetInt("user_id") {
 		return true
 	}
 	// 如果是游客则需要同时满足md5校验和UUID校验
-	if image.UUID == currentUserUUID && md5.Md5(currentUsername+image.FileName) == image.MD5 {
+	if c.GetInt("user_role") == models.RoleGuest && image.UUID == currentUserUUID && md5.Md5(currentUsername+image.FileName) == image.MD5 {
 		return true
 	}
 	return false

@@ -20,9 +20,10 @@ func GetSettings() (models.Settings, error) {
 
 	if changed, migrateErr := secureconfig.TryMigrateSettingsSecrets(&settings); migrateErr == nil && changed {
 		_ = db.DB.Model(&settings).Updates(map[string]any{
-			"tg_bot_token":   settings.TGBotToken,
-			"api_token":      settings.APIToken,
-			"api_token_hash": settings.APITokenHash,
+			"tg_bot_token":       settings.TGBotToken,
+			"oidc_client_secret": settings.OIDCClientSecret,
+			"api_token":          settings.APIToken,
+			"api_token_hash":     settings.APITokenHash,
 		}).Error
 	}
 
@@ -32,6 +33,13 @@ func GetSettings() (models.Settings, error) {
 			return settings, decryptErr
 		}
 		settings.TGBotToken = decrypted
+	}
+	if settings.OIDCClientSecret != "" {
+		decrypted, decryptErr := secureconfig.DecryptSettingValue("oidc_client_secret", settings.OIDCClientSecret)
+		if decryptErr != nil {
+			return settings, decryptErr
+		}
+		settings.OIDCClientSecret = decrypted
 	}
 
 	return settings, nil

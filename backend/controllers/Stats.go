@@ -56,20 +56,33 @@ func GetDashboardStats(c *gin.Context) {
 	db := database.GetDB().DB
 
 	var stats DashboardStats
+	roleID := c.GetInt("user_role")
+	userID := c.GetInt("user_id")
+	userUUID := GetUUID(c)
+	imageScope := func() *gorm.DB {
+		query := db.Model(&models.Image{})
+		if roleID == models.RoleAdmin {
+			return query
+		}
+		if roleID == models.RoleGuest {
+			return query.Where("uuid = ?", userUUID)
+		}
+		return query.Where("user_id = ?", userID)
+	}
 
 	// 获取总图片数量
-	db.Model(&models.Image{}).Count(&stats.TotalImages)
+	imageScope().Count(&stats.TotalImages)
 
 	// 获取总大小
 	var totalSize struct {
 		Total int64
 	}
-	db.Model(&models.Image{}).Select("COALESCE(SUM(file_size), 0) as total").Scan(&totalSize)
+	imageScope().Select("COALESCE(SUM(file_size), 0) as total").Scan(&totalSize)
 	stats.TotalSize = totalSize.Total
 
 	// 获取今日上传数量
 	today := time.Now().Format("2006-01-02")
-	db.Model(&models.Image{}).Where("DATE(created_at) = ?", today).Count(&stats.TodayUploads)
+	imageScope().Where("DATE(created_at) = ?", today).Count(&stats.TodayUploads)
 
 	// 获取本月上传数量
 	now := time.Now()
@@ -79,10 +92,10 @@ func GetDashboardStats(c *gin.Context) {
 	startTime := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	endTime := startTime.AddDate(0, 1, 0)
 
-	db.Model(&models.Image{}).Where("created_at >= ? AND created_at < ?", startTime, endTime).Count(&stats.MonthUploads)
+	imageScope().Where("created_at >= ? AND created_at < ?", startTime, endTime).Count(&stats.MonthUploads)
 
 	// 获取最近上传的图片
-	db.Order("created_at DESC").Limit(10).Find(&stats.RecentImages)
+	imageScope().Order("created_at DESC").Limit(10).Find(&stats.RecentImages)
 	setting, err := settings.GetSettings()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, StatsResponse{
@@ -97,13 +110,13 @@ func GetDashboardStats(c *gin.Context) {
 	}
 
 	// 获取最近7天的上传趋势
-	stats.UploadTrend = getUploadTrend(db, 7)
+	stats.UploadTrend = getUploadTrend(imageScope(), 7)
 
 	// 获取格式统计
-	stats.FormatStats = getFormatStats(db)
+	stats.FormatStats = getFormatStats(imageScope())
 
 	// 获取大小分布
-	stats.SizeDistribution = getSizeDistribution(db)
+	stats.SizeDistribution = getSizeDistribution(imageScope())
 
 	c.JSON(http.StatusOK, StatsResponse{
 		Code:    200,
@@ -203,18 +216,27 @@ func GetImageStats(c *gin.Context) {
 	period := c.DefaultQuery("period", "month") // day, week, month, year
 
 	var stats any
+	roleID := c.GetInt("user_role")
+	userID := c.GetInt("user_id")
+	userUUID := GetUUID(c)
+	imageScope := db.Model(&models.Image{})
+	if roleID == models.RoleGuest {
+		imageScope = imageScope.Where("uuid = ?", userUUID)
+	} else if roleID != models.RoleAdmin {
+		imageScope = imageScope.Where("user_id = ?", userID)
+	}
 
 	switch period {
 	case "day":
-		stats = getDailyStats(db)
+		stats = getDailyStats(imageScope)
 	case "week":
-		stats = getWeeklyStats(db)
+		stats = getWeeklyStats(imageScope)
 	case "month":
-		stats = getMonthlyStats(db)
+		stats = getMonthlyStats(imageScope)
 	case "year":
-		stats = getYearlyStats(db)
+		stats = getYearlyStats(imageScope)
 	default:
-		stats = getMonthlyStats(db)
+		stats = getMonthlyStats(imageScope)
 	}
 
 	c.JSON(http.StatusOK, StatsResponse{

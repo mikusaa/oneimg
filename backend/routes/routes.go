@@ -23,7 +23,10 @@ func SetupRoutes(frontendFS embed.FS) *gin.Engine {
 	r := gin.New()
 
 	// 基础中间件
-	r.Use(gin.Logger())
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipPaths: []string{
+		"/api/auth/oidc/callback",
+		"/api/auth/cas/callback",
+	}}))
 	r.Use(gin.Recovery())
 	r.Use(middlewares.ConfigMiddleware(cfg))
 	r.Use(middlewares.SessionMiddleware(cfg))
@@ -70,6 +73,10 @@ func SetupRoutes(frontendFS embed.FS) *gin.Engine {
 		api.GET("/settings/seo", controllers.GetSEOSettings)
 		// 随机图片
 		api.GET("/images/random", controllers.GetRandomImages)
+		api.GET("/auth/oidc/login", controllers.StartOIDCLogin)
+		api.GET("/auth/oidc/callback", controllers.OIDCCallback)
+		api.GET("/auth/cas/login", controllers.StartCASLogin)
+		api.GET("/auth/cas/callback", controllers.CASCallback)
 
 		// 需要认证的接口分组（应用AuthMiddleware）
 		auth := api.Group("")
@@ -115,12 +122,21 @@ func SetupRoutes(frontendFS embed.FS) *gin.Engine {
 				// 存储管理接口
 				auth.GET("/buckets", controllers.GetBuckets)
 				auth.POST("/buckets", controllers.AddBuckets)
+				auth.POST("/buckets/test", controllers.TestBucketConnection)
 				auth.POST("/buckets/update/:id", controllers.UpdateBuckets)
 				auth.DELETE("/buckets/:id", controllers.DeleteBuckets)
 
 				// 账户管理接口
 				auth.POST("/account/change", controllers.ChangeAccountInfo)
 				auth.POST("/sessions/clear", controllers.ClearAllSessions)
+
+				// 用户管理接口
+				auth.GET("/users", controllers.GetUsers)
+				auth.POST("/users/Add", controllers.CreateUser)
+				auth.DELETE("/users/:id", controllers.DeleteUser)
+				auth.POST("/users/updateRole", controllers.UpdateUserRole)
+				auth.POST("/users/resetPassword/:id", controllers.ResetPassword)
+				auth.POST("/users/updatePermission/:id", controllers.UpdateUserPermission)
 
 				// 系统设置接口
 				auth.Any("/settings/get", controllers.GetSettings)
