@@ -85,6 +85,7 @@ func SanitizeSettingsForResponse(setting models.Settings) map[string]any {
 		"save_webp":                     setting.SaveWebp,
 		"thumbnail":                     setting.Thumbnail,
 		"tourist":                       setting.Tourist,
+		"start_register":                setting.StartRegister,
 		"tg_notice":                     setting.TGNotice,
 		"pow_verify":                    setting.PowVerify,
 		"tg_bot_token":                  tgBotTokenStatus,

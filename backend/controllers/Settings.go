@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"oneimg/backend/database"
+	"oneimg/backend/middlewares"
 	"oneimg/backend/models"
 	"oneimg/backend/utils/publicurl"
 	"oneimg/backend/utils/result"
@@ -39,6 +40,7 @@ var hexColorRegex = regexp.MustCompile(`^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
 func GetSettings(c *gin.Context) {
 	var req GetSettingsRequest
+	_ = c.ShouldBindJSON(&req)
 	settingModel, err := settings.GetSettings()
 	if err != nil {
 		c.JSON(500, result.Error(500, "获取设置失败"))
@@ -51,7 +53,25 @@ func GetSettings(c *gin.Context) {
 	if effectiveURL, effectiveErr := casCallbackURL(settingModel); effectiveErr == nil {
 		responseSettings["cas_service_url_effective"] = effectiveURL
 	}
+	allowedGroups := currentSettingPermissions(c)
+	if len(allowedGroups) == 0 {
+		c.JSON(http.StatusForbidden, result.Error(403, "无权查看系统设置"))
+		return
+	}
+	allowed := make(map[string]struct{}, len(allowedGroups))
+	for _, code := range allowedGroups {
+		allowed[code] = struct{}{}
+	}
+	for key := range responseSettings {
+		if required := getSettingRequiredPermission(key); required != "" {
+			if _, ok := allowed[required]; !ok {
+				delete(responseSettings, key)
+			}
+		}
+	}
+	responseSettings["setting_permissions"] = allowedGroups
 	filtered := filterSettings(responseSettings, req.Keys)
+	filtered["setting_permissions"] = allowedGroups
 
 	c.JSON(200, result.Success("ok", filtered))
 }
@@ -68,6 +88,7 @@ func GetLoginSettings(c *gin.Context) {
 		map[string]any{
 			"pow_verify":        settingModel.PowVerify,
 			"tourist":           settingModel.Tourist,
+			"start_register":    settingModel.StartRegister,
 			"oidc_enabled":      oidcSettingsReady(settingModel),
 			"oidc_display_name": externalLoginDisplayName(settingModel.OIDCDisplayName, "OIDC 登录"),
 			"cas_enabled":       casSettingsReady(settingModel),
@@ -104,6 +125,10 @@ func UpdateSettings(c *gin.Context) {
 	}
 	if req.Value == nil {
 		c.JSON(http.StatusBadRequest, result.Error(400, "设置值不能为空"))
+		return
+	}
+	if required := getSettingRequiredPermission(req.Key); required == "" || !middlewares.HasPermission(c, required) {
+		c.JSON(http.StatusForbidden, result.Error(403, "无权修改该设置项"))
 		return
 	}
 	// 查询是否有该设置项
@@ -693,4 +718,50 @@ func settingValueToInt(value any) (int, error) {
 	default:
 		return 0, fmt.Errorf("类型错误：%T", value)
 	}
+}
+
+var settingKeyPermissions = map[string]string{
+	"default_storage": "setting:upload", "public_image_domain": "setting:upload", "cdn_domain": "setting:upload",
+	"default_path": "setting:upload", "file_name": "setting:upload", "max_file_size": "setting:upload",
+	"allowed_types": "setting:upload", "multi_storage_sync": "setting:upload", "save_original_name": "setting:upload",
+	"original_image": "setting:image", "save_webp": "setting:image", "thumbnail": "setting:image",
+	"main_image_quality": "setting:image", "skip_compress_formats": "setting:image", "watermark_enable": "setting:image",
+	"watermark_text": "setting:image", "watermark_size": "setting:image", "watermark_color": "setting:image",
+	"watermark_opac": "setting:image", "watermark_pos": "setting:image",
+	"pow_verify": "setting:security", "tourist": "setting:security", "start_register": "setting:security",
+	"referer_white_enable": "setting:security", "referer_white_list": "setting:security",
+	"oidc_enable": "setting:security", "oidc_issuer": "setting:security", "oidc_client_id": "setting:security",
+	"oidc_client_secret": "setting:security", "oidc_redirect_url": "setting:security", "oidc_scopes": "setting:security",
+	"oidc_client_secret_configured": "setting:security", "oidc_redirect_url_effective": "setting:security",
+	"oidc_username_claim": "setting:security", "oidc_display_name": "setting:security", "oidc_auto_provision": "setting:security",
+	"oidc_super_admin_username": "setting:security", "cas_enable": "setting:security", "cas_server_url": "setting:security",
+	"cas_service_url": "setting:security", "cas_display_name": "setting:security", "cas_auto_provision": "setting:security",
+	"cas_super_admin_username": "setting:security", "cas_service_url_effective": "setting:security",
+	"tg_notice": "setting:notification", "tg_bot_token": "setting:notification", "tg_receivers": "setting:notification",
+	"tg_notice_text": "setting:notification", "tg_bot_token_configured": "setting:notification",
+	"start_api": "setting:api", "api_token": "setting:api", "api_token_configured": "setting:api",
+	"seo_title": "setting:seo", "seo_description": "setting:seo", "seo_keywords": "setting:seo",
+	"seo_icp": "setting:seo", "public_security": "setting:seo", "seo_icon": "setting:seo",
+}
+
+func getSettingRequiredPermission(key string) string {
+	return settingKeyPermissions[key]
+}
+
+func currentSettingPermissions(c *gin.Context) []string {
+	user, ok := middlewares.GetCurrentUser(c)
+	if !ok || user.Role != models.RoleAdmin {
+		return []string{}
+	}
+	groups := []string{"setting:upload", "setting:image", "setting:security", "setting:notification", "setting:api", "setting:seo"}
+	if user.ID == models.SuperAdminID {
+		return groups
+	}
+	allowed := make([]string, 0, len(groups))
+	for _, code := range groups {
+		if user.Permission.HasPermission(code) {
+			allowed = append(allowed, code)
+		}
+	}
+	return allowed
 }

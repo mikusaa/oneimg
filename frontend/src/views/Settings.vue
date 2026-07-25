@@ -16,22 +16,37 @@
             </div>
         </section>
 
+        <nav v-if="availableSettingTabs.length" class="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-white/10" aria-label="设置分类">
+            <button
+                v-for="tab in availableSettingTabs"
+                :key="tab.key"
+                type="button"
+                class="shrink-0 border-b-2 px-3 py-2.5 text-sm transition-colors"
+                :class="activeSettingTab === tab.key
+                    ? 'border-slate-900 font-medium text-slate-900 dark:border-white dark:text-white'
+                    : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'"
+                @click="activeSettingTab = tab.key"
+            >
+                <i :class="tab.icon" class="mr-1.5"></i>{{ tab.label }}
+            </button>
+        </nav>
+
         <!-- 主要内容 -->
         <div class="pb-8 md:pb-10">
             <div class="grid gap-4 md:gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
                 <!-- 系统配置卡片 -->
                 <div class="order-1 md:order-2 w-full p-0 mx-auto">
-                    <div class="section-card p-3.5 sm:p-4 md:p-6">
+                    <div v-show="activeSettingTab !== 'seo'" class="section-card p-3.5 sm:p-4 md:p-6">
                         <h2 class="panel-title mb-4 flex items-center text-lg font-semibold sm:text-xl md:mb-5">
                             <span class="panel-icon mr-2 text-2xl">
                                 <i class="ri-list-settings-line"></i>
                             </span>
-                            系统配置
+                            {{ activeSettingTabLabel }}
                         </h2>
                         
                         <div class="account-form space-y-4 md:space-y-5">
                             <!-- 默认存储 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
                                 <label class="field-label" for="default_storage">
                                     系统默认存储
                                 </label>
@@ -53,7 +68,7 @@
                             </div>
 
                             <!-- 图片直链域名 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
                                 <label class="field-label" for="public_image_domain">
                                     图片直链域名
                                 </label>
@@ -75,7 +90,7 @@
                                 </div>
                             </div>
 
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
                                 <label class="field-label" for="cdn_domain">
                                     CDN 域名
                                 </label>
@@ -92,7 +107,7 @@
                                 </div>
                             </div>
 
-                            <div class="flex items-center justify-between gap-4 rounded-lg border border-slate-200/70 p-4 dark:border-white/10">
+                            <div v-show="activeSettingTab === 'upload'" class="flex items-center justify-between gap-4 rounded-lg border border-slate-200/70 p-4 dark:border-white/10">
                                 <div>
                                     <div class="field-label">多存储后台同步</div>
                                     <div class="field-hint">开启后先保存到本地存储，再按用户权限异步同步到远端存储。</div>
@@ -106,7 +121,7 @@
                             </div>
 
                             <!-- 默认存储路径 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
                                 <label class="field-label" for="default_path">
                                     默认存储路径
                                 </label>
@@ -125,7 +140,7 @@
                             </div>
 
                             <!-- 上传文件名 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
                                 <label class="field-label" for="file_name">
                                     上传文件名称
                                 </label>
@@ -143,7 +158,7 @@
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2">
+                            <div v-show="activeSettingTab === 'security'" class="grid gap-4 md:grid-cols-2">
                                 <div class="setting-group">
                                     <label class="field-label" for="oidc_issuer">OIDC Issuer</label>
                                     <input id="oidc_issuer" v-model="systemSettings.oidc_issuer" type="text" class="input-modern" placeholder="https://id.example.com" @blur="handleFieldBlur('oidc_issuer', systemSettings.oidc_issuer)" />
@@ -181,7 +196,7 @@
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2">
+                            <div v-show="activeSettingTab === 'security'" class="grid gap-4 md:grid-cols-2">
                                 <div class="setting-group">
                                     <label class="field-label" for="cas_server_url">CAS Server URL</label>
                                     <input id="cas_server_url" v-model="systemSettings.cas_server_url" type="text" class="input-modern" placeholder="https://cas.example.com" @blur="handleFieldBlur('cas_server_url', systemSettings.cas_server_url)" />
@@ -202,7 +217,7 @@
                             </div>
                             
                             <!-- TG Bot Token：失去焦点保存 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'notification'" class="setting-group">
                                 <label class="field-label" for="tg_bot_token">
                                     TG Bot Token
                                 </label>
@@ -220,7 +235,7 @@
                             </div>
                             
                             <!-- TG 通知接收者：失去焦点保存 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'notification'" class="setting-group">
                                 <label class="field-label" for="tg_receivers">
                                     TG 通知接收者
                                 </label>
@@ -238,7 +253,7 @@
                             </div>
                             
                             <!-- TG 通知文本：失去焦点保存 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'notification'" class="setting-group">
                                 <label class="field-label" for="tg_notice_text">
                                     TG 通知文本
                                 </label>
@@ -256,7 +271,7 @@
                             </div>
                             
                             <!-- 水印文本：失去焦点保存 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'image'" class="setting-group">
                                 <label class="field-label" for="watermark_text">
                                     图片水印文本
                                 </label>
@@ -276,7 +291,7 @@
                             </div>
 
                             <!-- 图片水印大小：失去焦点保存 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'image'" class="setting-group">
                                 <label class="field-label" for="watermark_size">
                                     图片水印大小
                                 </label>
@@ -293,7 +308,7 @@
                             </div>
 
                             <!-- 图片水印字体颜色 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'image'" class="setting-group">
                                 <label class="field-label" for="watermark_color">
                                     图片水印字体颜色
                                 </label>
@@ -313,7 +328,7 @@
                             </div>
 
                             <!-- 图片水印透明度：失去焦点保存 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'image'" class="setting-group">
                                 <label class="field-label" for="watermark_opac">
                                     图片水印透明度
                                 </label>
@@ -333,7 +348,7 @@
                             </div>
 
                             <!-- 图片水印位置：下拉框变更保存 -->
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'image'" class="setting-group">
                                 <label class="field-label" for="storage_type">
                                     图片水印位置
                                 </label>
@@ -356,7 +371,7 @@
                                     系统默认右下角
                                 </div>
                             </div>
-                            <div class="setting-group"> 
+                            <div v-show="activeSettingTab === 'security'" class="setting-group">
                                 <label class="field-label" for="referer_white_list">
                                     Referer来源白名单
                                 </label>
@@ -382,7 +397,7 @@
                                 </div>
                             </div>
 
-                            <div class="setting-group"> 
+                            <div v-show="activeSettingTab === 'api'" class="setting-group">
                                 <label class="field-label" for="api_token">
                                     API Token
                                 </label>
@@ -409,7 +424,7 @@
                                     3. {{ systemSettings.api_token_configured ? '当前已配置' : '当前未配置' }}
                                 </div>
                             </div>
-                            <div class="setting-group"> 
+                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
                                 <label class="field-label" for="max_file_size">
                                     允许最大上传大小
                                 </label>
@@ -425,7 +440,7 @@
                                     大小单位：字节，默认10mb
                                 </div>
                             </div>
-                            <div class="setting-group"> 
+                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
                                 <label class="field-label" for="allowed_types">
                                     允许上传的图片类型
                                 </label>
@@ -438,7 +453,7 @@
                                     @blur="handleFieldBlur('allowed_types', systemSettings.allowed_types)"
                                 />
                             </div>
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'image'" class="setting-group">
                                 <label class="field-label" for="main_image_quality">
                                     主图压缩质量
                                 </label>
@@ -456,7 +471,7 @@
                                     WebP 编码质量，范围 0-100，数值越高画质越好、体积越大。
                                 </div>
                             </div>
-                            <div class="setting-group">
+                            <div v-show="activeSettingTab === 'image'" class="setting-group">
                                 <label class="field-label" for="skip_compress_formats">
                                     跳过压缩格式
                                 </label>
@@ -479,7 +494,7 @@
                 <!-- 系统设置卡片（开关部分不变） -->
                 <div class="order-2 md:order-1 w-full p-0 mx-auto">
                     <!-- SEO设置卡片 -->
-                    <div class="section-card mb-3.5 space-y-4 p-3.5 sm:p-4 md:space-y-5 md:p-6">
+                    <div v-show="activeSettingTab === 'seo'" class="section-card mb-3.5 space-y-4 p-3.5 sm:p-4 md:space-y-5 md:p-6">
                         <h2 class="panel-title mb-4 flex items-center text-lg font-semibold sm:text-xl md:mb-5">
                             <span class="panel-icon mr-2 text-2xl">
                                 <i class="ri-seo-line"></i>
@@ -577,7 +592,7 @@
                         </div>
                     </div>
 
-                    <div class="section-card p-3.5 sm:p-4 md:p-6">
+                    <div v-show="activeSettingTab !== 'seo'" class="section-card p-3.5 sm:p-4 md:p-6">
                         <h2 class="panel-title mb-4 flex items-center text-lg font-semibold sm:text-xl md:mb-5">
                             <span class="panel-icon mr-2 text-2xl">
                                 <i class="ri-settings-2-line"></i>
@@ -587,7 +602,7 @@
                         
                         <div class="account-form space-y-4 md:space-y-5">
                             <!-- 是否保存原图 -->
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'image'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">保存原图</p>
                                 </div>
@@ -604,7 +619,7 @@
                             </div>
                             
                             <!-- 其他开关省略（和之前一致） -->
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'image'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">保存 WEBP 格式</p>
                                 </div>
@@ -619,7 +634,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'image'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">生成缩略图</p>
                                     <p class="setting-row-hint">生成缩略图，可提升后台预览速度，上传速度稍慢。</p>
@@ -635,7 +650,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'security'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">允许游客上传</p>
                                 </div>
@@ -650,7 +665,23 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'security'" class="setting-row">
+                                <div>
+                                    <p class="setting-row-title">开放用户注册</p>
+                                    <p class="setting-row-hint">注册用户固定为普通用户，注册完成后需要自行登录。</p>
+                                </div>
+                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
+                                    <input
+                                        type="checkbox"
+                                        v-model="systemSettings.start_register"
+                                        class="sr-only peer"
+                                        @change="handleSwitchChange('start_register', systemSettings.start_register)"
+                                    >
+                                    <div class="switch-track"></div>
+                                    <div class="switch-thumb"></div>
+                                </label>
+                            </div>
+                            <div v-show="activeSettingTab === 'notification'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">启用 TG 通知</p>
                                     <p class="setting-row-hint">国内服务器不要开启 TG 通知。</p>
@@ -666,7 +697,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'security'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">启用 POW 验证</p>
                                 </div>
@@ -681,7 +712,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'security'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">启用 OIDC 登录</p>
                                 </div>
@@ -691,7 +722,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'security'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">OIDC 自动创建用户</p>
                                 </div>
@@ -701,7 +732,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'security'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">启用 CAS 登录</p>
                                 </div>
@@ -711,7 +742,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'security'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">CAS 自动创建用户</p>
                                 </div>
@@ -721,7 +752,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'image'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">开启图片水印</p>
                                     <p class="setting-row-hint">
@@ -743,7 +774,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'security'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">开启来源白名单</p>
                                     <p v-if="hasPublicImageDomain" class="setting-row-hint">已配置图片直链域名，直接访问不会经过系统代理。</p>
@@ -763,7 +794,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'api'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">启用 API</p>
                                     <p class="setting-row-hint">启用 API 前必须先设置 API Token。</p>
@@ -779,7 +810,7 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-row">
+                            <div v-show="activeSettingTab === 'upload'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">保存源文件名</p>
                                     <p class="setting-row-hint">启用保存原图功能时将不自动重命名，”上传文件名称”设置也将失效。</p>
@@ -818,6 +849,7 @@ const systemSettings = reactive({
     save_webp: false,
     thumbnail: false,
     tourist: false,
+    start_register: false,
     tg_notice: false,
     pow_verify: false,
     tg_bot_token: '',
@@ -872,6 +904,19 @@ const systemSettings = reactive({
     public_image_domain: '',
     cdn_domain: ''
 })
+
+const SETTING_TABS = [
+    { key: 'upload', permission: 'setting:upload', label: '上传与存储', icon: 'ri-upload-cloud-2-line' },
+    { key: 'image', permission: 'setting:image', label: '图片处理', icon: 'ri-image-edit-line' },
+    { key: 'security', permission: 'setting:security', label: '安全与登录', icon: 'ri-shield-keyhole-line' },
+    { key: 'notification', permission: 'setting:notification', label: '通知', icon: 'ri-notification-3-line' },
+    { key: 'api', permission: 'setting:api', label: 'API', icon: 'ri-code-box-line' },
+    { key: 'seo', permission: 'setting:seo', label: 'SEO', icon: 'ri-seo-line' },
+]
+const settingPermissions = ref([])
+const activeSettingTab = ref('')
+const availableSettingTabs = computed(() => SETTING_TABS.filter(tab => settingPermissions.value.includes(tab.permission)))
+const activeSettingTabLabel = computed(() => availableSettingTabs.value.find(tab => tab.key === activeSettingTab.value)?.label || '系统配置')
 
 const updateSetting = reactive({})
 const publicDomainStorageTypes = ['s3', 'r2']
@@ -1178,6 +1223,10 @@ const getSettings = async () => {
         const result = await response.json()
         
         if (result.code === 200 && result.data) {
+            settingPermissions.value = Array.isArray(result.data.setting_permissions) ? result.data.setting_permissions : []
+            if (!availableSettingTabs.value.some(tab => tab.key === activeSettingTab.value)) {
+                activeSettingTab.value = availableSettingTabs.value[0]?.key || ''
+            }
             Object.assign(systemSettings, result.data)
             Object.assign(updateSetting, result.data)
         } else {

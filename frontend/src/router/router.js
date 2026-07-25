@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { hasAnyPermission, ROLE_ADMIN, ROLE_GUEST } from '@/utils/permissions.js'
 
 let seoStting = {
   seo_title: '初春图床',
@@ -28,6 +29,12 @@ const routes = [
     }
   },
   {
+    path: '/register',
+    name: 'Register',
+    component: () => import('@/views/Register.vue'),
+    meta: { title: '注册', public: true }
+  },
+  {
     path: '/',
     name: 'Home',
     component: () => import('@/views/Home.vue'),
@@ -48,7 +55,8 @@ const routes = [
     name: 'Tags',
     component: () => import('@/views/Tags.vue'),
     meta: {
-      title: '标签'
+      title: '标签',
+      permissions: ['tag:create', 'tag:update', 'tag:delete']
     }
   },
   {
@@ -64,7 +72,8 @@ const routes = [
     name: 'Buckets',
     component: () => import('@/views/Buckets.vue'),
     meta: {
-      title: '存储列表'
+      title: '存储列表',
+      permissions: ['storage:create', 'storage:update', 'storage:delete']
     }
   },
   {
@@ -73,7 +82,7 @@ const routes = [
     component: () => import('@/views/Users.vue'),
     meta: {
       title: '用户管理',
-      adminOnly: true
+      permissions: ['user:list']
     }
   },
   {
@@ -81,7 +90,8 @@ const routes = [
     name: 'Account',
     component: () => import('@/views/Account.vue'),
     meta: { 
-      title: '账户设置' 
+      title: '账户设置',
+      denyGuest: true
     }
   },
   {
@@ -89,7 +99,8 @@ const routes = [
     name: 'Settings',
     component: () => import('@/views/Settings.vue'),
     meta: { 
-      title: '系统设置' 
+      title: '系统设置',
+      permissions: ['setting:upload', 'setting:image', 'setting:security', 'setting:notification', 'setting:api', 'setting:seo']
     }
   }
 ]
@@ -206,13 +217,13 @@ router.beforeEach(async (to, from, next) => {
       return next('/login');
     }
     const currentRole = result.data.user_role ?? result.data.role;
-    if (currentRole !== undefined && userInfo.role !== currentRole) {
-      userInfo.role = currentRole;
-      localStorage.setItem('userInfo', JSON.stringify(userInfo));
-      window.refreshNavItems && window.refreshNavItems();
-    }
-    if (to.meta.adminOnly && Number(currentRole) !== 1) {
-      return next('/');
+    userInfo.role = currentRole;
+    userInfo.permission = result.data.permission || { codes: [], buckets: [] };
+    localStorage.setItem('userInfo', JSON.stringify(userInfo));
+    window.refreshNavItems && window.refreshNavItems();
+    if (to.meta.denyGuest && Number(currentRole) === ROLE_GUEST) return next('/');
+    if (Array.isArray(to.meta.permissions)) {
+      if (Number(currentRole) !== ROLE_ADMIN || !hasAnyPermission(to.meta.permissions, userInfo)) return next('/');
     }
 
     // 所有验证通过，放行
