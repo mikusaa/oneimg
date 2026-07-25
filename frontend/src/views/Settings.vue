@@ -158,64 +158,6 @@
                                 </div>
                             </div>
 
-                            <div v-show="activeSettingTab === 'security'" class="grid gap-4 md:grid-cols-2">
-                                <div class="setting-group">
-                                    <label class="field-label" for="oidc_issuer">OIDC Issuer</label>
-                                    <input id="oidc_issuer" v-model="systemSettings.oidc_issuer" type="text" class="input-modern" placeholder="https://id.example.com" @blur="handleFieldBlur('oidc_issuer', systemSettings.oidc_issuer)" />
-                                    <div class="field-hint">配置完整后可开启 OIDC 登录。</div>
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="oidc_client_id">OIDC Client ID</label>
-                                    <input id="oidc_client_id" v-model="systemSettings.oidc_client_id" type="text" class="input-modern" @blur="handleFieldBlur('oidc_client_id', systemSettings.oidc_client_id)" />
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="oidc_client_secret">OIDC Client Secret</label>
-                                    <input id="oidc_client_secret" v-model="systemSettings.oidc_client_secret" type="password" class="input-modern" :placeholder="systemSettings.oidc_client_secret_configured ? '已配置，留空表示不修改' : '未配置'" @blur="handleFieldBlur('oidc_client_secret', systemSettings.oidc_client_secret)" />
-                                    <div class="field-hint">{{ systemSettings.oidc_client_secret_configured ? '已配置，留空表示不修改' : 'OIDC 登录必填' }}</div>
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="oidc_redirect_url">OIDC 回调地址</label>
-                                    <input id="oidc_redirect_url" v-model="systemSettings.oidc_redirect_url" type="text" class="input-modern" placeholder="/api/auth/oidc/callback" @blur="handleFieldBlur('oidc_redirect_url', systemSettings.oidc_redirect_url)" />
-                                    <div class="field-hint">留空时使用 {{ systemSettings.oidc_redirect_url_effective || '当前站点回调地址' }}</div>
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="oidc_scopes">OIDC Scopes</label>
-                                    <input id="oidc_scopes" v-model="systemSettings.oidc_scopes" type="text" class="input-modern" @blur="handleFieldBlur('oidc_scopes', systemSettings.oidc_scopes)" />
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="oidc_username_claim">OIDC 用户名 Claim</label>
-                                    <input id="oidc_username_claim" v-model="systemSettings.oidc_username_claim" type="text" class="input-modern" @blur="handleFieldBlur('oidc_username_claim', systemSettings.oidc_username_claim)" />
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="oidc_display_name">OIDC 按钮名称</label>
-                                    <input id="oidc_display_name" v-model="systemSettings.oidc_display_name" type="text" class="input-modern" @blur="handleFieldBlur('oidc_display_name', systemSettings.oidc_display_name)" />
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="oidc_super_admin_username">OIDC 超级管理员用户名</label>
-                                    <input id="oidc_super_admin_username" v-model="systemSettings.oidc_super_admin_username" type="text" class="input-modern" @blur="handleFieldBlur('oidc_super_admin_username', systemSettings.oidc_super_admin_username)" />
-                                </div>
-                            </div>
-
-                            <div v-show="activeSettingTab === 'security'" class="grid gap-4 md:grid-cols-2">
-                                <div class="setting-group">
-                                    <label class="field-label" for="cas_server_url">CAS Server URL</label>
-                                    <input id="cas_server_url" v-model="systemSettings.cas_server_url" type="text" class="input-modern" placeholder="https://cas.example.com" @blur="handleFieldBlur('cas_server_url', systemSettings.cas_server_url)" />
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="cas_service_url">CAS 回调地址</label>
-                                    <input id="cas_service_url" v-model="systemSettings.cas_service_url" type="text" class="input-modern" placeholder="/api/auth/cas/callback" @blur="handleFieldBlur('cas_service_url', systemSettings.cas_service_url)" />
-                                    <div class="field-hint">留空时使用 {{ systemSettings.cas_service_url_effective || '当前站点回调地址' }}</div>
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="cas_display_name">CAS 按钮名称</label>
-                                    <input id="cas_display_name" v-model="systemSettings.cas_display_name" type="text" class="input-modern" @blur="handleFieldBlur('cas_display_name', systemSettings.cas_display_name)" />
-                                </div>
-                                <div class="setting-group">
-                                    <label class="field-label" for="cas_super_admin_username">CAS 超级管理员用户名</label>
-                                    <input id="cas_super_admin_username" v-model="systemSettings.cas_super_admin_username" type="text" class="input-modern" @blur="handleFieldBlur('cas_super_admin_username', systemSettings.cas_super_admin_username)" />
-                                </div>
-                            </div>
-                            
                             <!-- TG Bot Token：失去焦点保存 -->
                             <div v-show="activeSettingTab === 'notification'" class="setting-group">
                                 <label class="field-label" for="tg_bot_token">
@@ -712,46 +654,6 @@
                                     <div class="switch-thumb"></div>
                                 </label>
                             </div>
-                            <div v-show="activeSettingTab === 'security'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">启用 OIDC 登录</p>
-                                </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input type="checkbox" v-model="systemSettings.oidc_enable" class="sr-only peer" @change="handleSwitchChange('oidc_enable', systemSettings.oidc_enable)">
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
-                            </div>
-                            <div v-show="activeSettingTab === 'security'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">OIDC 自动创建用户</p>
-                                </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input type="checkbox" v-model="systemSettings.oidc_auto_provision" class="sr-only peer" @change="handleSwitchChange('oidc_auto_provision', systemSettings.oidc_auto_provision)">
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
-                            </div>
-                            <div v-show="activeSettingTab === 'security'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">启用 CAS 登录</p>
-                                </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input type="checkbox" v-model="systemSettings.cas_enable" class="sr-only peer" @change="handleSwitchChange('cas_enable', systemSettings.cas_enable)">
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
-                            </div>
-                            <div v-show="activeSettingTab === 'security'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">CAS 自动创建用户</p>
-                                </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input type="checkbox" v-model="systemSettings.cas_auto_provision" class="sr-only peer" @change="handleSwitchChange('cas_auto_provision', systemSettings.cas_auto_provision)">
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
-                            </div>
                             <div v-show="activeSettingTab === 'image'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">开启图片水印</p>
@@ -876,25 +778,6 @@ const systemSettings = reactive({
     save_original_name: false,
     default_storage: 1,
     multi_storage_sync: false,
-    oidc_enable: false,
-    oidc_issuer: '',
-    oidc_client_id: '',
-    oidc_client_secret: '',
-    oidc_client_secret_configured: false,
-    oidc_redirect_url: '',
-    oidc_redirect_url_effective: '',
-    oidc_scopes: 'openid profile email',
-    oidc_username_claim: 'preferred_username',
-    oidc_display_name: 'OIDC 登录',
-    oidc_auto_provision: true,
-    oidc_super_admin_username: '',
-    cas_enable: false,
-    cas_server_url: '',
-    cas_service_url: '',
-    cas_service_url_effective: '',
-    cas_display_name: 'CAS 登录',
-    cas_auto_provision: true,
-    cas_super_admin_username: '',
     max_file_size: 10485760,
     allowed_types: 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml',
     main_image_quality: 85,
@@ -996,7 +879,7 @@ const getRequestHeaders = () => {
 }
 
 const saveSetting = async (key, value) => {
-    if (updateSetting?.[key] === value && !['tg_bot_token', 'api_token', 'oidc_client_secret'].includes(key)) {
+    if (updateSetting?.[key] === value && !['tg_bot_token', 'api_token'].includes(key)) {
         return
     }
     clearTimeout(debounceTimer)
@@ -1023,11 +906,6 @@ const saveSetting = async (key, value) => {
                     systemSettings.tg_bot_token_configured = value !== '' || systemSettings.tg_bot_token_configured
                     updateSetting.tg_bot_token = ''
                     updateSetting.tg_bot_token_configured = systemSettings.tg_bot_token_configured
-                } else if (key === 'oidc_client_secret') {
-                    systemSettings.oidc_client_secret = ''
-                    systemSettings.oidc_client_secret_configured = value !== '' || systemSettings.oidc_client_secret_configured
-                    updateSetting.oidc_client_secret = ''
-                    updateSetting.oidc_client_secret_configured = systemSettings.oidc_client_secret_configured
                 } else if (key === 'api_token') {
                     systemSettings.api_token_configured = value !== '' || systemSettings.api_token_configured
                     updateSetting.api_token_configured = systemSettings.api_token_configured

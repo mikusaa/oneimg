@@ -61,24 +61,6 @@
                         登录
                     </button>
                 </div>
-                <div v-if="loginConfig.oidc_enabled || loginConfig.cas_enabled" class="mt-4 grid gap-3">
-                    <button
-                        v-if="loginConfig.oidc_enabled"
-                        @click="startExternalLogin('oidc')"
-                        class="soft-button w-full py-3 text-base"
-                        :disabled="isLoading"
-                    >
-                        {{ loginConfig.oidc_display_name || 'OIDC 登录' }}
-                    </button>
-                    <button
-                        v-if="loginConfig.cas_enabled"
-                        @click="startExternalLogin('cas')"
-                        class="soft-button w-full py-3 text-base"
-                        :disabled="isLoading"
-                    >
-                        {{ loginConfig.cas_display_name || 'CAS 登录' }}
-                    </button>
-                </div>
                 <!-- 游客登录按钮 -->
                  <div v-if="loginConfig.tourist" class="form-group">
                     <button 
@@ -126,11 +108,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, reactive } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
 import message from '@/utils/message.js';
-
-const route = useRoute();
-const router = useRouter();
 
 // 响应式数据
 const showModal = ref(false);
@@ -147,34 +125,8 @@ let powCheckInterval = null; // 轮询检测定时器
 const loginConfig = reactive({
     pow_verify: false,
     tourist: false,
-    oidc_enabled: false,
-    oidc_display_name: 'OIDC 登录',
-    cas_enabled: false,
-    cas_display_name: 'CAS 登录',
     start_register: false
 })
-
-const externalLoginErrors = {
-    access_denied: '您已取消单点登录',
-    invalid_state: '登录状态校验失败，请重试',
-    missing_code: 'OIDC 登录回调缺少授权码',
-    missing_ticket: 'CAS 登录回调缺少票据',
-    invalid_ticket: 'CAS 票据验证失败，请重试',
-    token_exchange_failed: 'OIDC 授权信息验证失败，请重试',
-    user_info_failed: '无法获取单点登录用户信息',
-    account_error: '单点登录账户无法使用',
-    not_configured: '单点登录尚未完成配置',
-    provider_error: '单点登录服务返回错误，请重试',
-    authentication_failed: '单点登录失败，请重试',
-    callback_failed: '单点登录失败，请重试',
-    internal_error: '单点登录暂时不可用，请稍后重试'
-};
-
-const startExternalLogin = (provider) => {
-    if (isLoading.value) return;
-    setLoadingState('正在跳转', '正在前往单点登录服务...', 30);
-    window.location.assign(`/api/auth/${provider}/login`);
-}
 
 // 加载状态管理
 const setLoadingState = (title, text, progress = 0) => {
@@ -404,53 +356,6 @@ const putLogin = async (token, touristId = '') => {
     }
 };
 
-const handleExternalLoginCallback = async () => {
-    const callbackStatus = Array.isArray(route.query.external_login)
-        ? route.query.external_login[0]
-        : route.query.external_login;
-    if (!callbackStatus) return null;
-
-    if (callbackStatus !== 'success') {
-        const errorCodeValue = Array.isArray(route.query.error_code)
-            ? route.query.error_code[0]
-            : route.query.error_code;
-        const errorCode = typeof errorCodeValue === 'string' ? errorCodeValue : '';
-        await router.replace('/login');
-        message.error(externalLoginErrors[errorCode] || '单点登录失败，请重试');
-        return 'error';
-    }
-
-    setLoadingState('登录中', '正在确认单点登录信息...', 90);
-    try {
-        const response = await fetch('/api/user/status', { method: 'GET' });
-        const result = await response.json();
-        if (!response.ok || result.code !== 200 || !result.data?.logged_in || !result.data?.username) {
-            throw new Error('invalid login status');
-        }
-
-        const userInfo = {
-            id: result.data.user_id,
-            username: result.data.username,
-            role: result.data.user_role ?? result.data.role,
-			permission: result.data.permission || { codes: [], buckets: [] },
-            isTourist: false,
-            touristFingerprint: ''
-        };
-        localStorage.setItem('userInfo', JSON.stringify(userInfo));
-        window.refreshNavItems?.();
-        clearLoadingState();
-        await router.replace('/');
-        return 'success';
-    } catch (error) {
-        console.error('确认单点登录状态失败:', error);
-        localStorage.removeItem('userInfo');
-        clearLoadingState();
-        await router.replace('/login');
-        message.error('无法确认单点登录状态，请重新登录');
-        return 'error';
-    }
-};
-
 const getLoginSettings = async () => { 
     try {
         const response = await fetch('/api/settings/login', {
@@ -476,9 +381,6 @@ onMounted(async () => {
     if (!URL.revokeObjectUrl && URL.revokeObjectURL) {
         URL.revokeObjectUrl = URL.revokeObjectURL;
     }
-
-    const callbackResult = await handleExternalLoginCallback();
-    if (callbackResult === 'success') return;
 
     // 获取登录配置
     await getLoginSettings();

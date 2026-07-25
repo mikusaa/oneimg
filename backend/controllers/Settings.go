@@ -47,12 +47,6 @@ func GetSettings(c *gin.Context) {
 		return
 	}
 	responseSettings := secureconfig.SanitizeSettingsForResponse(settingModel)
-	if effectiveURL, effectiveErr := oidcCallbackURL(settingModel); effectiveErr == nil {
-		responseSettings["oidc_redirect_url_effective"] = effectiveURL
-	}
-	if effectiveURL, effectiveErr := casCallbackURL(settingModel); effectiveErr == nil {
-		responseSettings["cas_service_url_effective"] = effectiveURL
-	}
 	allowedGroups := currentSettingPermissions(c)
 	if len(allowedGroups) == 0 {
 		c.JSON(http.StatusForbidden, result.Error(403, "无权查看系统设置"))
@@ -86,13 +80,9 @@ func GetLoginSettings(c *gin.Context) {
 
 	c.JSON(200, result.Success("ok",
 		map[string]any{
-			"pow_verify":        settingModel.PowVerify,
-			"tourist":           settingModel.Tourist,
-			"start_register":    settingModel.StartRegister,
-			"oidc_enabled":      oidcSettingsReady(settingModel),
-			"oidc_display_name": externalLoginDisplayName(settingModel.OIDCDisplayName, "OIDC 登录"),
-			"cas_enabled":       casSettingsReady(settingModel),
-			"cas_display_name":  externalLoginDisplayName(settingModel.CASDisplayName, "CAS 登录"),
+			"pow_verify":     settingModel.PowVerify,
+			"tourist":        settingModel.Tourist,
+			"start_register": settingModel.StartRegister,
 		},
 	))
 }
@@ -226,9 +216,6 @@ func updateSensitiveSettingsField(settings *models.Settings, key string, value a
 	case "tg_bot_token":
 		settings.TGBotToken = stringValue
 		return nil
-	case "oidc_client_secret":
-		settings.OIDCClientSecret = stringValue
-		return nil
 	default:
 		return fmt.Errorf("设置项 %s 不支持敏感更新", key)
 	}
@@ -243,7 +230,7 @@ func buildSettingsUpdate(key string, value any, fieldName string, fieldType refl
 	switch key {
 	case "api_token":
 		return "api_token_hash", normalizedValue, nil
-	case "tg_bot_token", "oidc_client_secret":
+	case "tg_bot_token":
 		return key, normalizedValue, nil
 	case "public_image_domain":
 		domain, err := publicurl.NormalizeDomain(fmt.Sprintf("%v", value))
@@ -257,23 +244,6 @@ func buildSettingsUpdate(key string, value any, fieldName string, fieldType refl
 			return "", nil, err
 		}
 		return "cdn_domain", domain, nil
-	case "oidc_issuer":
-		normalized, err := normalizeOIDCIssuer(fmt.Sprintf("%v", value))
-		return "oidc_issuer", normalized, err
-	case "oidc_redirect_url":
-		normalized, err := normalizeOIDCCallbackURL(fmt.Sprintf("%v", value))
-		return "oidc_redirect_url", normalized, err
-	case "cas_server_url":
-		normalized, err := normalizeCASServerURL(fmt.Sprintf("%v", value))
-		return "cas_server_url", normalized, err
-	case "cas_service_url":
-		normalized, err := normalizeCASCallbackURL(fmt.Sprintf("%v", value))
-		return "cas_service_url", normalized, err
-	case "oidc_scopes":
-		normalized, err := normalizeOIDCScopes(fmt.Sprintf("%v", value))
-		return "oidc_scopes", normalized, err
-	case "oidc_client_id", "oidc_username_claim", "oidc_display_name", "oidc_super_admin_username", "cas_display_name", "cas_super_admin_username":
-		return getSettingsColumnName(fieldName), strings.TrimSpace(fmt.Sprintf("%v", value)), nil
 	default:
 		convertedValue, convertErr := convertValueToTargetType(key, value, fieldType)
 		if convertErr != nil {
@@ -456,65 +426,6 @@ func validateSettingData(key string, value any) error {
 	}
 
 	switch key {
-	case "oidc_issuer":
-		_, err := normalizeOIDCIssuer(fmt.Sprintf("%v", value))
-		return err
-	case "oidc_redirect_url":
-		_, err := normalizeOIDCCallbackURL(fmt.Sprintf("%v", value))
-		return err
-	case "cas_service_url":
-		_, err := normalizeCASCallbackURL(fmt.Sprintf("%v", value))
-		return err
-	case "cas_server_url":
-		_, err := normalizeCASServerURL(fmt.Sprintf("%v", value))
-		return err
-	case "oidc_scopes":
-		_, err := normalizeOIDCScopes(fmt.Sprintf("%v", value))
-		return err
-	case "oidc_username_claim":
-		claim := strings.TrimSpace(fmt.Sprintf("%v", value))
-		if claim == "" || !oidcClaimNameRegex.MatchString(claim) {
-			return fmt.Errorf("OIDC 用户名 Claim 格式不正确")
-		}
-	case "oidc_client_id":
-		if len(strings.TrimSpace(fmt.Sprintf("%v", value))) > 512 {
-			return fmt.Errorf("OIDC Client ID 过长")
-		}
-	case "oidc_client_secret":
-		if len(strings.TrimSpace(fmt.Sprintf("%v", value))) > 4096 {
-			return fmt.Errorf("OIDC Client Secret 过长")
-		}
-	case "oidc_display_name", "cas_display_name":
-		name := strings.TrimSpace(fmt.Sprintf("%v", value))
-		if len([]rune(name)) > 40 {
-			return fmt.Errorf("登录按钮名称不能超过40个字符")
-		}
-	case "oidc_super_admin_username", "cas_super_admin_username":
-		if len([]rune(strings.TrimSpace(fmt.Sprintf("%v", value)))) > 255 {
-			return fmt.Errorf("超级管理员映射用户名不能超过255个字符")
-		}
-	case "oidc_enable":
-		enabled, err := convertValueToTargetType(key, value, reflect.TypeOf(false))
-		if err != nil {
-			return err
-		}
-		if enabled.(bool) {
-			setting, err := settings.GetSettings()
-			if err != nil || !oidcSettingsComplete(setting) {
-				return fmt.Errorf("请先完整配置 OIDC Issuer、Client ID、Client Secret 和回调地址")
-			}
-		}
-	case "cas_enable":
-		enabled, err := convertValueToTargetType(key, value, reflect.TypeOf(false))
-		if err != nil {
-			return err
-		}
-		if enabled.(bool) {
-			setting, err := settings.GetSettings()
-			if err != nil || !casSettingsComplete(setting) {
-				return fmt.Errorf("请先完整配置 CAS Server URL 和回调地址")
-			}
-		}
 	case "public_image_domain", "cdn_domain":
 		domain, err := publicurl.NormalizeDomain(fmt.Sprintf("%v", value))
 		if err != nil {
@@ -730,13 +641,6 @@ var settingKeyPermissions = map[string]string{
 	"watermark_opac": "setting:image", "watermark_pos": "setting:image",
 	"pow_verify": "setting:security", "tourist": "setting:security", "start_register": "setting:security",
 	"referer_white_enable": "setting:security", "referer_white_list": "setting:security",
-	"oidc_enable": "setting:security", "oidc_issuer": "setting:security", "oidc_client_id": "setting:security",
-	"oidc_client_secret": "setting:security", "oidc_redirect_url": "setting:security", "oidc_scopes": "setting:security",
-	"oidc_client_secret_configured": "setting:security", "oidc_redirect_url_effective": "setting:security",
-	"oidc_username_claim": "setting:security", "oidc_display_name": "setting:security", "oidc_auto_provision": "setting:security",
-	"oidc_super_admin_username": "setting:security", "cas_enable": "setting:security", "cas_server_url": "setting:security",
-	"cas_service_url": "setting:security", "cas_display_name": "setting:security", "cas_auto_provision": "setting:security",
-	"cas_super_admin_username": "setting:security", "cas_service_url_effective": "setting:security",
 	"tg_notice": "setting:notification", "tg_bot_token": "setting:notification", "tg_receivers": "setting:notification",
 	"tg_notice_text": "setting:notification", "tg_bot_token_configured": "setting:notification",
 	"start_api": "setting:api", "api_token": "setting:api", "api_token_configured": "setting:api",

@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"embed"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -16,17 +15,14 @@ import (
 )
 
 // 设置路由
-func SetupRoutes(frontendFS embed.FS) *gin.Engine {
+func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 	cfg := config.App
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 
 	// 基础中间件
-	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipPaths: []string{
-		"/api/auth/oidc/callback",
-		"/api/auth/cas/callback",
-	}}))
+	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 	r.Use(middlewares.ConfigMiddleware(cfg))
 	r.Use(middlewares.SessionMiddleware(cfg))
@@ -74,11 +70,6 @@ func SetupRoutes(frontendFS embed.FS) *gin.Engine {
 		api.GET("/settings/seo", controllers.GetSEOSettings)
 		// 随机图片
 		api.GET("/images/random", controllers.GetRandomImages)
-		api.GET("/auth/oidc/login", controllers.StartOIDCLogin)
-		api.GET("/auth/oidc/callback", controllers.OIDCCallback)
-		api.GET("/auth/cas/login", controllers.StartCASLogin)
-		api.GET("/auth/cas/callback", controllers.CASCallback)
-
 		// 需要认证的接口分组（应用AuthMiddleware）
 		auth := api.Group("")
 		auth.Use(middlewares.AuthMiddleware())

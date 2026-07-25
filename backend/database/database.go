@@ -96,8 +96,6 @@ func InitDB(cfg *config.Config) {
 		&models.Image{},
 		&models.ImageStorage{},
 		&models.Settings{},
-		&models.ExternalAuthFlow{},
-		&models.ExternalIdentity{},
 		&models.ImageTeleGram{},
 		&models.ImageToTags{},
 		&models.Buckets{},

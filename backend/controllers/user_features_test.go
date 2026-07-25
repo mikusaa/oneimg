@@ -20,6 +20,8 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func setupFeatureTestDB(t *testing.T) {
@@ -237,12 +239,134 @@ func TestCheckImageAccessPermissionRoleBoundaries(t *testing.T) {
 
 func TestSettingsResponseKeysHavePermissionGroups(t *testing.T) {
 	for key := range secureconfig.SanitizeSettingsForResponse(models.Settings{}) {
+		lowerKey := strings.ToLower(key)
+		if strings.Contains(lowerKey, "oidc") || strings.Contains(lowerKey, "cas") {
+			t.Errorf("external authentication setting %q is still exposed", key)
+		}
 		if key == "id" {
 			continue
 		}
 		if getSettingRequiredPermission(key) == "" {
 			t.Errorf("settings response key %q has no permission group", key)
 		}
+	}
+}
+
+func TestLoginSettingsOnlyExposeLocalAuthenticationOptions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupFeatureTestDB(t)
+	if err := database.GetDB().DB.Create(&models.Settings{
+		PowVerify:     true,
+		Tourist:       true,
+		StartRegister: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := performJSONRequest(GetLoginSettings, http.MethodGet, "/api/settings/login", nil, nil)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("login settings status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Data) != 3 || response.Data["pow_verify"] != true || response.Data["tourist"] != true || response.Data["start_register"] != true {
+		t.Fatalf("unexpected login settings: %#v", response.Data)
+	}
+	for key := range response.Data {
+		lowerKey := strings.ToLower(key)
+		if strings.Contains(lowerKey, "oidc") || strings.Contains(lowerKey, "cas") {
+			t.Fatalf("external authentication setting leaked: %s", key)
+		}
+	}
+}
+
+func TestDeleteUserDoesNotRequireExternalIdentityTable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupFeatureTestDB(t)
+	db := database.GetDB().DB
+	if db.Migrator().HasTable("external_identities") {
+		t.Fatal("new database unexpectedly contains external_identities")
+	}
+	if db.Migrator().HasTable("external_auth_flows") {
+		t.Fatal("new database unexpectedly contains external_auth_flows")
+	}
+	for _, column := range []string{
+		"oidc_enable", "oidc_issuer", "oidc_client_id", "oidc_client_secret", "oidc_redirect_url",
+		"oidc_scopes", "oidc_username_claim", "oidc_display_name", "oidc_auto_provision", "oidc_super_admin_username",
+		"cas_enable", "cas_server_url", "cas_service_url", "cas_display_name", "cas_auto_provision", "cas_super_admin_username",
+	} {
+		if db.Migrator().HasColumn("settings", column) {
+			t.Fatalf("new database unexpectedly contains settings.%s", column)
+		}
+	}
+	users := []models.User{
+		{Username: "super", Password: "hash", Role: models.RoleAdmin},
+		{Username: "delete-me", Password: "hash", Role: models.RoleUser},
+	}
+	if err := db.Create(&users).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodDelete, "/api/users/2", nil)
+	context.Params = gin.Params{{Key: "id", Value: "2"}}
+	context.Set("user_id", models.SuperAdminID)
+	DeleteUser(context)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("delete user status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var count int64
+	if err := db.Model(&models.User{}).Where("id = ?", 2).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("user was not deleted")
+	}
+}
+
+func TestLegacyExternalAuthSchemaRemainsCompatible(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	legacyDB, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`CREATE TABLE settings (id integer PRIMARY KEY AUTOINCREMENT, oidc_enable numeric, oidc_client_secret text, cas_enable numeric)`,
+		`INSERT INTO settings (id, oidc_enable, oidc_client_secret, cas_enable) VALUES (1, 0, '', 0)`,
+		`CREATE TABLE external_auth_flows (id integer PRIMARY KEY AUTOINCREMENT, state_hash text)`,
+		`CREATE TABLE external_identities (id integer PRIMARY KEY AUTOINCREMENT, user_id integer)`,
+	}
+	for _, statement := range statements {
+		if err := legacyDB.Exec(statement).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	sqlDB, err := legacyDB.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{DbType: "sqlite", SqlitePath: path, ConfigSecret: "test-config-secret-with-enough-bytes"}
+	config.App = cfg
+	database.InitDB(cfg)
+	migratedDB := database.GetDB().DB
+	if !migratedDB.Migrator().HasTable("external_auth_flows") || !migratedDB.Migrator().HasTable("external_identities") {
+		t.Fatal("legacy external authentication tables were removed")
+	}
+	if !migratedDB.Migrator().HasColumn("settings", "oidc_enable") || !migratedDB.Migrator().HasColumn("settings", "cas_enable") {
+		t.Fatal("legacy external authentication columns were removed")
+	}
+	var setting models.Settings
+	if err := migratedDB.First(&setting, 1).Error; err != nil {
+		t.Fatalf("migrated settings row is unreadable: %v", err)
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 // 包初始化：初始化随机种子
@@ -172,16 +171,7 @@ func DeleteUser(c *gin.Context) {
 		return
 	}
 
-	// 保留已删除用户的外部身份作为禁用墓碑，防止下次 SSO 又自动建号。
-	if err := db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&models.ExternalIdentity{}).Where("user_id = ?", id).Updates(map[string]any{
-			"user_id":  0,
-			"disabled": true,
-		}).Error; err != nil {
-			return err
-		}
-		return tx.Delete(&user).Error
-	}); err != nil {
+	if err := db.Delete(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, result.Fail(500, "删除用户失败："+err.Error()))
 		return
 	}
