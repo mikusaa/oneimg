@@ -25,7 +25,6 @@
                         <i class="ri-lock-2-line"></i>
                     </div>
                     <h5 class="card-title text-2xl font-bold text-gray-800 dark:text-white">欢迎登录</h5>
-                    <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">简洁、安全、响应更快的管理入口</p>
                 </div>
                 <!-- 用户名输入 -->
                 <div class="form-group mb-6">

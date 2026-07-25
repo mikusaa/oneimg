@@ -2,8 +2,7 @@
   <div class="page-shell text-gray-800 dark:text-gray-200">
     <section class="page-header border-b border-slate-200/70 pb-3 dark:border-white/10">
       <div>
-        <p class="panel-label">Gallery Manager</p>
-        <h1 class="page-title">图库管理台</h1>
+        <h1 class="page-title">图库管理</h1>
       </div>
     </section>
 

@@ -9,7 +9,7 @@
         >
           <i class="ri-menu-3-line text-lg"></i>
         </button>
-        <div class="flex min-w-0 items-center gap-2 sm:gap-2.5">
+        <div class="flex min-w-0 items-center gap-2 sm:gap-2.5 lg:hidden">
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white shadow-sm dark:bg-white dark:text-slate-900 sm:h-9 sm:w-9 sm:text-base">
               {{ getFirstWord(seoTitle) }}
           </div>
@@ -43,11 +43,18 @@
 
   <aside class="fixed inset-y-0 left-0 z-50 w-[min(88vw,var(--app-sidebar-width))] border-r border-slate-200/80 bg-slate-100 px-2 pb-2 pt-2 transition-transform duration-300 dark:border-white/10 dark:bg-slate-950 sm:px-3 sm:pb-3 sm:pt-3 lg:w-[var(--app-sidebar-width)]" :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
     <div class="flex h-full flex-col overflow-hidden rounded-[18px] border border-slate-200/80 bg-white px-3 py-3 sm:rounded-[22px] sm:px-3.5 sm:py-4 dark:border-white/10 dark:bg-slate-900">
-      <div class="flex items-center justify-between border-b border-slate-200/70 pb-3 dark:border-white/10 sm:pb-3.5">
-        <div>
-          <p class="text-xs font-medium uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">Navigation</p>
-          <h2 class="mt-1.5 text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">工作区</h2>
-        </div>
+      <div class="flex min-h-9 items-center justify-between border-b border-slate-200/70 pb-3 dark:border-white/10 sm:pb-3.5">
+        <router-link
+          to="/"
+          class="flex min-w-0 items-center gap-2.5"
+          title="返回控制中心"
+          @click="handleNavClick"
+        >
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-base font-bold text-white shadow-sm dark:bg-white dark:text-slate-900">
+            {{ getFirstWord(seoTitle) }}
+          </span>
+          <span class="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{{ seoTitle }}</span>
+        </router-link>
         <button
           type="button"
           class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white lg:hidden"
@@ -111,7 +118,7 @@ const refreshNavItems = () => {
   }
 
   navItems.value.push(
-    { path: '/', icon: 'home-5-line', name: '控制台' },
+    { path: '/', icon: 'home-5-line', name: '控制中心' },
     { path: '/gallery', icon: 'gallery-view-2', name: '图库管理' },
     { path: '/stats', icon: 'bar-chart-grouped-line', name: '数据统计' }
   )

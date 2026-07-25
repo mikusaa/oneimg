@@ -5,7 +5,6 @@
         <div class="content-panel home-panel-compact">
           <div class="mb-3 flex flex-col gap-2 border-b border-slate-200/70 pb-3 dark:border-white/10 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p class="panel-label">主上传区</p>
               <h2 class="section-title mt-1 flex items-center gap-2 text-base font-semibold sm:text-lg">
                 <i class="ri-upload-cloud-2-line text-primary"></i>
                 图片上传
@@ -78,16 +77,13 @@
         <div class="content-panel home-panel-compact space-y-2.5">
           <div class="flex flex-col gap-2 border-b border-slate-200/70 pb-2.5 dark:border-white/10 md:flex-row md:items-end md:justify-between">
             <div>
-              <p class="panel-label">上传设置</p>
               <h2 class="section-title mt-1 text-base font-semibold text-slate-900 dark:text-white sm:text-lg">上传设置</h2>
             </div>
           </div>
 
           <div class="grid gap-2.5 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
             <div class="control-group control-group-compact">
-            <p class="panel-label">上传目标</p>
             <p class="control-group-title">选择存储桶</p>
-            <p class="control-group-hint">上传前先确定目标存储。</p>
             <select 
               class="input-modern mt-3"
               v-model="selectedBucket"
@@ -103,9 +99,7 @@
           </div>
 
             <div class="control-group control-group-compact">
-            <p class="panel-label">标签区</p>
-            <p class="control-group-title">给本次上传补充标签</p>
-            <p class="control-group-hint">标签会跟随本次上传一起保存。</p>
+            <p class="control-group-title">上传标签</p>
 
             <div class="mt-2.5 space-y-2">
               <select 
@@ -172,12 +166,10 @@
         <div class="content-panel home-panel-compact">
           <div class="mb-3 flex flex-col gap-2 border-b border-slate-200/70 pb-3 dark:border-white/10 md:flex-row md:items-center md:justify-between">
             <div>
-              <p class="panel-label">结果流</p>
               <h2 class="section-title mt-1 flex items-center gap-2 text-base font-semibold sm:text-lg">
                 <i class="ri-gallery-line text-primary"></i>
                 最近上传
               </h2>
-              <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">结果区保持紧凑，优先看图和复制链接。</p>
             </div>
             <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300">{{ recentImages.length }} 张</span>
           </div>

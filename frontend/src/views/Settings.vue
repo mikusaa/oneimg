@@ -637,7 +637,7 @@
                             <div v-show="activeSettingTab === 'image'" class="setting-row">
                                 <div>
                                     <p class="setting-row-title">生成缩略图</p>
-                                    <p class="setting-row-hint">生成缩略图，可提升后台预览速度，上传速度稍慢。</p>
+                                    <p class="setting-row-hint">缩略图用于后台预览，生成时会增加少量上传耗时。</p>
                                 </div>
                                 <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
                                     <input 
