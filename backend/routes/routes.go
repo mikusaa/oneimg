@@ -65,6 +65,7 @@ func SetupRoutes(frontendFS embed.FS) *gin.Engine {
 	{
 		// 公开接口（无需认证）
 		api.POST("/login", controllers.Login)
+		api.POST("/register", controllers.Register)
 		api.POST("/logout", controllers.Logout)
 		api.GET("/logout", controllers.Logout)
 		// 返回登录设置
@@ -90,7 +91,9 @@ func SetupRoutes(frontendFS embed.FS) *gin.Engine {
 
 			// 标签管理接口
 			auth.GET("/tags", controllers.GetTags)
-			auth.DELETE("/tags/:id", controllers.DeleteTag)
+			auth.POST("/tags", middlewares.RequirePermission("tag:create"), controllers.AddTag)
+			auth.PUT("/tags/:id", middlewares.RequirePermission("tag:update"), controllers.UpdateTag)
+			auth.DELETE("/tags/:id", middlewares.RequirePermission("tag:delete"), controllers.DeleteTag)
 
 			// 存储桶列表
 			auth.GET("/buckets/list", controllers.GetBucketsList)
@@ -112,36 +115,28 @@ func SetupRoutes(frontendFS embed.FS) *gin.Engine {
 
 			// 通过URL上传图片
 			auth.POST("/images/url", controllers.UploadImagesByURL)
+			auth.POST("/account/change", controllers.ChangeAccountInfo)
 
-			// 需要管理员权限
-			auth.Use(middlewares.AdminOnlyMiddleware())
-			{
-				// 新增标签
-				auth.POST("/tags", controllers.AddTag)
+			// 存储管理接口
+			auth.GET("/buckets", middlewares.RequireAnyPermission("storage:create", "storage:update", "storage:delete"), controllers.GetBuckets)
+			auth.POST("/buckets", middlewares.RequirePermission("storage:create"), controllers.AddBuckets)
+			auth.POST("/buckets/test", middlewares.RequireAnyPermission("storage:create", "storage:update"), controllers.TestBucketConnection)
+			auth.POST("/buckets/update/:id", middlewares.RequirePermission("storage:update"), controllers.UpdateBuckets)
+			auth.DELETE("/buckets/:id", middlewares.RequirePermission("storage:delete"), controllers.DeleteBuckets)
 
-				// 存储管理接口
-				auth.GET("/buckets", controllers.GetBuckets)
-				auth.POST("/buckets", controllers.AddBuckets)
-				auth.POST("/buckets/test", controllers.TestBucketConnection)
-				auth.POST("/buckets/update/:id", controllers.UpdateBuckets)
-				auth.DELETE("/buckets/:id", controllers.DeleteBuckets)
+			auth.POST("/sessions/clear", middlewares.RequirePermission("setting:security"), controllers.ClearAllSessions)
 
-				// 账户管理接口
-				auth.POST("/account/change", controllers.ChangeAccountInfo)
-				auth.POST("/sessions/clear", controllers.ClearAllSessions)
+			// 用户管理接口
+			auth.GET("/users", middlewares.RequirePermission("user:list"), controllers.GetUsers)
+			auth.POST("/users/Add", middlewares.RequirePermission("user:create"), controllers.CreateUser)
+			auth.DELETE("/users/:id", middlewares.RequirePermission("user:delete"), controllers.DeleteUser)
+			auth.POST("/users/updateRole", middlewares.RequirePermission("user:role:update"), controllers.UpdateUserRole)
+			auth.POST("/users/resetPassword/:id", middlewares.RequirePermission("user:password:reset"), controllers.ResetPassword)
+			auth.POST("/users/updatePermission/:id", middlewares.RequirePermission("user:permission:update"), controllers.UpdateUserPermission)
 
-				// 用户管理接口
-				auth.GET("/users", controllers.GetUsers)
-				auth.POST("/users/Add", controllers.CreateUser)
-				auth.DELETE("/users/:id", controllers.DeleteUser)
-				auth.POST("/users/updateRole", controllers.UpdateUserRole)
-				auth.POST("/users/resetPassword/:id", controllers.ResetPassword)
-				auth.POST("/users/updatePermission/:id", controllers.UpdateUserPermission)
-
-				// 系统设置接口
-				auth.Any("/settings/get", controllers.GetSettings)
-				auth.POST("/settings/update", controllers.UpdateSettings)
-			}
+			// 系统设置接口，控制器按字段分组再次校验权限。
+			auth.Any("/settings/get", controllers.GetSettings)
+			auth.POST("/settings/update", controllers.UpdateSettings)
 		}
 	}
 

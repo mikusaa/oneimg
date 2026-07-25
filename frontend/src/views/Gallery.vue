@@ -13,7 +13,18 @@
           <div class="gallery-topbar-filters">
             <div v-if="isAdmin" class="gallery-inline-control">
               <span class="gallery-inline-label">角色</span>
-              <div class="role-buttons grid w-full grid-cols-3 overflow-hidden rounded-[16px] border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto">
+              <div class="role-buttons grid w-full grid-cols-4 overflow-hidden rounded-[16px] border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto">
+            <button
+              @click="changeRole('all')"
+              class="px-3 py-1.5 text-sm transition-all"
+              :class="[
+                roleImage === 'all'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'bg-transparent hover:bg-slate-100 dark:hover:bg-white/10'
+              ]"
+            >
+              全部
+            </button>
             <button
               @click="changeRole('admin')"
               class="px-3 py-1.5 text-sm transition-all"
@@ -122,7 +133,12 @@
               <span class="gallery-topbar-stat">已选 {{ selectedImages.length }}</span>
             </div>
           <div v-if="selectedImages.length > 0" class="batch-actions flex w-full flex-col gap-2 sm:flex-row sm:items-center xl:w-auto">
+            <button @click="handleBatchCopy" class="soft-button">
+              <i class="ri-file-copy-line"></i>
+              批量复制
+            </button>
             <button
+            v-if="canBatchTag"
             @click="handleBatchSetTag"
             class="soft-button">
                 <i class="ri-bookmark-2-fill"></i>
@@ -130,6 +146,7 @@
             </button>
             <!-- 批量删除按钮 - 游客和管理员都可见 -->
             <button
+              v-if="canBatchDelete"
               @click="handleBatchDelete"
               class="danger-button"
             >
@@ -274,11 +291,13 @@ import { ref, onMounted, computed, onUnmounted, unref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import errorImg from '@/assets/images/error.webp';
 import { getStorageSyncSummary, renderStorageStatusesHtml } from '@/utils/storageStatus.js';
+import { getStoredUser, hasPermission, isSuperAdmin, ROLE_ADMIN, ROLE_GUEST } from '@/utils/permissions.js';
 
 // ====================== 常量定义 ======================
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const PAGE_SIZE = 20;
 const ROLE_MAP = {
+  all: '全部',
   admin: '管理员',
   user: '普通用户',
   guest: '游客'
@@ -398,7 +417,7 @@ const loading = ref(false);
 const viewMode = ref('grid');
 const currentPage = ref(1);
 const totalPages = ref(1);
-const roleImage = ref("admin");
+const roleImage = ref("all");
 const isAdmin = ref(false);
 const presetTags = ref([]);
 const presetBuckets = ref([]);
@@ -408,6 +427,7 @@ const selectedTags = ref([]); // 选中的标签ID数组
 const searchKeyword = ref('');
 const selectAll = ref(false); // 全选状态
 const currentPreviewImage = ref(null);
+const currentUser = getStoredUser();
 
 // 路由实例
 const router = useRouter();
@@ -429,6 +449,22 @@ const visiblePages = computed(() => {
 });
 
 const getImageAltText = (image) => image?.original_filename || image?.filename || '图片';
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+
+const canManageImage = (image, permission) => {
+  if (!image) return false;
+  if (isSuperAdmin(currentUser)) return true;
+  if (Number(image.user_id) === 1) return false;
+  if (Number(currentUser.role) === ROLE_GUEST || currentUser.isTourist === true) return true;
+  if (Number(image.user_id) === Number(currentUser.id)) return true;
+  return Number(currentUser.role) === ROLE_ADMIN && hasPermission(permission, currentUser);
+};
+
+const selectedImageRecords = computed(() => images.value.filter(image => selectedImages.value.includes(image.id)));
+const canBatchDelete = computed(() => selectedImageRecords.value.some(image => canManageImage(image, 'image:delete')));
+const canBatchTag = computed(() => selectedImageRecords.value.some(image =>
+  canManageImage(image, 'image:tag:add') || canManageImage(image, 'image:tag:delete')
+));
 
 // ====================== 监听器 ======================
 /**
@@ -509,7 +545,7 @@ const loadImages = async () => {
       tags: selectedTags.value,
       bucket: selectedBucket.value
     });
-    if (isAdmin.value) {
+    if (isAdmin.value && roleImage.value !== 'all') {
       params.set('role', roleImage.value);
     }
     if (searchKeyword.value) {
@@ -791,15 +827,9 @@ const handleBatchDelete = () => {
     return;
   }
 
-  // 权限过滤
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-  let filterIds = selectedImages.value;
-  if (!isAdmin.value && userInfo.id) {
-    filterIds = selectedImages.value.filter(id => {
-      const image = images.value.find(item => item.id === id);
-      return image && image.user_id === userInfo.id;
-    });
-  }
+  const filterIds = selectedImages.value.filter(id =>
+    canManageImage(images.value.find(item => item.id === id), 'image:delete')
+  );
 
   if (filterIds.length === 0) {
     Message.warning('你没有权限删除选中的图片');
@@ -837,6 +867,81 @@ const handleBatchDelete = () => {
   modal.open();
 };
 
+const formatBatchLinks = (format) => selectedImageRecords.value.map(image => {
+  const url = getFullUrl(image.url);
+  const alt = getImageAltText(image);
+  switch (format) {
+    case 'markdown': return `![${alt}](${url})`;
+    case 'html': return `<img src="${url}" alt="${alt}">`;
+    case 'bbcode': return `[img]${url}[/img]`;
+    default: return url;
+  }
+}).join('\n');
+
+const copyText = async (text) => {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  if (!copied) throw new Error('浏览器不支持自动复制');
+};
+
+const handleBatchCopy = () => {
+  if (selectedImageRecords.value.length === 0) {
+    Message.warning('请选择要复制的图片');
+    return;
+  }
+  let format = 'url';
+  const modal = new PopupModal({
+    title: '批量复制图片链接',
+    width: 'lg',
+    content: `
+      <div class="space-y-3">
+        <label class="field-label" for="batch-copy-format">链接格式</label>
+        <select id="batch-copy-format" class="input-modern w-full">
+          <option value="url">URL</option>
+          <option value="markdown">Markdown</option>
+          <option value="html">HTML</option>
+          <option value="bbcode">BBCode</option>
+        </select>
+        <label class="field-label" for="batch-copy-preview">复制预览</label>
+        <textarea id="batch-copy-preview" class="input-modern min-h-[220px] w-full font-mono text-xs" readonly></textarea>
+      </div>
+    `,
+    buttons: [
+      { text: '取消', type: 'default', callback: currentModal => currentModal.close() },
+      { text: '复制', type: 'primary', callback: async currentModal => {
+        try {
+          await copyText(formatBatchLinks(format));
+          Message.success(`已复制 ${selectedImageRecords.value.length} 条链接`);
+          currentModal.close();
+        } catch (error) {
+          Message.error(error.message || '复制失败');
+        }
+      }}
+    ],
+    onOpen: currentModal => {
+      const select = currentModal.content.querySelector('#batch-copy-format');
+      const preview = currentModal.content.querySelector('#batch-copy-preview');
+      const refresh = () => {
+        format = select.value;
+        preview.value = formatBatchLinks(format);
+      };
+      select.addEventListener('change', refresh);
+      refresh();
+    }
+  });
+  modal.open();
+};
+
 /**
  * 批量设置标签
  */
@@ -847,7 +952,14 @@ const handleBatchSetTag = () => {
     }
 
     // 已选择的图片
-    const imageId = selectedImages.value;
+    const imageId = selectedImages.value.filter(id => {
+      const image = images.value.find(item => item.id === id);
+      return canManageImage(image, 'image:tag:add') || canManageImage(image, 'image:tag:delete');
+    });
+    if (imageId.length === 0) {
+      Message.warning('你没有权限编辑选中的图片');
+      return;
+    }
 
     // 构建标签选项
     const tagList = [
@@ -907,6 +1019,11 @@ const batchDeleteTag = async (formData) => {
         return;
     }
 
+    const imageIds = selectedImages.value.filter(id => canManageImage(images.value.find(item => item.id === id), 'image:tag:delete'));
+    if (imageIds.length === 0) {
+        Message.warning('你没有权限删除选中图片的标签');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE_URL}/api/images/tags`, {
         method: 'DELETE',
@@ -914,7 +1031,7 @@ const batchDeleteTag = async (formData) => {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
             },
             body: JSON.stringify({
-                image_ids: selectedImages.value,
+                image_ids: imageIds,
                 tag_id: formData.tag
             })
         });
@@ -938,6 +1055,11 @@ const batchAddTag = async (formData) => {
         Message.warning("请选择Tag");
         return;
     }
+    const imageIds = selectedImages.value.filter(id => canManageImage(images.value.find(item => item.id === id), 'image:tag:add'));
+    if (imageIds.length === 0) {
+        Message.warning('你没有权限给选中的图片添加标签');
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE_URL}/api/images/tags`, {
         method: 'POST',
@@ -945,7 +1067,7 @@ const batchAddTag = async (formData) => {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
             },
             body: JSON.stringify({
-                image_ids: selectedImages.value,
+                image_ids: imageIds,
                 tag_id: formData.tag
             })
         });
@@ -1027,7 +1149,10 @@ const openPreview = (image) => {
  * @returns {string} HTML字符串
  */
 const generatePreviewContent = (image) => {
-  const altText = getImageAltText(image);
+  const altText = escapeHtml(getImageAltText(image));
+  const canDelete = canManageImage(image, 'image:delete');
+  const canAddTag = canManageImage(image, 'image:tag:add');
+  const canDeleteTag = canManageImage(image, 'image:tag:delete');
   const roleClass = getRoleName(image) === '管理员'
     ? 'background-color: #e0f2fe; color: #0369a1; dark:background-color: #075985; dark:color: #bae6fd;' 
     : getRoleName(image) === '普通用户'
@@ -1037,12 +1162,12 @@ const generatePreviewContent = (image) => {
   // 生成标签HTML
   const tagsHtml = image.tags?.map(tag => `
     <div class="px-2 py-0.5 rounded bg-primary/10 dark:bg-primary/20 text-primary text-xs" data-tag-id="${tag.id}" data-image-id="${image.id}">
-      <span>${tag.name}</span>
-      <button
+      <span>${escapeHtml(tag.name)}</span>
+      ${canDeleteTag ? `<button
         onclick="window.deleteImageTag(event, ${image.id}, ${tag.id})"
         class="ml-1 text-primary/70 hover:text-primary/30">
         <i class="ri-close-line text-xs"></i>
-      </button>
+      </button>` : ''}
     </div>
   `).join('') || '';
 
@@ -1055,7 +1180,7 @@ const generatePreviewContent = (image) => {
             ${getRoleName(image)}
           </span>
           <span class="text-xs text-white px-2 py-0.5 rounded bg-success">
-            ${presetBuckets.value.find(bucket => bucket.id == image.bucket_id)?.name}
+            ${escapeHtml(presetBuckets.value.find(bucket => bucket.id == image.bucket_id)?.name || '未知')}
           </span>
         </div>
         <div class="flex gap-1">
@@ -1067,14 +1192,13 @@ const generatePreviewContent = (image) => {
             <i class="ri-download-fill text-xs"></i>
             下载
           </button>
-          <!-- 删除按钮 -->
-          <button 
+          ${canDelete ? `<button
             class="px-3 py-1.5 text-xs bg-danger/10 hover:bg-danger/20 whitespace-nowrap text-danger rounded-md transition-colors duration-200 flex items-center gap-1"
             onclick="event.stopPropagation(); window.deletePreviewImage(${image.id})"
           >
             <i class="ri-delete-bin-fill text-xs"></i>
             删除
-          </button>
+          </button>` : ''}
         </div>
       </div>
       
@@ -1126,11 +1250,11 @@ const generatePreviewContent = (image) => {
       <div class="pt-2 flex flex-wrap gap-2 items-center">
         <p class="mr-1 text-xs text-secondary font-semibold">Tags：</p>
         ${tagsHtml}
-        <button 
+        ${canAddTag ? `<button
           onclick="window.addImageTag(${image.id})"
           class="flex items-center px-2 py-1 bg-success/10 dark:bg-success/20 text-success rounded-full text-xs hover:text-success/30 transition-colors">
           <i class="ri-add-line"></i>
-        </button>
+        </button>` : ''}
       </div>
       
       <!-- 底部信息栏 -->
@@ -1141,7 +1265,7 @@ const generatePreviewContent = (image) => {
         </div>
         <div class="flex items-center gap-1.5">
           <i class="ri-file-text-line w-3.5 text-center"></i>
-          原始: ${image.original_filename || image.filename || '未知'}
+          原始: ${escapeHtml(image.original_filename || image.filename || '未知')}
         </div>
         <div class="flex items-center gap-1.5">
           <i class="ri-image-line w-3.5 text-center"></i>
@@ -1226,17 +1350,17 @@ const registerPreviewGlobalFunctions = (modal, imageId) => {
   };
 
   // 删除标签
-  window.deleteImageTag = (event, imgId, tagId) => {
+  window.deleteImageTag = async (event, imgId, tagId) => {
     if (tagId == 0) {
       Message.warning("无法删除默认Tag");
       return;
     }
     event.preventDefault();
-    if(deleteImageTagAsync(imgId, tagId)){
+    if (await deleteImageTagAsync(imgId, tagId)) {
         const tagDiv = document.querySelector(`[data-image-id="${imageId}"][data-tag-id="${tagId}"]`);
         // 如果当前标签是最后一个，则修改为默认
         if(currentPreviewImage.value.tags.length <= 1){
-            tagDiv.querySelector('span').innerHTML = "默认";
+            tagDiv.querySelector('span').textContent = "默认";
             tagDiv.setAttribute('data-tag-id', '0');
             // 修改删除调用函数
             tagDiv.querySelector('button').setAttribute("onclick", `window.deleteImageTag(event, ${imageId}, 0)`);
@@ -1374,7 +1498,7 @@ onMounted(() => {
     isAdmin.value = false;
   } else if (Number(userInfo?.role) === 1) {
     isAdmin.value = true;
-    roleImage.value = "admin";
+    roleImage.value = "all";
   } else {
     isAdmin.value = false;
     roleImage.value = "user";

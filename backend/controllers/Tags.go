@@ -3,6 +3,7 @@ package controllers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"oneimg/backend/database"
@@ -19,6 +20,7 @@ func AddTag(c *gin.Context) {
 		return
 	}
 
+	tag.Name = strings.TrimSpace(tag.Name)
 	if tag.Name == "" {
 		c.JSON(http.StatusBadRequest, result.Error(400, "标签名称不能为空"))
 		return
@@ -51,6 +53,57 @@ func AddTag(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result.Success("ok", tag))
+}
+
+func UpdateTag(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, result.Error(400, "标签ID无效"))
+		return
+	}
+	if id == 0 {
+		c.JSON(http.StatusForbidden, result.Error(403, "默认标签不能修改"))
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, result.Error(400, "参数错误"))
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		c.JSON(http.StatusBadRequest, result.Error(400, "标签名称不能为空"))
+		return
+	}
+	if utf8.RuneCountInString(req.Name) > 10 {
+		c.JSON(http.StatusBadRequest, result.Error(400, "标签名称过长"))
+		return
+	}
+
+	db := database.GetDB().DB
+	var tag models.Tags
+	if err := db.First(&tag, uint(id)).Error; err != nil {
+		c.JSON(http.StatusNotFound, result.Error(404, "标签不存在"))
+		return
+	}
+	var count int64
+	if err := db.Model(&models.Tags{}).Where("name = ? AND id <> ?", req.Name, id).Count(&count).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, result.Error(500, "查询标签失败"))
+		return
+	}
+	if count > 0 {
+		c.JSON(http.StatusConflict, result.Error(409, "标签已存在"))
+		return
+	}
+	if err := db.Model(&tag).Update("name", req.Name).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, result.Error(500, "更新标签失败"))
+		return
+	}
+	tag.Name = req.Name
+	c.JSON(http.StatusOK, result.Success("标签更新成功", tag))
 }
 
 func GetTags(c *gin.Context) {

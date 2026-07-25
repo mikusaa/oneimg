@@ -1,230 +1,108 @@
 <template>
-    <div class="page-shell">
-        <section class="page-header">
-            <div>
-                <h1 class="page-title">标签管理</h1>
-            </div>
-            <div class="stat-tile min-w-[170px] p-4">
-                <p class="text-xs uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">标签总数</p>
-                <p class="mt-2 text-base font-semibold text-slate-900 dark:text-white">{{ tagList.length + 1 }}</p>
-            </div>
-        </section>
+  <div class="page-shell">
+    <section class="page-header">
+      <div><h1 class="page-title">标签管理</h1></div>
+      <div class="stat-tile min-w-[150px] p-4">
+        <p class="text-xs text-slate-400">标签总数</p>
+        <p class="mt-1 text-lg font-semibold text-slate-900 dark:text-white">{{ tags.length + 1 }}</p>
+      </div>
+    </section>
 
-        <div class="section-card">
-            <h2 class="section-title text-lg font-semibold mb-4 flex items-center gap-2">
-                <i class="ri-bookmark-line text-primary"></i>
-                标签管理
-            </h2>
-            
-            <!-- 标签添加区域 -->
-            <div class="flex justify-between items-center mb-6">
-                <input type="text" 
-                    v-model="tagInput"
-                    @keyup.enter="handleAddTag"
-                    class="input-modern min-w-[100px] flex-1 px-6 py-4"
-                    placeholder="请输入标签(最多10个字符)..." 
-                    maxlength="10"/>
-                <button class="primary-button ml-3 px-6 py-4" 
-                        @click="handleAddTag"
-                        :disabled="isAdding">
-                    <span v-if="!isAdding" class="truncate text-overflow">添加</span>
-                    <span v-else class="flex items-center gap-1">
-                        <i class="ri-loader-2-line animate-spin"></i>
-                        提交中
-                    </span>
-                </button>
-            </div>
-            
-            <!-- 错误提示 -->
-            <div v-if="errorMsg" class="mb-4 px-4 py-2 text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                {{ errorMsg }}
-            </div>
-            
-            <!-- 标签列表区域 -->
-            <div class="tag-list-container">
-                <h3 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">已创建标签</h3>
-                
-                <!-- 标签列表 -->
-                <div class="flex flex-wrap gap-3">
-                    <!-- 默认标签 -->
-                    <div class="flex items-center px-4 py-2 bg-primary/10 dark:bg-primary/20 text-primary rounded-lg text-sm">
-                        <span>默认</span>
-                        <button class="ml-2 text-primary/70 hover:text-red-500 transition-colors" 
-                                @click="handleDeleteTag(0, 0)"
-                                :disabled="isDeleting">
-                            <i class="ri-close-line"></i>
-                        </button>
-                    </div>
-
-                    <!-- 标签项 -->
-                    <div v-for="(tag, index) in tagList" :key="index" class="flex items-center px-4 py-2 bg-primary/10 dark:bg-primary/20 text-primary rounded-lg text-sm">
-                        <span>{{ tag?.name || '未知'}}</span>
-                        <button class="ml-2 text-primary/70 hover:text-red-500 transition-colors" 
-                                @click="handleDeleteTag(tag.id, index)"
-                                :disabled="isDeleting">
-                            <i class="ri-close-line"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div v-if="canCreate" class="toolbar-surface flex gap-3">
+      <input v-model="newTag" class="input-modern flex-1" maxlength="10" placeholder="新标签名称" @keyup.enter="createTag" />
+      <button class="primary-button" :disabled="saving" @click="createTag"><i class="ri-add-line"></i>添加</button>
     </div>
+
+    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div class="section-card flex items-center justify-between gap-3 p-4">
+        <div class="flex items-center gap-2"><i class="ri-bookmark-fill text-primary"></i><span class="font-medium">默认</span></div>
+        <span class="text-xs text-slate-400">系统标签</span>
+      </div>
+      <div v-for="tag in tags" :key="tag.id" class="section-card flex items-center justify-between gap-3 p-4">
+        <div class="min-w-0 flex items-center gap-2"><i class="ri-bookmark-line text-primary"></i><span class="truncate font-medium">{{ tag.name }}</span></div>
+        <div class="flex shrink-0 gap-1">
+          <button v-if="canUpdate" class="icon-button" title="编辑标签" @click="startEdit(tag)"><i class="ri-edit-line"></i></button>
+          <button v-if="canDelete" class="icon-button text-red-500" title="删除标签" @click="deleteTag(tag)"><i class="ri-delete-bin-line"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="editingTag" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 px-4" @click.self="editingTag = null">
+      <form class="section-card w-full max-w-md p-6" @submit.prevent="updateTag">
+        <div class="mb-5 flex items-center justify-between"><h2 class="text-lg font-semibold">编辑标签</h2><button type="button" class="icon-button" title="关闭" @click="editingTag = null"><i class="ri-close-line"></i></button></div>
+        <input v-model="editName" class="input-modern w-full" maxlength="10" autofocus />
+        <div class="mt-5 flex justify-end gap-2"><button type="button" class="soft-button" @click="editingTag = null">取消</button><button class="primary-button" :disabled="saving">保存</button></div>
+      </form>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-// 响应式数据
-const tagInput = ref('');          // 标签输入框
-const tagList = ref([]);           // 标签列表
-const errorMsg = ref('');          // 错误提示
-const isAdding = ref(false);       // 添加标签加载状态
-const isDeleting = ref(false);     // 删除标签加载状态
+import { onMounted, ref } from 'vue'
+import message from '@/utils/message.js'
+import { hasPermission } from '@/utils/permissions.js'
 
-// 初始化：加载已有标签
-onMounted(() => {
-    fetchTagList();
-});
+const tags = ref([])
+const newTag = ref('')
+const editingTag = ref(null)
+const editName = ref('')
+const saving = ref(false)
+const canCreate = hasPermission('tag:create')
+const canUpdate = hasPermission('tag:update')
+const canDelete = hasPermission('tag:delete')
 
-// 获取标签列表
-const fetchTagList = async () => {
-    try {
-        // 替换为你的实际接口地址
-        const response = await fetch('/api/tags', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-            }
-        });
-        
-        const result = await response.json();
-        if (response.ok && result.code === 200) {
-            tagList.value = result.data?.list || [];
-        } else {
-            throw new Error(result.message || '获取标签列表失败');
-        }
-    } catch (error) {
-        console.error('获取标签失败:', error);
-        Message.error(error.message || '获取标签列表失败');
-    }
-};
-
-// 处理添加标签
-const handleAddTag = async () => {
-    // 清空之前的错误提示
-    errorMsg.value = '';
-    
-    // 1. 输入校验
-    const tagName = tagInput.value.trim();
-    if (!tagName) {
-        errorMsg.value = '标签名称不能为空';
-        return;
-    }
-    
-    if (tagName.length > 10) {
-        errorMsg.value = '标签名称不能超过10个字符';
-        return;
-    }
-    
-    // 2. 重复校验
-    const isDuplicate = tagList.value.some(tag => tag.name === tagName);
-    if (isDuplicate) {
-        errorMsg.value = '该标签已存在，请勿重复添加';
-        return;
-    }
-    
-    // 3. 提交添加
-    try {
-        isAdding.value = true;
-        
-        // 替换为你的实际接口地址
-        const response = await fetch('/api/tags', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-            },
-            body: JSON.stringify({ name: tagName })
-        });
-        
-        const result = await response.json();
-        if (response.ok && result.code === 200) {
-            // 添加成功，更新列表
-            tagList.value.push(result.data);
-            tagInput.value = ''; // 清空输入框
-            Message.success('标签添加成功');
-        } else {
-            throw new Error(result.message || '添加标签失败');
-        }
-    } catch (error) {
-        console.error('添加标签失败:', error);
-        errorMsg.value = error.message || '添加标签失败';
-        Message.error(error.message || '添加标签失败');
-    } finally {
-        isAdding.value = false;
-    }
-};
-
-// 处理删除标签
-const handleDeleteTag = async (tagId, index) => {
-    // 确认删除
-    const modal = new PopupModal({
-        title: '确认删除',
-        content: `
-        <div class="flex gap-3">
-            <i class="fa fa-exclamation-triangle text-warning text-xl mt-1"></i>
-            <div>
-            <p>确定要删除这个标签吗？</p>
-            <p class="mt-1 text-secondary text-sm">删除后无法恢复，请谨慎操作</p>
-            </div>
-        </div>
-        `,
-        buttons: [
-        {
-            text: '取消',
-            type: 'default',
-            callback: (modal) => modal.close()
-        },
-        {
-            text: '确认删除',
-            type: 'danger',
-            callback: async (modal) => {
-            modal.close()
-            await deleteAsync(tagId, index)
-            }
-        }
-        ],
-        maskClose: true
-    })
-    modal.open()
-};
-
-const deleteAsync = async (tagId, index) => {
-    try {
-        isDeleting.value = true;
-        
-        // 替换为你的实际接口地址
-        const response = await fetch(`/api/tags/${tagId}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-            }
-        });
-        
-        const result = await response.json();
-        if (response.ok && result.code === 200) {
-            // 删除成功，更新列表
-            tagList.value.splice(index, 1);
-            Message.success('标签删除成功');
-        } else {
-            throw new Error(result.message || '删除标签失败');
-        }
-    } catch (error) {
-        console.error('删除标签失败:', error);
-        Message.error(error.message || '删除标签失败');
-    } finally {
-        isDeleting.value = false;
-    }
+const loadTags = async () => {
+  try {
+    const response = await fetch('/api/tags')
+    const result = await response.json()
+    if (!response.ok || result.code !== 200) throw new Error(result.message || '获取标签失败')
+    tags.value = result.data?.list || []
+  } catch (error) { message.error(error.message || '获取标签失败') }
 }
+
+const createTag = async () => {
+  const name = newTag.value.trim()
+  if (!name) return message.error('标签名称不能为空')
+  saving.value = true
+  try {
+    const response = await fetch('/api/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
+    const result = await response.json()
+    if (!response.ok || result.code !== 200) throw new Error(result.message || '添加标签失败')
+    newTag.value = ''
+    message.success('标签已添加')
+    await loadTags()
+  } catch (error) { message.error(error.message || '添加标签失败') } finally { saving.value = false }
+}
+
+const startEdit = tag => {
+  editingTag.value = tag
+  editName.value = tag.name
+}
+
+const updateTag = async () => {
+  const name = editName.value.trim()
+  if (!name) return message.error('标签名称不能为空')
+  saving.value = true
+  try {
+    const response = await fetch(`/api/tags/${editingTag.value.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
+    const result = await response.json()
+    if (!response.ok || result.code !== 200) throw new Error(result.message || '更新标签失败')
+    editingTag.value = null
+    message.success('标签已更新')
+    await loadTags()
+  } catch (error) { message.error(error.message || '更新标签失败') } finally { saving.value = false }
+}
+
+const deleteTag = async tag => {
+  if (!window.confirm(`确认删除标签“${tag.name}”吗？`)) return
+  try {
+    const response = await fetch(`/api/tags/${tag.id}`, { method: 'DELETE' })
+    const result = await response.json()
+    if (!response.ok || result.code !== 200) throw new Error(result.message || '删除标签失败')
+    message.success('标签已删除')
+    await loadTags()
+  } catch (error) { message.error(error.message || '删除标签失败') }
+}
+
+onMounted(loadTags)
 </script>
