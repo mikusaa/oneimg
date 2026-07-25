@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -25,9 +26,42 @@ const (
 	RoleUser     = 3
 )
 
-// Permission 保存普通用户可使用的存储桶。
+var permissionNames = map[string]string{
+	"user:list":              "查看用户",
+	"user:create":            "添加用户",
+	"user:delete":            "删除用户",
+	"user:role:update":       "修改角色",
+	"user:permission:update": "编辑权限",
+	"user:password:reset":    "重置密码",
+	"tag:create":             "新增标签",
+	"tag:update":             "编辑标签",
+	"tag:delete":             "删除标签",
+	"storage:create":         "新增存储",
+	"storage:update":         "编辑存储",
+	"storage:delete":         "删除存储",
+	"image:delete":           "删除图片",
+	"image:tag:add":          "添加图片标签",
+	"image:tag:delete":       "删除图片标签",
+	"setting:upload":         "上传与存储",
+	"setting:image":          "图片处理",
+	"setting:security":       "安全与登录",
+	"setting:notification":   "通知",
+	"setting:api":            "API",
+	"setting:seo":            "站点SEO",
+}
+
+var allPermissionCodes = []string{
+	"user:list", "user:create", "user:delete", "user:role:update", "user:permission:update", "user:password:reset",
+	"tag:create", "tag:update", "tag:delete",
+	"storage:create", "storage:update", "storage:delete",
+	"image:delete", "image:tag:add", "image:tag:delete",
+	"setting:upload", "setting:image", "setting:security", "setting:notification", "setting:api", "setting:seo",
+}
+
+// Permission 保存后台功能权限及用户可使用的存储桶。
 type Permission struct {
-	Buckets []int `json:"buckets" gorm:"default:[]"`
+	Codes   []string `json:"codes" gorm:"default:[]"`
+	Buckets []int    `json:"buckets" gorm:"default:[]"`
 }
 
 func (p Permission) Value() (driver.Value, error) {
@@ -36,6 +70,7 @@ func (p Permission) Value() (driver.Value, error) {
 
 func (p *Permission) Scan(src any) error {
 	if src == nil {
+		p.Codes = []string{}
 		p.Buckets = []int{}
 		return nil
 	}
@@ -49,10 +84,66 @@ func (p *Permission) Scan(src any) error {
 		return errors.New("invalid json source for Permission")
 	}
 	if len(data) == 0 || string(data) == "null" || string(data) == "[]" {
+		p.Codes = []string{}
 		p.Buckets = []int{}
 		return nil
 	}
-	return json.Unmarshal(data, p)
+	if err := json.Unmarshal(data, p); err != nil {
+		return err
+	}
+	if p.Codes == nil {
+		p.Codes = []string{}
+	}
+	if p.Buckets == nil {
+		p.Buckets = []int{}
+	}
+	return nil
+}
+
+func AllPermissionCodes() []string {
+	return append([]string(nil), allPermissionCodes...)
+}
+
+func PermissionName(code string) string {
+	if name, ok := permissionNames[code]; ok {
+		return name
+	}
+	return "未知权限"
+}
+
+func ValidatePermissionCodes(codes []string) error {
+	for _, code := range codes {
+		if _, ok := permissionNames[code]; !ok {
+			return fmt.Errorf("非法的权限码: %s", code)
+		}
+	}
+	return nil
+}
+
+func FilterPermissionCodes(codes []string) []string {
+	seen := make(map[string]struct{}, len(codes))
+	result := make([]string, 0, len(codes))
+	for _, allowed := range allPermissionCodes {
+		for _, code := range codes {
+			if code != allowed {
+				continue
+			}
+			if _, ok := seen[code]; !ok {
+				seen[code] = struct{}{}
+				result = append(result, code)
+			}
+		}
+	}
+	return result
+}
+
+func (p Permission) HasPermission(code string) bool {
+	for _, current := range p.Codes {
+		if current == code || current == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 func IntSliceContains(arr []int, target int) bool {

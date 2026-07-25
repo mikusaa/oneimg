@@ -43,7 +43,7 @@ func GetImageDetail(c *gin.Context) {
 		})
 		return
 	}
-	if !CheckImageAccessPermission(c, image) {
+	if !CheckImageAccessPermission(c, image, "") {
 		c.JSON(http.StatusForbidden, gin.H{
 			"code": 403,
 			"msg":  "无权访问",

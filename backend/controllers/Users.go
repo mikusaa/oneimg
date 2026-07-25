@@ -116,6 +116,7 @@ func CreateUser(c *gin.Context) {
 		Password: hashedPwd,
 		Role:     req.Role,
 		Permission: models.Permission{
+			Codes:   []string{},
 			Buckets: []int{},
 		},
 		CreatedAt: time.Now(),
@@ -222,8 +223,11 @@ func UpdateUserRole(c *gin.Context) {
 		return
 	}
 
-	// 更新角色
-	if err := db.Model(&user).Update("role", req.Role).Error; err != nil {
+	permission := user.Permission
+	if req.Role == models.RoleUser {
+		permission.Codes = []string{}
+	}
+	if err := db.Model(&user).Updates(map[string]any{"role": req.Role, "permission": permission}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, result.Fail(500, "更新角色失败："+err.Error()))
 		return
 	}
@@ -287,7 +291,8 @@ func UpdateUserPermission(c *gin.Context) {
 	}
 
 	type UpdatePermissionReq struct {
-		Permission []int `json:"permission"`
+		Permission []int     `json:"permission"`
+		Codes      *[]string `json:"codes"`
 	}
 	var req UpdatePermissionReq
 
@@ -305,17 +310,13 @@ func UpdateUserPermission(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, result.Fail(500, "读取多存储设置失败"))
 		return
 	}
-	if !setting.MultiStorageSync {
-		if id == models.SuperAdminID {
-			c.JSON(http.StatusBadRequest, result.Fail(400, "不能修改超级管理员权限"))
-			return
-		}
-
-		// 单存储模式下这些 ID 仍是访问权限，不允许修改自身。
-		if c.GetInt("user_id") == id {
-			c.JSON(http.StatusBadRequest, result.Fail(400, "不能修改当前登录用户权限"))
-			return
-		}
+	if id == models.SuperAdminID {
+		c.JSON(http.StatusBadRequest, result.Fail(400, "不能修改超级管理员权限"))
+		return
+	}
+	if c.GetInt("user_id") == id {
+		c.JSON(http.StatusBadRequest, result.Fail(400, "不能修改当前登录用户权限"))
+		return
 	}
 
 	db := database.GetDB().DB
@@ -323,6 +324,12 @@ func UpdateUserPermission(c *gin.Context) {
 	if err := db.Where("id = ?", id).First(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, result.Fail(404, "用户不存在"))
 		return
+	}
+	if req.Codes != nil {
+		if err := models.ValidatePermissionCodes(*req.Codes); err != nil {
+			c.JSON(http.StatusBadRequest, result.Fail(400, err.Error()))
+			return
+		}
 	}
 
 	uniquePermissions := make([]int, 0, len(req.Permission))
@@ -356,8 +363,15 @@ func UpdateUserPermission(c *gin.Context) {
 		}
 	}
 
-	// 更新权限
+	codes := user.Permission.Codes
+	if req.Codes != nil {
+		codes = models.FilterPermissionCodes(*req.Codes)
+	}
+	if user.Role != models.RoleAdmin {
+		codes = []string{}
+	}
 	if err := db.Model(&user).Update("permission", models.Permission{
+		Codes:   codes,
 		Buckets: uniquePermissions,
 	}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, result.Fail(500, "更新权限失败："+err.Error()))

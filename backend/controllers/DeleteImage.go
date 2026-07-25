@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"oneimg/backend/database"
+	"oneimg/backend/middlewares"
 	"oneimg/backend/models"
 	"oneimg/backend/services"
 	"oneimg/backend/utils/buckets"
@@ -63,7 +64,7 @@ func DeleteImage(c *gin.Context) {
 	}
 
 	// 校验权限
-	if !CheckImageAccessPermission(c, image) {
+	if !CheckImageAccessPermission(c, image, "image:delete") {
 		c.JSON(http.StatusForbidden, gin.H{
 			"code": 403,
 			"msg":  "无权访问",
@@ -365,18 +366,25 @@ func DeleteTelegramStorageImage(image models.Image, bucket models.Buckets) (dele
 }
 
 // 辅助函数：权限校验
-func CheckImageAccessPermission(c *gin.Context, image models.Image) bool {
+func CheckImageAccessPermission(c *gin.Context, image models.Image, requiredPermission string) bool {
+	userID := c.GetInt("user_id")
+	role := c.GetInt("user_role")
 	currentUserUUID := GetUUID(c)
 	currentUsername := c.GetString("username")
-	// 如果是管理员直接通过
-	if c.GetInt("user_role") == models.RoleAdmin {
+
+	if image.UserId == models.SuperAdminID && userID != models.SuperAdminID {
+		return false
+	}
+	if userID == models.SuperAdminID || (role != models.RoleGuest && userID > 0 && image.UserId == userID) {
 		return true
 	}
-	if c.GetInt("user_role") == models.RoleUser && image.UserId == c.GetInt("user_id") {
-		return true
+	if role == models.RoleAdmin {
+		return requiredPermission == "" || middlewares.HasPermission(c, requiredPermission)
 	}
-	// 如果是游客则需要同时满足md5校验和UUID校验
-	if c.GetInt("user_role") == models.RoleGuest && image.UUID == currentUserUUID && md5.Md5(currentUsername+image.FileName) == image.MD5 {
+	if role == models.RoleUser {
+		return false
+	}
+	if role == models.RoleGuest && image.UUID == currentUserUUID && md5.Md5(currentUsername+image.FileName) == image.MD5 {
 		return true
 	}
 	return false

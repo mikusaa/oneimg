@@ -444,7 +444,7 @@ func AddImageTag(c *gin.Context) {
 		}
 		return
 	}
-	if !CheckImageAccessPermission(c, image) {
+	if !CheckImageAccessPermission(c, image, "image:tag:add") {
 		c.JSON(http.StatusForbidden, result.Error(403, "无权操作该图片"))
 		return
 	}
@@ -518,7 +518,7 @@ func DeleteImageTag(c *gin.Context) {
 		}
 		return
 	}
-	if !CheckImageAccessPermission(c, image) {
+	if !CheckImageAccessPermission(c, image, "image:tag:delete") {
 		c.JSON(http.StatusForbidden, result.Error(403, "无权操作该图片"))
 		return
 	}
@@ -566,7 +566,7 @@ func DeleteImageTags(c *gin.Context) {
 
 	// 直接执行删除操作，不返回结果
 	db := database.GetDB().DB
-	if status, message, ok := ensureImageBatchAccess(c, db, req.Images); !ok {
+	if status, message, ok := ensureImageBatchAccess(c, db, req.Images, "image:tag:delete"); !ok {
 		c.JSON(status, result.Error(status, message))
 		return
 	}
@@ -621,7 +621,7 @@ func AddImageTags(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, result.Error(500, "查询图片列表失败："+err.Error()))
 		return
 	}
-	if status, message, ok := ensureImageBatchAccess(c, db, req.Images); !ok {
+	if status, message, ok := ensureImageBatchAccess(c, db, req.Images, "image:tag:add"); !ok {
 		c.JSON(status, result.Error(status, message))
 		return
 	}
@@ -668,7 +668,7 @@ func AddImageTags(c *gin.Context) {
 	c.JSON(http.StatusOK, result.Success("批量添加标签成功", nil))
 }
 
-func ensureImageBatchAccess(c *gin.Context, db *gorm.DB, imageIDs []int) (int, string, bool) {
+func ensureImageBatchAccess(c *gin.Context, db *gorm.DB, imageIDs []int, requiredPermission string) (int, string, bool) {
 	uniqueIDs := make([]int, 0, len(imageIDs))
 	seen := make(map[int]struct{}, len(imageIDs))
 	for _, imageID := range imageIDs {
@@ -690,7 +690,7 @@ func ensureImageBatchAccess(c *gin.Context, db *gorm.DB, imageIDs []int) (int, s
 		return http.StatusBadRequest, "图片不存在", false
 	}
 	for _, image := range images {
-		if !CheckImageAccessPermission(c, image) {
+		if !CheckImageAccessPermission(c, image, requiredPermission) {
 			return http.StatusForbidden, fmt.Sprintf("无权操作图片 %d", image.Id), false
 		}
 	}

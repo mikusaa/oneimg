@@ -35,6 +35,9 @@ func Init() *System {
 
 	// 初始化默认用户
 	InitDefaultUser(cfg, db)
+	if err := MigrateLegacyUserPermissions(db.DB); err != nil {
+		log.Printf("用户权限兼容迁移失败: %v", err)
+	}
 
 	// 初始化系统设置
 	InitSettings(db)
@@ -88,6 +91,10 @@ func InitDefaultUser(cfg *config.Config, db *database.Database) {
 		Username: defaultUsername,
 		Role:     1,
 		Password: hashedPassword,
+		Permission: models.Permission{
+			Codes:   []string{},
+			Buckets: []int{},
+		},
 	}
 
 	result := db.DB.Create(&defaultUser)

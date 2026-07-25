@@ -5,6 +5,7 @@
         <h1 class="page-title">存储管理</h1>
       </div>
       <button
+        v-if="canCreateStorage"
         @click="AddBucketModal"
         class="primary-button"
       >
@@ -20,6 +21,7 @@
         存储管理
       </h2>
       <button
+        v-if="canCreateStorage"
         @click="AddBucketModal"
         class="px-4 py-2 bg-primary text-white rounded-lg flex items-center gap-1 hover:bg-primary/80 transition-colors"
       >
@@ -74,12 +76,14 @@
 
         <div v-if="storage.type !== 'default'" class="flex items-center justify-end gap-3 pt-3 border-t border-gray-200 dark:border-dark-300">
           <button
+          v-if="canUpdateStorage"
           @click="UpdateBucketModal(storage)"
           class="soft-button text-sm">
             <i class="ri-edit-fill"></i>
             编辑
           </button>
           <button
+            v-if="canDeleteStorage"
             @click="DeleteBucketModal(storage.id)"
             class="danger-button text-sm">
             <i class="ri-delete-bin-7-fill"></i>
@@ -94,6 +98,12 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import message from '@/utils/message.js';
+import { getStoredUser, hasPermission } from '@/utils/permissions.js';
+
+const currentUser = getStoredUser();
+const canCreateStorage = hasPermission('storage:create', currentUser);
+const canUpdateStorage = hasPermission('storage:update', currentUser);
+const canDeleteStorage = hasPermission('storage:delete', currentUser);
 const buckets = ref([]);
 
 const typeSpecificFields = {

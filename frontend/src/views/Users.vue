@@ -5,7 +5,7 @@
         <h1 class="page-title">用户管理</h1>
         <p class="page-subtitle">{{ multiStorageSync ? '管理系统用户账号与后台同步存储源' : '管理系统用户账号与权限' }}</p>
       </div>
-      <button class="primary-button" @click="openCreateModal">
+	  <button v-if="canCreateUser" class="primary-button" @click="openCreateModal">
         <i class="ri-add-line"></i>
         新增用户
       </button>
@@ -39,7 +39,7 @@
         >
           <option value="all">全部角色</option>
           <option value="1">管理员</option>
-          <option value="2">普通用户</option>
+          <option value="3">普通用户</option>
         </select>
         <div
           class="stat-tile px-3.5 py-2.5 hidden sm:flex items-center gap-2 shrink-0"
@@ -160,6 +160,7 @@
 
               <!-- 下拉操作 -->
               <div
+				v-if="canManageUsers"
                 class="relative shrink-0"
                 :ref="(el) => setDropdownRef(user.id, el)"
               >
@@ -196,6 +197,9 @@
                 <i class="ri-folder-3-line text-xs"></i>
                 {{ getUserBucketCount(user) }} {{ multiStorageSync ? '个同步源' : '个存储桶' }}
               </span>
+			  <span v-if="user.role === RoleAdmin" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20">
+				<i class="ri-shield-keyhole-line text-xs"></i>{{ getUserCodeCount(user) }} 个权限
+			  </span>
             </div>
 
             <!-- 创建时间 -->
@@ -215,31 +219,31 @@
           class="absolute right-0 top-[55px] right-[20px] mt-1 w-44 z-[60] rounded-xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl py-1.5"
           @click.stop
         >
-          <button
+		  <button v-if="canUpdateRole"
             class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition text-left"
             @click="openRoleModal(user)"
           >
             <i class="ri-shield-star-line text-base"></i>
             修改角色
           </button>
-          <button
+		  <button v-if="canUpdatePermission"
             class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition text-left"
             @click="openProfileModal(user)"
           >
             <i class="ri-shield-keyhole-line text-base"></i>
             {{ multiStorageSync ? '设置同步源' : '设置权限' }}
           </button>
-          <button
+		  <button v-if="canResetPassword"
             class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition text-left"
             @click="handleResetPassword(user)"
           >
             <i class="ri-key-2-line text-base"></i>
             重置密码
           </button>
-          <div
+		  <div v-if="canDeleteUser"
             class="my-1.5 border-t border-slate-100 dark:border-white/5"
           ></div>
-          <button
+		  <button v-if="canDeleteUser"
             class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm transition text-left"
             :class="
               user.id === SuperAdminID
@@ -302,11 +306,41 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import PopupModal from '@/utils/popupModal.js'
 import message from '@/utils/message.js'
+import { getStoredUser, hasPermission } from '@/utils/permissions.js'
 
 const SuperAdminID = 1
 const RoleAdmin = 1
 const RoleUser = 3
 const PAGE_LIMIT = 12
+const currentUser = getStoredUser()
+const canCreateUser = hasPermission('user:create', currentUser)
+const canDeleteUser = hasPermission('user:delete', currentUser)
+const canUpdateRole = hasPermission('user:role:update', currentUser)
+const canUpdatePermission = hasPermission('user:permission:update', currentUser)
+const canResetPassword = hasPermission('user:password:reset', currentUser)
+const canManageUsers = canDeleteUser || canUpdateRole || canUpdatePermission || canResetPassword
+
+const PERMISSION_GROUPS = [
+  { title: '用户管理', items: [
+    { code: 'user:list', name: '查看用户' }, { code: 'user:create', name: '添加用户' },
+    { code: 'user:delete', name: '删除用户' }, { code: 'user:role:update', name: '修改角色' },
+    { code: 'user:permission:update', name: '编辑权限' }, { code: 'user:password:reset', name: '重置密码' }
+  ]},
+  { title: '内容与标签', items: [
+    { code: 'tag:create', name: '新增标签' }, { code: 'tag:update', name: '编辑标签' }, { code: 'tag:delete', name: '删除标签' }
+  ]},
+  { title: '存储管理', items: [
+    { code: 'storage:create', name: '新增存储' }, { code: 'storage:update', name: '编辑存储' }, { code: 'storage:delete', name: '删除存储' }
+  ]},
+  { title: '图片管理', items: [
+    { code: 'image:delete', name: '删除图片' }, { code: 'image:tag:add', name: '添加图片标签' }, { code: 'image:tag:delete', name: '删除图片标签' }
+  ]},
+  { title: '系统设置', items: [
+    { code: 'setting:upload', name: '上传与存储' }, { code: 'setting:image', name: '图片处理' },
+    { code: 'setting:security', name: '安全与登录' }, { code: 'setting:notification', name: '通知' },
+    { code: 'setting:api', name: 'API' }, { code: 'setting:seo', name: '站点 SEO' }
+  ]}
+]
 
 const users = ref([])
 const total = ref(0)
@@ -336,6 +370,10 @@ function getInitials(name) {
   return name.slice(0, 2).toUpperCase()
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char])
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '--'
   const d = new Date(dateStr)
@@ -347,6 +385,10 @@ function getUserBucketCount(user) {
   const userBucketIds = user.permission?.buckets || []
   if (!multiStorageSync.value) return userBucketIds.length
   return userBucketIds.filter(id => buckets.value.some(bucket => bucket.id === id && bucket.type !== 'default')).length
+}
+
+function getUserCodeCount(user) {
+  return user.permission?.codes?.length || 0
 }
 
 const pageNumbers = computed(() => {
@@ -542,7 +584,7 @@ function openDeleteModal(user) {
         </div>
         <div>
           <p class="text-sm text-slate-700 dark:text-slate-200">
-            你确定要删除用户 <strong>${user.username}</strong> 吗？
+			你确定要删除用户 <strong>${escapeHtml(user.username)}</strong> 吗？
           </p>
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
             此操作无法撤销，该用户的所有关联数据将会丢失。
@@ -589,120 +631,75 @@ function openDeleteModal(user) {
 }
 
 function openProfileModal(user) {
-    const bucketOptions = multiStorageSync.value
-        ? buckets.value.filter(item => item.type !== 'default')
-        : buckets.value
-    // 当前用户已配置的存储桶 ID 数组
-    const userBucketIds = user.permission?.buckets || []
-    const selectedIds = multiStorageSync.value
-        ? userBucketIds.filter(id => bucketOptions.some(item => item.id === id))
-        : [...userBucketIds]
+  const bucketOptions = multiStorageSync.value ? buckets.value.filter(item => item.type !== 'default') : buckets.value
+  const selectedIds = [...(user.permission?.buckets || [])].filter(id => bucketOptions.some(item => item.id === id))
+  const selectedCodes = [...(user.permission?.codes || [])]
 
-    // 生成存储桶卡片 HTML
-    function renderBucketCards() {
-        if (bucketOptions.length === 0) {
-            const emptyText = multiStorageSync.value ? '暂无可配置的远程存储源' : '暂无可配置的存储桶'
-            return `<div class="w-full rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center text-sm text-slate-400 dark:border-white/10 dark:text-slate-500">${emptyText}</div>`
-        }
-        let html = ''
-        bucketOptions.forEach(item => {
-            const isChecked = selectedIds.includes(item.id)
-            html += `
-            <div data-bucket-id="${item.id}" class="bucket-card relative border rounded-2xl px-4 py-2 cursor-pointer transition-all duration-300 shadow-sm select-none border-2 ${isChecked ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}">
-                ${isChecked ? `
-                <div class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
-                    <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                </div>
-                ` : ''}
-                <div class="text-center">
-                    <div class="text-slate-900 dark:text-white text-sm whitespace-nowrap">${item.name}</div>
-                </div>
-            </div>
-            `
-        })
-        return html
-    }
+  const renderBucketCards = () => bucketOptions.length === 0
+    ? '<div class="w-full rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center text-sm text-slate-400 dark:border-white/10">暂无可配置的存储源</div>'
+    : bucketOptions.map(item => {
+        const checked = selectedIds.includes(item.id)
+        return `<button type="button" data-bucket-id="${item.id}" class="bucket-card rounded-lg border px-3 py-2 text-sm ${checked ? 'border-primary bg-primary/10 text-primary' : 'border-slate-200 dark:border-white/10'}">${checked ? '<i class="ri-checkbox-circle-fill"></i> ' : ''}${escapeHtml(item.name)}</button>`
+      }).join('')
 
-    const modalContent = `
-        <div class="py-1 space-y-5">
-            <p class="text-sm text-slate-600 dark:text-slate-300">
-                ${multiStorageSync.value
-                    ? `设置用户 <strong class="text-slate-900 dark:text-white">${user.username}</strong> 上传后需要后台同步的存储源。`
-                    : `设置用户 <strong class="text-slate-900 dark:text-white">${user.username}</strong> 的存储桶访问权限`}
-            </p>
-            ${multiStorageSync.value ? '<p class="text-xs text-slate-400 dark:text-slate-500">文件会始终先保存在本机，此处只配置额外同步目标。</p>' : ''}
-            <!-- 卡片多选流式布局 -->
-            <div id="bucketCardWrap" class="flex flex-wrap gap-3">
-                ${renderBucketCards()}
-            </div>
-        </div>
-    `
+  const renderCodeCards = () => PERMISSION_GROUPS.map(group => `
+    <div><p class="mb-2 text-xs font-semibold text-slate-400">${group.title}</p><div class="flex flex-wrap gap-2">
+      ${group.items.map(item => {
+        const checked = selectedCodes.includes(item.code)
+        return `<button type="button" data-code="${item.code}" class="code-card rounded-lg border px-2.5 py-1.5 text-xs ${checked ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'border-slate-200 dark:border-white/10'}">${checked ? '<i class="ri-checkbox-circle-fill"></i> ' : ''}${item.name}</button>`
+      }).join('')}
+    </div></div>`).join('')
 
-    const modal = new PopupModal({
-        title: multiStorageSync.value ? '设置同步存储源' : '设置用户权限',
-        width: '620px',
-        content: modalContent,
-        buttons: [
-            {
-                text: '取消',
-                type: 'default',
-                callback: () => modal.close()
+  const modal = new PopupModal({
+    title: '设置用户权限',
+    width: '720px',
+    content: `<div class="max-h-[65vh] space-y-6 overflow-y-auto pr-1">
+      <p class="text-sm text-slate-600 dark:text-slate-300">设置用户 <strong>${escapeHtml(user.username)}</strong> 的功能与存储权限。</p>
+      ${user.role === RoleAdmin ? `<section><h4 class="mb-3 font-medium">功能权限</h4><div id="codeCardWrap" class="space-y-4 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">${renderCodeCards()}</div></section>` : ''}
+      <section><h4 class="mb-3 font-medium">${multiStorageSync.value ? '后台同步存储源' : '可用存储桶'}</h4><div id="bucketCardWrap" class="flex flex-wrap gap-2">${renderBucketCards()}</div></section>
+    </div>`,
+    buttons: [
+      { text: '取消', type: 'default', callback: () => modal.close() },
+      { text: '确认保存', type: 'primary', callback: async () => {
+        try {
+          const response = await fetch(`/api/users/updatePermission/${user.id}`, {
+            method: 'POST', headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             },
-            {
-                text: '确认保存',
-                type: 'primary',
-                callback: async () => {
-                    try {
-                        const res = await fetch(`/api/users/updatePermission/${user.id}`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-                            },
-                            body: JSON.stringify({
-                                permission: selectedIds
-                            })
-                        })
-                        const data = await res.json()
-                        if (data.code === 200) {
-                            modal.close()
-                            message.success(multiStorageSync.value ? '同步存储源已更新' : '权限更新成功')
-                            fetchUsers()
-                        } else {
-                            message.error(data.message || '更新失败')
-                        }
-                    } catch (err) {
-                        message.error('网络请求异常')
-                    }
-                }
-            }
-        ]
+            body: JSON.stringify({ permission: selectedIds, codes: user.role === RoleAdmin ? selectedCodes : [] })
+          })
+          const data = await response.json()
+          if (!response.ok || data.code !== 200) throw new Error(data.message || '更新失败')
+          modal.close()
+          message.success('权限更新成功')
+          fetchUsers()
+        } catch (error) { message.error(error.message || '网络请求异常') }
+      }}
+    ]
+  })
+  modal.open()
+
+  const bindInteractions = () => {
+    const bucketWrap = document.getElementById('bucketCardWrap')
+    bucketWrap?.querySelectorAll('.bucket-card').forEach(card => {
+      card.onclick = () => {
+        const id = Number(card.dataset.bucketId)
+        const index = selectedIds.indexOf(id)
+        if (index >= 0) selectedIds.splice(index, 1); else selectedIds.push(id)
+        bucketWrap.innerHTML = renderBucketCards(); bindInteractions()
+      }
     })
-    modal.open()
-
-    // 绑定卡片点击事件封装
-    function bindCardClick() {
-        const wrap = document.getElementById('bucketCardWrap')
-        const cards = wrap.querySelectorAll('.bucket-card')
-        cards.forEach(card => {
-            card.onclick = () => {
-                const bid = Number(card.dataset.bucketId)
-                const idx = selectedIds.indexOf(bid)
-                if (idx > -1) selectedIds.splice(idx, 1)
-                else selectedIds.push(bid)
-                // 重渲染卡片
-                wrap.innerHTML = renderBucketCards()
-                bindCardClick()
-            }
-        })
-    }
-
-    // 初始绑定
-    setTimeout(() => {
-        bindCardClick()
-    }, 80)
+    const codeWrap = document.getElementById('codeCardWrap')
+    codeWrap?.querySelectorAll('.code-card').forEach(card => {
+      card.onclick = () => {
+        const index = selectedCodes.indexOf(card.dataset.code)
+        if (index >= 0) selectedCodes.splice(index, 1); else selectedCodes.push(card.dataset.code)
+        codeWrap.innerHTML = renderCodeCards(); bindInteractions()
+      }
+    })
+  }
+  setTimeout(bindInteractions, 80)
 }
 
 function openRoleModal(user) {
@@ -714,7 +711,7 @@ function openRoleModal(user) {
     content: `
       <div class="py-1">
         <p class="text-sm text-slate-600 dark:text-slate-300 mb-1">
-          修改用户 <strong class="text-slate-900 dark:text-white">${user.username}</strong> 的角色
+		  修改用户 <strong class="text-slate-900 dark:text-white">${escapeHtml(user.username)}</strong> 的角色
         </p>
         <div class="mt-3">
           <label class="field-label block mb-1.5">选择角色</label>
@@ -746,7 +743,7 @@ function openRoleModal(user) {
         type: 'primary',
         callback: async (modal) => {
           const newRoleSelect = modal.content.querySelector('select[name="newRole"]')
-          const newRole = parseInt(newRoleSelect?.value || '2')
+          const newRole = parseInt(newRoleSelect?.value || '3')
 
           try {
             const res = await fetch('/api/users/updateRole', {
@@ -787,7 +784,7 @@ async function handleResetPassword(user) {
         </div>
         <div>
           <p class="text-sm text-slate-700 dark:text-slate-200">
-            你确定要重置用户 <strong>${user.username}</strong> 的密码吗？
+			你确定要重置用户 <strong>${escapeHtml(user.username)}</strong> 的密码吗？
           </p>
           <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
             此操作无法撤销，请谨慎操作。
@@ -831,7 +828,7 @@ const resetPassword = async (user) => {
         content: `
           <div class="py-1">
             <p class="text-sm text-slate-600 dark:text-slate-300 mb-3">
-              用户 <strong class="text-slate-900 dark:text-white">${user.username}</strong> 的新密码已生成，请妥善保管。
+			  用户 <strong class="text-slate-900 dark:text-white">${escapeHtml(user.username)}</strong> 的新密码已生成，请妥善保管。
             </p>
             <div>
               <label class="field-label block mb-1.5">新密码</label>
@@ -889,7 +886,7 @@ const resetPassword = async (user) => {
 // 获取存储列表
 const GetBuckets = async () => {
   try {
-    const response = await fetch('/api/buckets', {
+    const response = await fetch('/api/buckets/list', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

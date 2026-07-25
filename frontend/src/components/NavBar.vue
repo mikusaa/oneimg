@@ -88,6 +88,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Message from '@/utils/message.js'
+import { getStoredUser, hasAnyPermission, hasPermission, ROLE_ADMIN, ROLE_GUEST } from '@/utils/permissions.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -100,7 +101,7 @@ const navItems = ref([])
 const storageKey = 'theme-preference'
 
 const refreshNavItems = () => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+  const userInfo = getStoredUser()
   navItems.value = []
   isLogin.value = !!userInfo.username
 
@@ -112,19 +113,25 @@ const refreshNavItems = () => {
   navItems.value.push(
     { path: '/', icon: 'home-5-line', name: '控制台' },
     { path: '/gallery', icon: 'gallery-view-2', name: '图库管理' },
-    { path: '/tags', icon: 'price-tag-3-line', name: '标签管理' },
     { path: '/stats', icon: 'bar-chart-grouped-line', name: '数据统计' }
   )
 
-  if (userInfo?.role === 1) {
-    navItems.value.push(
-      { path: '/buckets', icon: 'database-2-line', name: '存储管理' },
-      { path: '/users', icon: 'user-line', name: '用户管理' },
-      { path: '/settings', icon: 'settings-4-line', name: '系统设置' }
-    )
+  if (Number(userInfo?.role) === ROLE_ADMIN) {
+    if (hasAnyPermission(['tag:create', 'tag:update', 'tag:delete'], userInfo)) {
+      navItems.value.push({ path: '/tags', icon: 'price-tag-3-line', name: '标签管理' })
+    }
+    if (hasAnyPermission(['storage:create', 'storage:update', 'storage:delete'], userInfo)) {
+      navItems.value.push({ path: '/buckets', icon: 'database-2-line', name: '存储管理' })
+    }
+    if (hasPermission('user:list', userInfo)) {
+      navItems.value.push({ path: '/users', icon: 'user-line', name: '用户管理' })
+    }
+    if (hasAnyPermission(['setting:upload', 'setting:image', 'setting:security', 'setting:notification', 'setting:api', 'setting:seo'], userInfo)) {
+      navItems.value.push({ path: '/settings', icon: 'settings-4-line', name: '系统设置' })
+    }
   }
 
-  if (userInfo?.isTourist !== true) {
+  if (Number(userInfo?.role) !== ROLE_GUEST) {
     navItems.value.push(
       { path: '/account', icon: 'shield-user-line', name: '账户设置' },
     )

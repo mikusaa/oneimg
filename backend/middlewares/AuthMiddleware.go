@@ -33,9 +33,19 @@ func AuthMiddleware() gin.HandlerFunc {
 			}
 
 			if validateToken(setting, apiToken) {
-				c.Set("user_id", 1)
-				c.Set("user_role", 1)
-				c.Set("username", "admin")
+				apiUser := &models.User{
+					ID:       models.SuperAdminID,
+					Role:     models.RoleAdmin,
+					Username: "api_admin",
+					Permission: models.Permission{
+						Codes:   []string{"*"},
+						Buckets: []int{},
+					},
+				}
+				c.Set("user_id", apiUser.ID)
+				c.Set("user_role", apiUser.Role)
+				c.Set("username", apiUser.Username)
+				c.Set("current_user", apiUser)
 				c.Next()
 				return
 			}
@@ -79,10 +89,10 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		// 游客是虚拟账号；其他会话每次核对用户，使删除/角色变更立即生效。
+		var currentUser models.User
 		if userRoleValue != models.RoleGuest {
 			db := database.GetDB()
-			var currentUser models.User
-			if db == nil || db.DB.Select("id", "role", "username").First(&currentUser, userIDValue).Error != nil {
+			if db == nil || db.DB.Select("id", "role", "username", "permission").First(&currentUser, userIDValue).Error != nil {
 				session.Clear()
 				_ = session.Save()
 				c.JSON(http.StatusUnauthorized, AuthResponse{Code: 401, Message: "用户不存在或已被禁用"})
@@ -93,6 +103,13 @@ func AuthMiddleware() gin.HandlerFunc {
 			usernameValue = currentUser.Username
 			session.Set("user_role", userRoleValue)
 			session.Set("username", usernameValue)
+		} else {
+			currentUser = models.User{
+				ID:         userIDValue,
+				Role:       models.RoleGuest,
+				Username:   usernameValue,
+				Permission: models.Permission{Codes: []string{}, Buckets: []int{}},
+			}
 		}
 
 		// 将用户信息存储到上下文中，供后续处理使用
@@ -101,10 +118,68 @@ func AuthMiddleware() gin.HandlerFunc {
 		c.Set("user_id", userIDValue)
 		c.Set("user_role", userRoleValue)
 		c.Set("username", usernameValue)
+		c.Set("current_user", &currentUser)
 
 		// 继续处理请求
 		c.Next()
 	}
+}
+
+func RequirePermission(code string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, ok := GetCurrentUser(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, AuthResponse{Code: 401, Message: "用户信息获取失败"})
+			c.Abort()
+			return
+		}
+		if user.ID == models.SuperAdminID {
+			c.Next()
+			return
+		}
+		if user.Role != models.RoleAdmin || !user.Permission.HasPermission(code) {
+			c.JSON(http.StatusForbidden, AuthResponse{
+				Code:    403,
+				Message: "无操作权限，需要权限: [" + models.PermissionName(code) + "]",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func RequireAnyPermission(codes ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, ok := GetCurrentUser(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, AuthResponse{Code: 401, Message: "用户信息获取失败"})
+			c.Abort()
+			return
+		}
+		if user.ID == models.SuperAdminID {
+			c.Next()
+			return
+		}
+		if user.Role == models.RoleAdmin {
+			for _, code := range codes {
+				if user.Permission.HasPermission(code) {
+					c.Next()
+					return
+				}
+			}
+		}
+		c.JSON(http.StatusForbidden, AuthResponse{Code: 403, Message: "无操作权限"})
+		c.Abort()
+	}
+}
+
+func HasPermission(c *gin.Context, code string) bool {
+	user, ok := GetCurrentUser(c)
+	if !ok {
+		return false
+	}
+	return user.ID == models.SuperAdminID || (user.Role == models.RoleAdmin && user.Permission.HasPermission(code))
 }
 
 func validateToken(setting models.Settings, token string) bool {
@@ -162,21 +237,11 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 	}
 }
 
-// GetCurrentUser 从上下文中获取当前用户信息
-func GetCurrentUser(c *gin.Context) (userID int, username string, exists bool) {
-	userIDInterface, userIDExists := c.Get("user_id")
-	usernameInterface, usernameExists := c.Get("username")
-
-	if !userIDExists || !usernameExists {
-		return 0, "", false
+func GetCurrentUser(c *gin.Context) (*models.User, bool) {
+	value, exists := c.Get("current_user")
+	if !exists {
+		return nil, false
 	}
-
-	userID, ok1 := userIDInterface.(int)
-	username, ok2 := usernameInterface.(string)
-
-	if !ok1 || !ok2 {
-		return 0, "", false
-	}
-
-	return userID, username, true
+	user, ok := value.(*models.User)
+	return user, ok
 }
