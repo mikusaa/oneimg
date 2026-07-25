@@ -8,7 +8,7 @@
 
         <!-- 主要内容 -->
         <div class="pb-16">
-            <div class="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-6">
+            <div class="mx-auto grid max-w-2xl grid-cols-1 gap-6">
 
                 <div class="section-card mx-auto overflow-hidden w-full m-4">
                     <div class="panel-content p-6 md:p-8">
@@ -22,7 +22,7 @@
                         <!-- 账户修改表单 -->
                         <form @submit.prevent="updateAccount" class="account-form space-y-6">
                             <!-- 新用户名 -->
-                            <div class="setting-group">
+                            <div v-if="isAdmin" class="setting-group">
                                 <label 
                                     class="setting-label block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" 
                                     for="newUsername"
@@ -36,7 +36,7 @@
                                     class="setting-input w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary focus:border-primary dark:focus:ring-primary/70 dark:focus:border-primary/70 transition-colors outline-none"
                                     placeholder="留空则不修改用户名"
                                     minlength="3"
-                                    maxlength="20"
+                                    maxlength="64"
                                 />
                             </div>
                             
@@ -116,8 +116,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import message from '@/utils/message.js'
+import { getStoredUser, ROLE_ADMIN } from '@/utils/permissions.js'
 
 const router = useRouter()
+const isAdmin = Number(getStoredUser()?.role) === ROLE_ADMIN
 
 // 表单数据
 const accountForm = ref({
@@ -135,7 +137,7 @@ const updateAccount = async () => {
     const { newUsername, currentPassword, newPassword, confirmPassword } = accountForm.value
     
     // 检查是否有任何修改
-    const hasUsernameChange = newUsername && newUsername.trim() !== ''
+    const hasUsernameChange = isAdmin && newUsername && newUsername.trim() !== ''
     const hasPasswordChange = newPassword && newPassword.trim() !== ''
     
     if (!hasUsernameChange && !hasPasswordChange) {
@@ -150,8 +152,8 @@ const updateAccount = async () => {
             return
         }
         
-        if (newUsername.length > 20) {
-            message.error('用户名长度不能超过20位')
+        if (newUsername.length > 64) {
+            message.error('用户名长度不能超过64位')
             return
         }
     }
@@ -203,7 +205,7 @@ const updateAccount = async () => {
             throw new Error(result.message || '修改失败')
         }
         
-        message.success('修改成功')
+        message.success('修改成功，请重新登录')
 
         // 清空表单
         accountForm.value = {
@@ -213,10 +215,9 @@ const updateAccount = async () => {
             confirmPassword: ''
         }
         
-        // 刷新页面
-        setTimeout(() => {
-            window.location.reload();
-        }, 1000)
+        localStorage.removeItem('userInfo')
+        localStorage.removeItem('authToken')
+        setTimeout(() => router.replace('/login'), 800)
 
     } catch (error) {
         message.error(error.message || '更新失败')

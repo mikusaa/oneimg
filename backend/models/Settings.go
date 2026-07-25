@@ -14,6 +14,7 @@ type Settings struct {
 	Tourist          bool   `gorm:"column:tourist;default:false" json:"tourist"`                       // 是否允许游客上传（默认允许）
 	TGNotice         bool   `gorm:"column:tg_notice;default:false" json:"tg_notice"`                   // 是否启用TG通知（默认关闭）
 	PowVerify        bool   `gorm:"column:pow_verify;default:false" json:"pow_verify"`                 // 是否启用POW验证（默认关闭）
+	StartRegister    bool   `gorm:"column:start_register;default:false" json:"start_register"`         // 是否开放普通用户注册
 	TGBotToken       string `gorm:"column:tg_bot_token;default:''" json:"tg_bot_token"`                // TG机器人Token
 	TGReceivers      string `gorm:"column:tg_receivers;default:''" json:"tg_receivers"`                // TG接收者（多个用逗号分隔）
 	TGNoticeText     string `gorm:"column:tg_notice_text;default:''" json:"tg_notice_text"`            // TG通知文本

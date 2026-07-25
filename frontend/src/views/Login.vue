@@ -17,6 +17,9 @@
         <!-- 登录卡片 -->
         <div class="card glass-panel w-full max-w-md overflow-hidden transition-all duration-300" :class="{ 'opacity-50 pointer-events-none': isLoading }">
             <div class="card-body p-6">
+				<div v-if="loginConfig.start_register" class="mb-2 flex justify-end">
+					<router-link to="/register" class="text-sm text-primary hover:underline">注册账户</router-link>
+				</div>
                 <div class="mb-8 text-center">
                     <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-blue-700 text-2xl text-white shadow-lg shadow-primary/20">
                         <i class="ri-lock-2-line"></i>
@@ -148,7 +151,8 @@ const loginConfig = reactive({
     oidc_enabled: false,
     oidc_display_name: 'OIDC 登录',
     cas_enabled: false,
-    cas_display_name: 'CAS 登录'
+    cas_display_name: 'CAS 登录',
+    start_register: false
 })
 
 const externalLoginErrors = {
@@ -375,6 +379,7 @@ const putLogin = async (token, touristId = '') => {
                 id: result.data?.user?.id,
                 username: username.value,
                 role: result.data?.user?.role,
+				permission: result.data?.user?.permission || { codes: [], buckets: [] },
                 isTourist: !!touristId,
                 touristFingerprint: touristId || ''
             };
@@ -428,6 +433,7 @@ const handleExternalLoginCallback = async () => {
             id: result.data.user_id,
             username: result.data.username,
             role: result.data.user_role ?? result.data.role,
+			permission: result.data.permission || { codes: [], buckets: [] },
             isTourist: false,
             touristFingerprint: ''
         };
