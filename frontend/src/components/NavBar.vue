@@ -92,7 +92,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Message from '@/utils/message.js'
 import { getStoredUser, hasAnyPermission, hasPermission, ROLE_ADMIN, ROLE_GUEST } from '@/utils/permissions.js'
@@ -106,6 +106,7 @@ const isDark = ref(false)
 const sidebarOpen = ref(false)
 const navItems = ref([])
 const storageKey = 'theme-preference'
+const activeRoutePath = computed(() => route.matched.length > 0 ? route.path : window.location.pathname)
 
 const refreshNavItems = () => {
   const userInfo = getStoredUser()
@@ -148,9 +149,9 @@ const refreshNavItems = () => {
 const isRouteActive = (targetPath) => {
   const exactMatchPaths = ['/', '/login']
   if (exactMatchPaths.includes(targetPath)) {
-    return route.path === targetPath
+    return activeRoutePath.value === targetPath
   }
-  return route.path.startsWith(targetPath)
+  return activeRoutePath.value.startsWith(targetPath)
 }
 
 const getFirstWord = (title) => {
