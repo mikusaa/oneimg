@@ -1,5 +1,8 @@
 <template>
-  <div class="app-shell min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 lg:pl-[var(--app-sidebar-width)]">
+  <div
+    class="app-shell min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100"
+    :class="{ 'lg:pl-[var(--app-sidebar-width)]': useSidebarLayout }"
+  >
     <Navbar />
 
     <main class="min-h-[calc(100vh-53px)] px-2.5 pb-3 pt-[calc(var(--app-header-height-mobile)+8px)] sm:px-4 sm:pb-4 md:px-5 md:pb-5 md:pt-[calc(var(--app-header-height)+10px)] xl:px-6 2xl:px-8">
@@ -44,10 +47,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import Navbar from '@/components/NavBar.vue'
 import icpImg from '@/assets/images/icp.svg'
 import securityImg from '@/assets/images/gongan.png'
+
+const route = useRoute()
+const useSidebarLayout = computed(() => !route.meta.public)
 
 const seoSetting = ref({
   seo_title: '初春图床',

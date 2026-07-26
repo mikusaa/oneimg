@@ -2,7 +2,7 @@
     <div class="flex min-h-[calc(100vh-140px)] items-center justify-center p-4">
         <!-- 全局加载遮罩 -->
         <div v-if="isLoading" class="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
-            <div class="loading-card bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-md w-full m-[15px] md:ml-[255px]">
+            <div class="loading-card m-[15px] w-full max-w-md rounded-xl bg-white p-6 shadow-2xl dark:bg-gray-800">
                 <!-- 加载动画 -->
                 <div class="loading-spinner w-12 h-12 border-4 border-gray-200 dark:border-gray-700 border-t-primary dark:border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
                 <h3 class="loading-title text-lg font-bold text-center text-gray-800 dark:text-white mb-2">{{ loadingTitle }}</h3>
@@ -78,7 +78,7 @@
         <!-- POW验证弹窗 -->
         <div 
             v-if="showModal" 
-            class="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 transition-opacity duration-300  md:ml-[255px]"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-300 dark:bg-black/70"
             @click="closeModal" id="powModal" style="display: none;"
         >
             <div class="modal bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 transform transition-all duration-300 scale-100" @click.stop>
@@ -335,15 +335,10 @@ const putLogin = async (token, touristId = '') => {
                 touristFingerprint: touristId || ''
             };
             localStorage.setItem('userInfo', JSON.stringify(userInfo));
-            
-            setLoadingState((result.message || '登录成功'), '即将跳转到主页...', 100);
-            
-            setTimeout(() => {
-                clearLoadingState();
-                showModal.value = false;
-                // 跳转到主页
-                window.location.href = '/';
-            }, 1500);
+
+            clearLoadingState();
+            showModal.value = false;
+            window.location.replace('/');
         } else {
             clearLoadingState();
             message.error('登录失败: ' + (result.message || '未知错误'));
