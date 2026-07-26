@@ -74,6 +74,34 @@
           </div>
         </div>
 
+        <div v-if="storage.type === 'default'" class="border-t border-slate-200/80 pt-4 dark:border-white/10">
+          <label class="field-label" :for="`default-cdn-${storage.id}`">CDN 域名</label>
+          <div v-if="canUpdateStorage" class="settings-token-row">
+            <input
+              :id="`default-cdn-${storage.id}`"
+              v-model="cdnDomains[storage.id]"
+              type="text"
+              class="input-modern min-w-0"
+              placeholder="例如 https://img.example.com"
+              @keyup.enter="saveDefaultStorageCDN(storage)"
+            >
+            <button
+              type="button"
+              class="soft-button shrink-0"
+              :class="{ 'cursor-not-allowed opacity-50': !cdnDomainChanged(storage) || savingCDN === storage.id }"
+              :disabled="!cdnDomainChanged(storage) || savingCDN === storage.id"
+              @click="saveDefaultStorageCDN(storage)"
+            >
+              <i :class="savingCDN === storage.id ? 'ri-loader-4-line animate-spin' : 'ri-save-line'"></i>
+              保存
+            </button>
+          </div>
+          <p v-else class="text-sm text-slate-700 dark:text-slate-200">
+            {{ storage.cdn_domain || '未配置' }}
+          </p>
+          <p class="field-hint">CDN 站点根路径需指向本地 uploads 目录，返回链接会移除 /uploads 前缀。</p>
+        </div>
+
         <div v-if="storage.type !== 'default'" class="flex items-center justify-end gap-3 pt-3 border-t border-gray-200 dark:border-dark-300">
           <button
           v-if="canUpdateStorage"
@@ -96,7 +124,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import message from '@/utils/message.js';
 import { getStoredUser, hasPermission } from '@/utils/permissions.js';
 
@@ -105,6 +133,9 @@ const canCreateStorage = hasPermission('storage:create', currentUser);
 const canUpdateStorage = hasPermission('storage:update', currentUser);
 const canDeleteStorage = hasPermission('storage:delete', currentUser);
 const buckets = ref([]);
+const cdnDomains = reactive({});
+const savedCDNDomains = reactive({});
+const savingCDN = ref(null);
 
 const typeSpecificFields = {
   s3: [
@@ -397,12 +428,53 @@ const GetBuckets = async () => {
     const result = await response.json();
     if (response.ok && result.code === 200) {
       buckets.value = result.data;
+      for (const storage of buckets.value) {
+        if (storage.type !== 'default') continue;
+        const domain = storage.cdn_domain || '';
+        cdnDomains[storage.id] = domain;
+        savedCDNDomains[storage.id] = domain;
+      }
     } else {
       message.error(result.message || '获取存储列表失败');
     }
   } catch (error) {
     console.error('获取存储列表失败:', error);
     message.error('获取存储列表失败，请稍后重试');
+  }
+};
+
+const cdnDomainChanged = (storage) => {
+  return String(cdnDomains[storage.id] || '').trim() !== String(savedCDNDomains[storage.id] || '').trim();
+};
+
+const saveDefaultStorageCDN = async (storage) => {
+  if (!canUpdateStorage || !cdnDomainChanged(storage) || savingCDN.value === storage.id) return;
+
+  savingCDN.value = storage.id;
+  try {
+    const response = await fetch('/api/buckets/default/cdn', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+      },
+      body: JSON.stringify({ cdn_domain: String(cdnDomains[storage.id] || '').trim() })
+    });
+    const result = await response.json();
+    if (!response.ok || result.code !== 200) {
+      throw new Error(result.message || '更新 CDN 域名失败');
+    }
+
+    const domain = result.data?.cdn_domain || '';
+    cdnDomains[storage.id] = domain;
+    savedCDNDomains[storage.id] = domain;
+    storage.cdn_domain = domain;
+    message.success('CDN 域名已更新');
+  } catch (error) {
+    console.error('更新 CDN 域名失败:', error);
+    message.error(error.message || '更新 CDN 域名失败');
+  } finally {
+    savingCDN.value = null;
   }
 };
 

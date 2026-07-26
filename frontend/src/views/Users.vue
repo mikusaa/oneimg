@@ -336,9 +336,9 @@ const PERMISSION_GROUPS = [
     { code: 'image:delete', name: '删除图片' }, { code: 'image:tag:add', name: '添加图片标签' }, { code: 'image:tag:delete', name: '删除图片标签' }
   ]},
   { title: '系统设置', items: [
-    { code: 'setting:upload', name: '上传与存储' }, { code: 'setting:image', name: '图片处理' },
-    { code: 'setting:security', name: '安全与登录' }, { code: 'setting:notification', name: '通知' },
-    { code: 'setting:api', name: 'API' }, { code: 'setting:seo', name: '站点 SEO' }
+    { code: 'setting:upload', name: '存储与上传' }, { code: 'setting:image', name: '图片处理' },
+    { code: 'setting:security', name: '访问安全' }, { code: 'setting:notification', name: 'Telegram 通知' },
+    { code: 'setting:api', name: '上传 API' }, { code: 'setting:seo', name: '站点信息' }
   ]}
 ]
 

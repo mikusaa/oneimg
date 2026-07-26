@@ -400,3 +400,77 @@ func TestRequirePermission(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateDefaultStorageCDNNormalizesAndClearsDomain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupFeatureTestDB(t)
+	db := database.GetDB().DB
+	setting := models.Settings{CDNDomain: "https://old.example.com"}
+	if err := db.Create(&setting).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := performJSONRequest(
+		UpdateDefaultStorageCDN,
+		http.MethodPut,
+		"/api/buckets/default/cdn",
+		map[string]any{"cdn_domain": " img.example.com/ "},
+		nil,
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("update CDN domain status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if err := db.First(&setting, setting.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if setting.CDNDomain != "https://img.example.com" {
+		t.Fatalf("normalized CDN domain = %q", setting.CDNDomain)
+	}
+
+	recorder = performJSONRequest(
+		UpdateDefaultStorageCDN,
+		http.MethodPut,
+		"/api/buckets/default/cdn",
+		map[string]any{"cdn_domain": ""},
+		nil,
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("clear CDN domain status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if err := db.First(&setting, setting.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if setting.CDNDomain != "" {
+		t.Fatalf("cleared CDN domain = %q", setting.CDNDomain)
+	}
+}
+
+func TestUpdateDefaultStorageCDNRequiresStorageUpdatePermission(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	router := gin.New()
+	router.PUT(
+		"/api/buckets/default/cdn",
+		func(c *gin.Context) {
+			c.Set("current_user", &models.User{
+				ID:         2,
+				Role:       models.RoleAdmin,
+				Permission: models.Permission{Codes: []string{}},
+			})
+		},
+		middlewares.RequirePermission("storage:update"),
+		UpdateDefaultStorageCDN,
+	)
+
+	payload, err := json.Marshal(map[string]any{"cdn_domain": "img.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPut, "/api/buckets/default/cdn", bytes.NewReader(payload))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("denied CDN update status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}

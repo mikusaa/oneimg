@@ -11,6 +11,7 @@ import (
 	"oneimg/backend/models"
 	"oneimg/backend/services"
 	"oneimg/backend/utils/buckets"
+	"oneimg/backend/utils/publicurl"
 	"oneimg/backend/utils/result"
 	"oneimg/backend/utils/secureconfig"
 	"oneimg/backend/utils/settings"
@@ -48,6 +49,11 @@ func GetBuckets(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, result.Error(500, "获取存储桶失败"))
 		return
 	}
+	settingModel, err := settings.GetSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, result.Error(500, "获取系统配置失败"))
+		return
+	}
 
 	// 返回结构体
 	type BucketResponse struct {
@@ -56,6 +62,7 @@ func GetBuckets(c *gin.Context) {
 		TotalReadable string  `json:"total_readable"` // 总容量
 		UsagePercent  float64 `json:"usage_percent"`  // 使用率（保留两位小数）
 		UsageFree     string  `json:"usage_free"`     // 可用容量
+		CDNDomain     string  `json:"cdn_domain,omitempty"`
 	}
 	var bucketRes []BucketResponse
 
@@ -63,6 +70,9 @@ func GetBuckets(c *gin.Context) {
 		maskedConfig := secureconfig.MaskBucketConfigValues(bucket.Config)
 		bucket.Config = maskedConfig
 		res := BucketResponse{Buckets: bucket}
+		if bucket.Type == "default" {
+			res.CDNDomain = settingModel.CDNDomain
+		}
 		// 根据存储类型计算/转换容量和使用量
 		switch bucket.Type {
 		case "default": // 本地磁盘
@@ -103,6 +113,36 @@ func GetBuckets(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result.Success("ok", bucketRes))
+}
+
+type UpdateDefaultStorageCDNRequest struct {
+	CDNDomain string `json:"cdn_domain"`
+}
+
+func UpdateDefaultStorageCDN(c *gin.Context) {
+	var req UpdateDefaultStorageCDNRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, result.Error(400, "请求参数错误"))
+		return
+	}
+
+	domain, err := publicurl.NormalizeDomain(req.CDNDomain)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, result.Error(400, err.Error()))
+		return
+	}
+
+	settingModel, err := settings.GetSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, result.Error(500, "获取系统配置失败"))
+		return
+	}
+	if err := database.GetDB().DB.Model(&settingModel).Update("cdn_domain", domain).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, result.Error(500, "更新 CDN 域名失败"))
+		return
+	}
+
+	c.JSON(http.StatusOK, result.Success("更新成功", gin.H{"cdn_domain": domain}))
 }
 
 // 获取存储桶列表

@@ -1,750 +1,758 @@
 <template>
     <div class="page-shell text-gray-800 dark:text-gray-200">
         <section class="page-header border-b border-slate-200/70 pb-4 dark:border-white/10">
-            <div>
-                <h1 class="page-title">系统设置</h1>
-            </div>
-            <div class="grid w-full gap-2.5 sm:w-auto sm:grid-cols-2">
-                <div class="stat-tile min-w-0">
-                    <p class="text-xs uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">默认存储</p>
-                    <p class="mt-2 text-base font-semibold text-slate-900 dark:text-white">{{ presetBuckets.find(bucket => bucket.id == systemSettings.default_storage)?.name || '未选择' }}</p>
+            <h1 class="page-title">系统设置</h1>
+
+            <div class="settings-status-list" aria-label="当前设置状态">
+                <div class="settings-status-item">
+                    <span class="settings-status-icon"><i class="ri-database-2-line"></i></span>
+                    <span>
+                        <span class="settings-status-label">默认存储</span>
+                        <span class="settings-status-value">{{ currentDefaultBucket?.name || '未选择' }}</span>
+                    </span>
                 </div>
-                <div class="stat-tile min-w-0">
-                    <p class="text-xs uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">API 状态</p>
-                    <p class="mt-2 text-base font-semibold text-slate-900 dark:text-white">{{ systemSettings.start_api ? '已启用' : '未启用' }}</p>
+                <div class="settings-status-item">
+                    <span class="settings-status-icon"><i class="ri-code-box-line"></i></span>
+                    <span>
+                        <span class="settings-status-label">API 状态</span>
+                        <span class="settings-status-value">{{ systemSettings.start_api ? '已启用' : '未启用' }}</span>
+                    </span>
+                </div>
+                <div class="settings-status-item">
+                    <span class="settings-status-icon"><i class="ri-file-upload-line"></i></span>
+                    <span>
+                        <span class="settings-status-label">最大文件</span>
+                        <span class="settings-status-value">{{ maxFileSizeReadable }}</span>
+                    </span>
                 </div>
             </div>
         </section>
 
-        <nav v-if="availableSettingTabs.length" class="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-white/10" aria-label="设置分类">
+        <nav
+            v-if="availableSettingTabs.length"
+            class="settings-tabs"
+            aria-label="设置分类"
+        >
             <button
                 v-for="tab in availableSettingTabs"
                 :key="tab.key"
                 type="button"
-                class="shrink-0 border-b-2 px-3 py-2.5 text-sm transition-colors"
-                :class="activeSettingTab === tab.key
-                    ? 'border-slate-900 font-medium text-slate-900 dark:border-white dark:text-white'
-                    : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'"
-                @click="activeSettingTab = tab.key"
+                class="settings-tab"
+                :class="{ 'settings-tab-active': activeSettingTab === tab.key }"
+                @click="selectSettingTab(tab.key)"
             >
-                <i :class="tab.icon" class="mr-1.5"></i>{{ tab.label }}
+                <i :class="tab.icon"></i>
+                <span>{{ tab.label }}</span>
             </button>
         </nav>
 
-        <!-- 主要内容 -->
         <div class="pb-8 md:pb-10">
-            <div class="grid gap-4 md:gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
-                <!-- 系统配置卡片 -->
-                <div class="order-1 md:order-2 w-full p-0 mx-auto">
-                    <div v-show="activeSettingTab !== 'seo'" class="section-card p-3.5 sm:p-4 md:p-6">
-                        <h2 class="panel-title mb-4 flex items-center text-lg font-semibold sm:text-xl md:mb-5">
-                            <span class="panel-icon mr-2 text-2xl">
-                                <i class="ri-list-settings-line"></i>
-                            </span>
-                            {{ activeSettingTabLabel }}
-                        </h2>
-                        
-                        <div class="account-form space-y-4 md:space-y-5">
-                            <!-- 默认存储 -->
-                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
-                                <label class="field-label" for="default_storage">
-                                    系统默认存储
-                                </label>
-                                <select 
-                                    id="default_storage"
-                                    v-model="systemSettings.default_storage"
-                                    class="input-modern"
-                                    @change="handleSelectChange('default_storage', systemSettings.default_storage)"
-                                >
-                                    <option 
-                                        v-for="bucket in presetBuckets" 
-                                        :key="bucket.id"
-                                        :value="bucket.id"
-                                        >{{ bucket.name }} ({{ bucket.type }})</option>
-                                </select>
-                                <div class="field-hint">
-                                    选择后系统将使用该存储作为默认存储，游客仅能使用该存储
-                                </div>
-                            </div>
+            <div v-if="activeSettingTab" class="page-surface settings-panel">
+                <header class="settings-panel-header">
+                    <span class="panel-icon text-2xl"><i :class="activeSettingTabIcon"></i></span>
+                    <h2 class="text-lg font-semibold text-slate-900 dark:text-white sm:text-xl">
+                        {{ activeSettingTabLabel }}
+                    </h2>
+                </header>
 
-                            <!-- 图片直链域名 -->
-                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
-                                <label class="field-label" for="public_image_domain">
-                                    图片直链域名
-                                </label>
-                                <input
-                                    id="public_image_domain"
-                                    v-model="systemSettings.public_image_domain"
-                                    type="text"
-                                    class="input-modern"
-                                    :class="{ 'cursor-not-allowed opacity-60': publicImageDomainInputDisabled }"
-                                    :disabled="publicImageDomainInputDisabled"
-                                    placeholder="例如 https://img.example.com"
-                                    @blur="handleFieldBlur('public_image_domain', systemSettings.public_image_domain)"
-                                />
-                                <div
-                                    class="field-hint"
-                                    :class="{ 'text-amber-600 dark:text-amber-300': publicImageDomainUnavailable || hasPublicImageDomain }"
-                                >
-                                    {{ publicImageDomainHint }}
-                                </div>
+                <div class="divide-y divide-slate-200/80 dark:divide-white/10">
+                    <template v-if="activeSettingTab === 'storage'">
+                        <section class="settings-section">
+                            <div class="settings-section-heading">
+                                <h3>存储策略</h3>
                             </div>
-
-                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
-                                <label class="field-label" for="cdn_domain">
-                                    CDN 域名
-                                </label>
-                                <input
-                                    id="cdn_domain"
-                                    v-model="systemSettings.cdn_domain"
-                                    type="text"
-                                    class="input-modern"
-                                    placeholder="例如 http://localhost:8081"
-                                    @blur="handleFieldBlur('cdn_domain', systemSettings.cdn_domain)"
-                                />
-                                <div class="field-hint">
-                                    用于本地存储主图直链，CDN 根路径需要指向 uploads 目录，返回链接会自动去掉 /uploads 前缀。
-                                </div>
-                            </div>
-
-                            <div v-show="activeSettingTab === 'upload'" class="flex items-center justify-between gap-4 rounded-lg border border-slate-200/70 p-4 dark:border-white/10">
-                                <div>
-                                    <div class="field-label">多存储后台同步</div>
-                                    <div class="field-hint">开启后先保存到本地存储，再按用户权限异步同步到远端存储。</div>
-                                </div>
-                                <input
-                                    v-model="systemSettings.multi_storage_sync"
-                                    type="checkbox"
-                                    class="toggle-modern"
-                                    @change="handleSwitchChange('multi_storage_sync', systemSettings.multi_storage_sync)"
-                                />
-                            </div>
-
-                            <!-- 默认存储路径 -->
-                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
-                                <label class="field-label" for="default_path">
-                                    默认存储路径
-                                </label>
-                                
-                                <input 
-                                    id="default_path"
-                                    v-model="systemSettings.default_path"
-                                    type="text" 
-                                    class="input-modern"
-                                    placeholder="默认存储路径，默认 /uploads/{year}/{moon}"
-                                    @blur="handleFieldBlur('default_path', systemSettings.default_path)"
-                                />
-                                <div class="field-hint">
-                                    默认上传路径，魔法变量 {year} 年 {month} 月 {day} 日 {hour} 小时 {minute} 分钟 {random} 随机 {uuid} UUID {role} 角色（1 为管理员, 2 为游客）
-                                </div>
-                            </div>
-
-                            <!-- 上传文件名 -->
-                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
-                                <label class="field-label" for="file_name">
-                                    上传文件名称
-                                </label>
-                                
-                                <input 
-                                    id="file_name"
-                                    v-model="systemSettings.file_name"
-                                    type="text" 
-                                    class="input-modern"
-                                    placeholder="上传文件名称，默认 {random}"
-                                    @blur="handleFieldBlur('file_name', systemSettings.file_name)"
-                                />
-                                <div class="field-hint">
-                                    上传文件名称，魔法变量 {random} 随机数 {year} 年 {month} 月 {day} 日 {hour} 小时 {minute} 分钟 {second} 秒
-                                </div>
-                            </div>
-
-                            <!-- TG Bot Token：失去焦点保存 -->
-                            <div v-show="activeSettingTab === 'notification'" class="setting-group">
-                                <label class="field-label" for="tg_bot_token">
-                                    TG Bot Token
-                                </label>
-                                <input 
-                                    id="tg_bot_token"
-                                    v-model="systemSettings.tg_bot_token"
-                                    type="password" 
-                                    class="input-modern"
-                                    :placeholder="systemSettings.tg_bot_token_configured ? '已配置，留空表示不修改' : '未配置，请输入 Bot Token'"
-                                    @blur="handleFieldBlur('tg_bot_token', systemSettings.tg_bot_token)"
-                                />
-                                <div class="field-hint">
-                                    {{ systemSettings.tg_bot_token_configured ? '已配置，留空表示不修改' : '发送Telegram通知时必填' }}
-                                </div>
-                            </div>
-                            
-                            <!-- TG 通知接收者：失去焦点保存 -->
-                            <div v-show="activeSettingTab === 'notification'" class="setting-group">
-                                <label class="field-label" for="tg_receivers">
-                                    TG 通知接收者
-                                </label>
-                                <input 
-                                    id="tg_receivers"
-                                    v-model="systemSettings.tg_receivers"
-                                    type="text" 
-                                    class="input-modern"
-                                    placeholder="接收通知的TG用户ID"
-                                    @blur="handleFieldBlur('tg_receivers', systemSettings.tg_receivers)"
-                                />
-                                <div class="field-hint">
-                                    发送Telegram通知时必填
-                                </div>
-                            </div>
-                            
-                            <!-- TG 通知文本：失去焦点保存 -->
-                            <div v-show="activeSettingTab === 'notification'" class="setting-group">
-                                <label class="field-label" for="tg_notice_text">
-                                    TG 通知文本
-                                </label>
-                                <input 
-                                    id="tg_notice_text"
-                                    v-model="systemSettings.tg_notice_text"
-                                    type="text" 
-                                    class="input-modern"
-                                    placeholder="自定义TG通知文本"
-                                    @blur="handleFieldBlur('tg_notice_text', systemSettings.tg_notice_text)"
-                                />
-                                <div class="field-hint">
-                                    默认模板：{username} {date} 上传了图片 {filename}，存储容器[{StorageType}]
-                                </div>
-                            </div>
-                            
-                            <!-- 水印文本：失去焦点保存 -->
-                            <div v-show="activeSettingTab === 'image'" class="setting-group">
-                                <label class="field-label" for="watermark_text">
-                                    图片水印文本
-                                </label>
-                                <input 
-                                    id="watermark_text"
-                                    v-model="systemSettings.watermark_text"
-                                    type="text" 
-                                    class="input-modern"
-                                    :class="{ 'cursor-not-allowed opacity-60': hasPublicImageDomain }"
-                                    :disabled="hasPublicImageDomain"
-                                    placeholder="图片水印文本"
-                                    @blur="handleFieldBlur('watermark_text', systemSettings.watermark_text)"
-                                />
-                                <div v-if="hasPublicImageDomain" class="field-hint text-amber-600 dark:text-amber-300">
-                                    已配置图片直链域名，图片水印文本不会生效，请先清空图片直链域名再修改。
-                                </div>
-                            </div>
-
-                            <!-- 图片水印大小：失去焦点保存 -->
-                            <div v-show="activeSettingTab === 'image'" class="setting-group">
-                                <label class="field-label" for="watermark_size">
-                                    图片水印大小
-                                </label>
-                                <input 
-                                    id="watermark_size"
-                                    v-model="systemSettings.watermark_size"
-                                    type="text" 
-                                    class="input-modern"
-                                    :class="{ 'cursor-not-allowed opacity-60': hasPublicImageDomain }"
-                                    :disabled="hasPublicImageDomain"
-                                    placeholder="图片水印大小"
-                                    @blur="handleFieldBlur('watermark_size', systemSettings.watermark_size)"
-                                />
-                            </div>
-
-                            <!-- 图片水印字体颜色 -->
-                            <div v-show="activeSettingTab === 'image'" class="setting-group">
-                                <label class="field-label" for="watermark_color">
-                                    图片水印字体颜色
-                                </label>
-                                <input 
-                                    id="watermark_color"
-                                    v-model="systemSettings.watermark_color"
-                                    type="text" 
-                                    class="input-modern"
-                                    :class="{ 'cursor-not-allowed opacity-60': hasPublicImageDomain }"
-                                    :disabled="hasPublicImageDomain"
-                                    placeholder="图片水印字体颜色"
-                                    @blur="handleFieldBlur('watermark_color', systemSettings.watermark_color)"
-                                />
-                                <div class="field-hint">
-                                    默认值为 #000000 黑色
-                                </div>
-                            </div>
-
-                            <!-- 图片水印透明度：失去焦点保存 -->
-                            <div v-show="activeSettingTab === 'image'" class="setting-group">
-                                <label class="field-label" for="watermark_opac">
-                                    图片水印透明度
-                                </label>
-                                <input 
-                                    id="watermark_opac"
-                                    v-model="systemSettings.watermark_opac"
-                                    type="text" 
-                                    class="input-modern"
-                                    :class="{ 'cursor-not-allowed opacity-60': hasPublicImageDomain }"
-                                    :disabled="hasPublicImageDomain"
-                                    placeholder="图片水印透明度"
-                                    @blur="handleFieldBlur('watermark_opac', systemSettings.watermark_opac)"
-                                />
-                                <div class="field-hint">
-                                    默认值：0.5
-                                </div>
-                            </div>
-
-                            <!-- 图片水印位置：下拉框变更保存 -->
-                            <div v-show="activeSettingTab === 'image'" class="setting-group">
-                                <label class="field-label" for="storage_type">
-                                    图片水印位置
-                                </label>
-                                <select 
-                                    id="watermark_pos"
-                                    v-model="systemSettings.watermark_pos"
-                                    class="input-modern"
-                                    :class="{ 'cursor-not-allowed opacity-60': hasPublicImageDomain }"
-                                    :disabled="hasPublicImageDomain"
-                                    @change="handleSelectChange('watermark_pos', systemSettings.watermark_pos)"
-                                >
-                                    <option value="" disabled>请选择图片水印位置</option>
-                                    <option value="top-left">左上角</option>
-                                    <option value="top-right">右上角</option>
-                                    <option value="bottom-left">左下角</option>
-                                    <option value="bottom-right">右下角</option>
-                                    <option value="center">居中</option>
-                                </select>
-                                <div class="field-hint">
-                                    系统默认右下角
-                                </div>
-                            </div>
-                            <div v-show="activeSettingTab === 'security'" class="setting-group">
-                                <label class="field-label" for="referer_white_list">
-                                    Referer来源白名单
-                                </label>
-                                <textarea 
-                                    id="referer_white_list"
-                                    v-model="systemSettings.referer_white_list"
-                                    type="password"
-                                    class="input-modern min-h-[112px] leading-6"
-                                    :class="{ 'cursor-not-allowed opacity-60': hasPublicImageDomain }"
-                                    :disabled="hasPublicImageDomain"
-                                    placeholder="Referer来源白名单，多个以英文逗号分隔"
-                                    @blur="handleFieldBlur('referer_white_list', systemSettings.referer_white_list)"
-                                    rows="4"
-                                >
-                                </textarea>
-                                <div class="field-hint">
-                                    1. 仅需填写域名（支持主域名），多个以英文逗号分隔；<br>
-                                    2. 无需填写协议（http://），无需填写端口（:80）；<br>
-                                    3. 如果开启了来源白名单，那么仅能从这些来源访问图片资源（直接打开不受限制）
-                                </div>
-                                <div v-if="hasPublicImageDomain" class="field-hint text-amber-600 dark:text-amber-300">
-                                    已配置图片直链域名，直接访问不会经过系统代理，来源白名单不会生效。
-                                </div>
-                            </div>
-
-                            <div v-show="activeSettingTab === 'api'" class="setting-group">
-                                <label class="field-label" for="api_token">
-                                    API Token
-                                </label>
-                                <div class="flex flex-col gap-2 sm:relative sm:block sm:w-full">
-                                    <input 
-                                        id="api_token"
-                                        v-model="systemSettings.api_token"
-                                        type="text" 
-                                        class="input-modern sm:pr-20"
-                                        :placeholder="systemSettings.api_token_configured ? '已配置，留空表示不修改' : '未配置，请输入 API Token'"
-                                        @blur="handleFieldBlur('api_token', systemSettings.api_token)"
-                                    />
-                                    <button
-                                        type="button"
-                                        class="inline-flex h-10 items-center justify-center rounded-xl bg-slate-900 px-3.5 text-sm font-medium text-white transition hover:bg-slate-700 sm:absolute sm:right-1 sm:top-1 sm:h-[calc(100%-8px)] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
-                                        @click="generateApiToken"
+                            <div class="settings-field-grid">
+                                <div class="setting-group">
+                                    <label class="field-label" for="default_storage">系统默认存储</label>
+                                    <select
+                                        id="default_storage"
+                                        v-model="systemSettings.default_storage"
+                                        class="input-modern"
+                                        @change="handleSelectChange('default_storage', systemSettings.default_storage)"
                                     >
-                                        生成
-                                    </button>
+                                        <option
+                                            v-for="bucket in presetBuckets"
+                                            :key="bucket.id"
+                                            :value="bucket.id"
+                                        >
+                                            {{ bucket.name }} ({{ bucket.type }})
+                                        </option>
+                                    </select>
+                                    <p class="field-hint">游客仅可使用系统默认存储。</p>
                                 </div>
-                                <div class="field-hint">
-                                    1. 用于调用 API 接口，在请求头 Authorization 字段中添加 oneimg_token={API Token}；<br>
-                                    2. 仅在首次设置时显示，刷新后将再不显示，请注意保存；<br>
-                                    3. {{ systemSettings.api_token_configured ? '当前已配置' : '当前未配置' }}
-                                </div>
-                            </div>
-                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
-                                <label class="field-label" for="max_file_size">
-                                    允许最大上传大小
-                                </label>
-                                <input 
-                                    id="max_file_size"
-                                    v-model="systemSettings.max_file_size"
-                                    type="number"
-                                    class="input-modern"
-                                    placeholder="允许最大上传大小"
-                                    @blur="handleFieldBlur('max_file_size', systemSettings.max_file_size)"
-                                />
-                                <div class="field-hint">
-                                    大小单位：字节，默认10mb
-                                </div>
-                            </div>
-                            <div v-show="activeSettingTab === 'upload'" class="setting-group">
-                                <label class="field-label" for="allowed_types">
-                                    允许上传的图片类型
-                                </label>
-                                <input 
-                                    id="allowed_types"
-                                    v-model="systemSettings.allowed_types"
-                                    type="text"
-                                    class="input-modern"
-                                    placeholder="允许上传的图片类型"
-                                    @blur="handleFieldBlur('allowed_types', systemSettings.allowed_types)"
-                                />
-                            </div>
-                            <div v-show="activeSettingTab === 'image'" class="setting-group">
-                                <label class="field-label" for="main_image_quality">
-                                    主图压缩质量
-                                </label>
-                                <input
-                                    id="main_image_quality"
-                                    v-model="systemSettings.main_image_quality"
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    class="input-modern"
-                                    placeholder="默认 85"
-                                    @blur="handleFieldBlur('main_image_quality', systemSettings.main_image_quality)"
-                                />
-                                <div class="field-hint">
-                                    WebP 编码质量，范围 0-100，数值越高画质越好、体积越大。
-                                </div>
-                            </div>
-                            <div v-show="activeSettingTab === 'image'" class="setting-group">
-                                <label class="field-label" for="skip_compress_formats">
-                                    跳过压缩格式
-                                </label>
-                                <input
-                                    id="skip_compress_formats"
-                                    v-model="systemSettings.skip_compress_formats"
-                                    type="text"
-                                    class="input-modern"
-                                    placeholder="image/gif,image/svg+xml"
-                                    @blur="handleFieldBlur('skip_compress_formats', systemSettings.skip_compress_formats)"
-                                />
-                                <div class="field-hint">
-                                    逗号分隔，支持 MIME 或扩展名，例如 image/png,gif,svg；命中后主图保持原格式。
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- 系统设置卡片（开关部分不变） -->
-                <div class="order-2 md:order-1 w-full p-0 mx-auto">
-                    <!-- SEO设置卡片 -->
-                    <div v-show="activeSettingTab === 'seo'" class="section-card mb-3.5 space-y-4 p-3.5 sm:p-4 md:space-y-5 md:p-6">
-                        <h2 class="panel-title mb-4 flex items-center text-lg font-semibold sm:text-xl md:mb-5">
-                            <span class="panel-icon mr-2 text-2xl">
-                                <i class="ri-seo-line"></i>
-                            </span>
-                            SEO 设置
-                        </h2>
-                        <div class="setting-group"> 
-                            <label class="field-label" for="seo_title">
-                                网站标题
-                            </label>
-                            <input 
-                                id="seo_title"
-                                v-model="systemSettings.seo_title"
-                                type="text"
-                                class="input-modern"
-                                placeholder="请输入网站标题"
-                                @blur="handleFieldBlur('seo_title', systemSettings.seo_title)"
-                            />
-                        </div>
-                        <div class="setting-group"> 
-                            <label class="field-label" for="seo_description">
-                                网站标题
-                            </label>
-                            <textarea
-                                id="seo_description"
-                                v-model="systemSettings.seo_description"
-                                type="text"
-                                class="input-modern min-h-[96px]"
-                                rows="3"
-                                placeholder="请输入网站描述"
-                                @blur="handleFieldBlur('seo_description', systemSettings.seo_description)"
-                            ></textarea>
-                        </div>
-                        <div class="setting-group"> 
-                            <label class="field-label" for="seo_keywords">
-                                网站关键词
-                            </label>
-                            <textarea
-                                id="seo_keywords"
-                                v-model="systemSettings.seo_keywords"
-                                type="text"
-                                class="input-modern min-h-[96px]"
-                                rows="3"
-                                placeholder="请输入网站关键词"
-                                @blur="handleFieldBlur('seo_keywords', systemSettings.seo_keywords)"
-                            ></textarea>
-                        </div>
-                        <div class="setting-group"> 
-                            <label class="field-label" for="seo_icp">
-                                网站备案号
-                            </label>
-                            <input 
-                                id="seo_icp"
-                                v-model="systemSettings.seo_icp"
-                                type="text"
-                                class="input-modern"
-                                placeholder="请输入网站备案号"
-                                @blur="handleFieldBlur('seo_icp', systemSettings.seo_icp)"
-                            />
-                            <div class="field-hint">
-                                输入网站备案号会在页面底部显示备案信息
+                                <div class="settings-toggle-field">
+                                    <div>
+                                        <p class="setting-row-title">多存储后台同步</p>
+                                        <p class="setting-row-hint">先保存到本地，再按用户权限异步同步到远端存储。</p>
+                                    </div>
+                                    <label class="settings-switch" title="多存储后台同步">
+                                        <input
+                                            v-model="systemSettings.multi_storage_sync"
+                                            type="checkbox"
+                                            class="sr-only peer"
+                                            @change="handleSwitchChange('multi_storage_sync', systemSettings.multi_storage_sync)"
+                                        >
+                                        <span class="switch-track"></span>
+                                        <span class="switch-thumb"></span>
+                                    </label>
+                                </div>
                             </div>
-                        </div>
-                        <div class="setting-group"> 
-                            <label class="field-label" for="public_security">
-                                网站公安备案号
-                            </label>
-                            <input 
-                                id="public_security"
-                                v-model="systemSettings.public_security"
-                                type="text"
-                                class="input-modern"
-                                placeholder="请输入网站公安备案号"
-                                @blur="handleFieldBlur('public_security', systemSettings.public_security)"
-                            />
-                            <div class="field-hint">
-                                输入网站公安备案号会在页面底部显示公安备案信息
-                            </div>
-                        </div>
-                        <div class="setting-group"> 
-                            <label class="field-label" for="seo_icon">
-                                网站小图标
-                            </label>
-                            <input 
-                                id="seo_icon"
-                                v-model="systemSettings.seo_icon"
-                                type="text"
-                                class="input-modern"
-                                placeholder="请输入网站小图标"
-                                @blur="handleFieldBlur('seo_icon', systemSettings.seo_icon)"
-                            />
-                            <div class="field-hint">
-                                输入网站小图标URL会替换默认的小图标
-                            </div>
-                        </div>
-                    </div>
+                        </section>
 
-                    <div v-show="activeSettingTab !== 'seo'" class="section-card p-3.5 sm:p-4 md:p-6">
-                        <h2 class="panel-title mb-4 flex items-center text-lg font-semibold sm:text-xl md:mb-5">
-                            <span class="panel-icon mr-2 text-2xl">
-                                <i class="ri-settings-2-line"></i>
-                            </span>
-                            系统设置
-                        </h2>
-                        
-                        <div class="account-form space-y-4 md:space-y-5">
-                            <!-- 是否保存原图 -->
-                            <div v-show="activeSettingTab === 'image'" class="setting-row">
+                        <section class="settings-section">
+                            <div class="settings-section-heading">
+                                <h3>图片直链</h3>
+                            </div>
+                            <div class="settings-field-grid">
+                                <div class="setting-group">
+                                    <label class="field-label" for="public_image_domain">图片直链域名</label>
+                                    <input
+                                        id="public_image_domain"
+                                        v-model="systemSettings.public_image_domain"
+                                        type="text"
+                                        class="input-modern"
+                                        :class="{ 'cursor-not-allowed opacity-60': publicImageDomainInputDisabled }"
+                                        :disabled="publicImageDomainInputDisabled"
+                                        placeholder="例如 https://img.example.com"
+                                        @blur="handleFieldBlur('public_image_domain', systemSettings.public_image_domain)"
+                                    >
+                                    <p
+                                        class="field-hint"
+                                        :class="{ 'text-amber-600 dark:text-amber-300': publicImageDomainUnavailable || hasPublicImageDomain }"
+                                    >
+                                        {{ publicImageDomainHint }}
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
+                    </template>
+
+                    <template v-else-if="activeSettingTab === 'upload'">
+                        <section class="settings-section">
+                            <div class="settings-section-heading">
+                                <h3>文件组织</h3>
+                            </div>
+                            <div class="settings-field-grid">
+                                <div class="setting-group">
+                                    <label class="field-label" for="default_path">默认存储路径</label>
+                                    <input
+                                        id="default_path"
+                                        v-model="systemSettings.default_path"
+                                        type="text"
+                                        class="input-modern"
+                                        placeholder="例如 /uploads/{year}/{month}/{day}"
+                                        @blur="handleFieldBlur('default_path', systemSettings.default_path)"
+                                    >
+                                    <p class="field-hint">
+                                        支持 {year}、{month}、{day}、{hour}、{minute}、{random}、{uuid} 和 {role}。
+                                    </p>
+                                </div>
+
+                                <div class="setting-group">
+                                    <label class="field-label" for="file_name">文件名模板</label>
+                                    <input
+                                        id="file_name"
+                                        v-model="systemSettings.file_name"
+                                        type="text"
+                                        class="input-modern"
+                                        :class="{ 'cursor-not-allowed opacity-60': systemSettings.save_original_name }"
+                                        :disabled="systemSettings.save_original_name"
+                                        placeholder="例如 {random}"
+                                        @blur="handleFieldBlur('file_name', systemSettings.file_name)"
+                                    >
+                                    <p class="field-hint">
+                                        支持 {random}、{year}、{month}、{day}、{hour}、{minute} 和 {second}。
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="settings-toggle-row mt-5">
                                 <div>
-                                    <p class="setting-row-title">保存原图</p>
+                                    <p class="setting-row-title">保留原文件名</p>
+                                    <p class="setting-row-hint">使用上传文件的基础名称，扩展名仍按最终图片格式调整；启用后文件名模板不生效。</p>
                                 </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input 
-                                        type="checkbox" 
-                                        v-model="systemSettings.original_image"
+                                <label class="settings-switch" title="保留原文件名">
+                                    <input
+                                        v-model="systemSettings.save_original_name"
+                                        type="checkbox"
                                         class="sr-only peer"
-                                        @change="handleSwitchChange('original_image', systemSettings.original_image)"
+                                        @change="handleSwitchChange('save_original_name', systemSettings.save_original_name)"
                                     >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
+                                    <span class="switch-track"></span>
+                                    <span class="switch-thumb"></span>
                                 </label>
                             </div>
-                            
-                            <!-- 其他开关省略（和之前一致） -->
-                            <div v-show="activeSettingTab === 'image'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">保存 WEBP 格式</p>
-                                </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input 
-                                        type="checkbox" 
-                                        v-model="systemSettings.save_webp"
-                                        class="sr-only peer"
-                                        @change="handleSwitchChange('save_webp', systemSettings.save_webp)"
-                                    >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
+                        </section>
+
+                        <section class="settings-section">
+                            <div class="settings-section-heading">
+                                <h3>上传限制</h3>
                             </div>
-                            <div v-show="activeSettingTab === 'image'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">生成缩略图</p>
-                                    <p class="setting-row-hint">缩略图用于后台预览，生成时会增加少量上传耗时。</p>
+                            <div class="settings-field-grid">
+                                <div class="setting-group">
+                                    <label class="field-label" for="max_file_size">最大文件大小</label>
+                                    <div class="settings-input-suffix">
+                                        <input
+                                            id="max_file_size"
+                                            v-model.number="systemSettings.max_file_size"
+                                            type="number"
+                                            min="1"
+                                            class="input-modern pr-16"
+                                            @blur="handleFieldBlur('max_file_size', systemSettings.max_file_size)"
+                                        >
+                                        <span>字节</span>
+                                    </div>
+                                    <p class="field-hint">默认 10485760 字节（10 MB）。</p>
                                 </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input 
-                                        type="checkbox" 
+
+                                <div class="setting-group">
+                                    <label class="field-label" for="allowed_types">允许上传的图片类型</label>
+                                    <textarea
+                                        id="allowed_types"
+                                        v-model="systemSettings.allowed_types"
+                                        class="input-modern min-h-[88px] leading-6"
+                                        rows="2"
+                                        placeholder="image/jpeg,image/png,image/webp"
+                                        @blur="handleFieldBlur('allowed_types', systemSettings.allowed_types)"
+                                    ></textarea>
+                                    <p class="field-hint">使用英文逗号分隔 MIME 类型。</p>
+                                </div>
+                            </div>
+                        </section>
+                    </template>
+
+                    <template v-else-if="activeSettingTab === 'image'">
+                        <section class="settings-section">
+                            <div class="settings-section-heading">
+                                <h3>主图保存</h3>
+                            </div>
+
+                            <div class="settings-toggle-list">
+                                <div class="settings-toggle-row">
+                                    <div>
+                                        <p class="setting-row-title">保存原图</p>
+                                        <p class="setting-row-hint">主图保持上传时的字节、格式和扩展名，不压缩、不转换，也不添加水印。</p>
+                                    </div>
+                                    <label class="settings-switch" title="保存原图">
+                                        <input
+                                            v-model="systemSettings.original_image"
+                                            type="checkbox"
+                                            class="sr-only peer"
+                                            @change="handleSwitchChange('original_image', systemSettings.original_image)"
+                                        >
+                                        <span class="switch-track"></span>
+                                        <span class="switch-thumb"></span>
+                                    </label>
+                                </div>
+
+                                <div class="settings-toggle-row" :class="{ 'opacity-50': systemSettings.original_image }">
+                                    <div>
+                                        <p class="setting-row-title">保存 WebP 格式</p>
+                                    </div>
+                                    <label
+                                        class="settings-switch"
+                                        :class="systemSettings.original_image ? 'cursor-not-allowed' : ''"
+                                        title="保存 WebP 格式"
+                                    >
+                                        <input
+                                            v-model="systemSettings.save_webp"
+                                            type="checkbox"
+                                            class="sr-only peer"
+                                            :disabled="systemSettings.original_image"
+                                            @change="handleSwitchChange('save_webp', systemSettings.save_webp)"
+                                        >
+                                        <span class="switch-track"></span>
+                                        <span class="switch-thumb"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <p v-if="systemSettings.original_image" class="settings-notice mt-4">
+                                保存原图已启用，WebP、压缩质量、跳过压缩格式和水印设置暂不参与主图处理。
+                            </p>
+
+                            <div class="settings-field-grid mt-5">
+                                <div class="setting-group" :class="{ 'opacity-50': systemSettings.original_image }">
+                                    <label class="field-label" for="main_image_quality">主图压缩质量</label>
+                                    <input
+                                        id="main_image_quality"
+                                        v-model.number="systemSettings.main_image_quality"
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        class="input-modern"
+                                        :disabled="systemSettings.original_image"
+                                        placeholder="85"
+                                        @blur="handleFieldBlur('main_image_quality', systemSettings.main_image_quality)"
+                                    >
+                                    <p class="field-hint">范围 0-100，数值越高画质越好、体积越大。</p>
+                                </div>
+
+                                <div class="setting-group" :class="{ 'opacity-50': systemSettings.original_image }">
+                                    <label class="field-label" for="skip_compress_formats">跳过压缩格式</label>
+                                    <input
+                                        id="skip_compress_formats"
+                                        v-model="systemSettings.skip_compress_formats"
+                                        type="text"
+                                        class="input-modern"
+                                        :disabled="systemSettings.original_image"
+                                        placeholder="image/gif,image/svg+xml,image/webp"
+                                        @blur="handleFieldBlur('skip_compress_formats', systemSettings.skip_compress_formats)"
+                                    >
+                                    <p class="field-hint">支持 MIME 或扩展名，使用英文逗号分隔；命中后主图保持原格式。</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="settings-section">
+                            <div class="settings-section-heading settings-section-heading-inline">
+                                <div>
+                                    <h3>缩略图</h3>
+                                    <p>用于图库快速预览，不影响对外主图链接。</p>
+                                </div>
+                                <label class="settings-switch" title="生成缩略图">
+                                    <input
                                         v-model="systemSettings.thumbnail"
+                                        type="checkbox"
                                         class="sr-only peer"
                                         @change="handleSwitchChange('thumbnail', systemSettings.thumbnail)"
                                     >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
+                                    <span class="switch-track"></span>
+                                    <span class="switch-thumb"></span>
                                 </label>
                             </div>
-                            <div v-show="activeSettingTab === 'security'" class="setting-row">
+                        </section>
+
+                        <section class="settings-section">
+                            <div class="settings-section-heading settings-section-heading-inline">
                                 <div>
-                                    <p class="setting-row-title">允许游客上传</p>
+                                    <h3>图片水印</h3>
+                                    <p v-if="watermarkUnavailableReason" class="text-amber-600 dark:text-amber-300">
+                                        {{ watermarkUnavailableReason }}
+                                    </p>
+                                    <p v-else>仅处理新上传且未跳过压缩的主图。</p>
                                 </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input 
-                                        type="checkbox" 
-                                        v-model="systemSettings.tourist"
-                                        class="sr-only peer"
-                                        @change="handleSwitchChange('tourist', systemSettings.tourist)"
-                                    >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
-                            </div>
-                            <div v-show="activeSettingTab === 'security'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">开放用户注册</p>
-                                    <p class="setting-row-hint">注册用户固定为普通用户，注册完成后需要自行登录。</p>
-                                </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
+                                <label
+                                    class="settings-switch"
+                                    :class="watermarkUnavailableReason ? 'cursor-not-allowed opacity-60' : ''"
+                                    title="图片水印"
+                                >
                                     <input
+                                        v-model="systemSettings.watermark_enable"
                                         type="checkbox"
-                                        v-model="systemSettings.start_register"
                                         class="sr-only peer"
-                                        @change="handleSwitchChange('start_register', systemSettings.start_register)"
+                                        :disabled="Boolean(watermarkUnavailableReason)"
+                                        @change="handleSwitchChange('watermark_enable', systemSettings.watermark_enable)"
                                     >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
+                                    <span class="switch-track"></span>
+                                    <span class="switch-thumb"></span>
                                 </label>
                             </div>
-                            <div v-show="activeSettingTab === 'notification'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">启用 TG 通知</p>
-                                    <p class="setting-row-hint">国内服务器不要开启 TG 通知。</p>
+
+                            <div
+                                class="settings-field-grid mt-5"
+                                :class="{ 'opacity-50': watermarkFieldsDisabled }"
+                            >
+                                <div class="setting-group md:col-span-2">
+                                    <label class="field-label" for="watermark_text">水印文本</label>
+                                    <input
+                                        id="watermark_text"
+                                        v-model="systemSettings.watermark_text"
+                                        type="text"
+                                        class="input-modern"
+                                        :disabled="watermarkFieldsDisabled"
+                                        @blur="handleFieldBlur('watermark_text', systemSettings.watermark_text)"
+                                    >
                                 </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input 
-                                        type="checkbox" 
-                                        v-model="systemSettings.tg_notice"
-                                        class="sr-only peer"
-                                        @change="handleSwitchChange('tg_notice', systemSettings.tg_notice)"
+
+                                <div class="setting-group">
+                                    <label class="field-label" for="watermark_pos">水印位置</label>
+                                    <select
+                                        id="watermark_pos"
+                                        v-model="systemSettings.watermark_pos"
+                                        class="input-modern"
+                                        :disabled="watermarkFieldsDisabled"
+                                        @change="handleSelectChange('watermark_pos', systemSettings.watermark_pos)"
                                     >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
-                            </div>
-                            <div v-show="activeSettingTab === 'security'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">启用 POW 验证</p>
+                                        <option value="top-left">左上角</option>
+                                        <option value="top-right">右上角</option>
+                                        <option value="bottom-left">左下角</option>
+                                        <option value="bottom-right">右下角</option>
+                                        <option value="center">居中</option>
+                                    </select>
                                 </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input 
-                                        type="checkbox" 
-                                        v-model="systemSettings.pow_verify"
-                                        class="sr-only peer"
-                                        @change="handleSwitchChange('pow_verify', systemSettings.pow_verify)"
+
+                                <div class="setting-group">
+                                    <label class="field-label" for="watermark_size">字体大小</label>
+                                    <input
+                                        id="watermark_size"
+                                        v-model.number="systemSettings.watermark_size"
+                                        type="number"
+                                        min="1"
+                                        max="100"
+                                        class="input-modern"
+                                        :disabled="watermarkFieldsDisabled"
+                                        @blur="handleFieldBlur('watermark_size', systemSettings.watermark_size)"
                                     >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
+                                </div>
+
+                                <div class="setting-group">
+                                    <label class="field-label" for="watermark_color">字体颜色</label>
+                                    <div class="settings-color-row">
+                                        <input
+                                            v-model="systemSettings.watermark_color"
+                                            type="color"
+                                            class="settings-color-swatch"
+                                            :disabled="watermarkFieldsDisabled"
+                                            aria-label="选择水印字体颜色"
+                                            @change="handleFieldBlur('watermark_color', systemSettings.watermark_color)"
+                                        >
+                                        <input
+                                            id="watermark_color"
+                                            v-model="systemSettings.watermark_color"
+                                            type="text"
+                                            class="input-modern"
+                                            :disabled="watermarkFieldsDisabled"
+                                            placeholder="#000000"
+                                            @blur="handleFieldBlur('watermark_color', systemSettings.watermark_color)"
+                                        >
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="mb-2 flex items-center justify-between gap-3">
+                                        <label class="field-label mb-0" for="watermark_opac">透明度</label>
+                                        <span class="settings-range-value">{{ systemSettings.watermark_opac }}</span>
+                                    </div>
+                                    <div class="settings-range-row">
+                                        <input
+                                            v-model.number="systemSettings.watermark_opac"
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.05"
+                                            class="settings-range"
+                                            :disabled="watermarkFieldsDisabled"
+                                            aria-label="水印透明度"
+                                            @change="handleFieldBlur('watermark_opac', systemSettings.watermark_opac)"
+                                        >
+                                        <input
+                                            id="watermark_opac"
+                                            v-model.number="systemSettings.watermark_opac"
+                                            type="number"
+                                            min="0"
+                                            max="1"
+                                            step="0.05"
+                                            class="input-modern settings-number-input"
+                                            :disabled="watermarkFieldsDisabled"
+                                            @blur="handleFieldBlur('watermark_opac', systemSettings.watermark_opac)"
+                                        >
+                                    </div>
+                                </div>
                             </div>
-                            <div v-show="activeSettingTab === 'image'" class="setting-row">
+                        </section>
+                    </template>
+
+                    <template v-else-if="activeSettingTab === 'security'">
+                        <section class="settings-section">
+                            <div class="settings-section-heading">
+                                <h3>账号访问</h3>
+                            </div>
+                            <div class="settings-toggle-list">
+                                <div class="settings-toggle-row">
+                                    <div>
+                                        <p class="setting-row-title">允许游客上传</p>
+                                    </div>
+                                    <label class="settings-switch" title="允许游客上传">
+                                        <input
+                                            v-model="systemSettings.tourist"
+                                            type="checkbox"
+                                            class="sr-only peer"
+                                            @change="handleSwitchChange('tourist', systemSettings.tourist)"
+                                        >
+                                        <span class="switch-track"></span>
+                                        <span class="switch-thumb"></span>
+                                    </label>
+                                </div>
+
+                                <div class="settings-toggle-row">
+                                    <div>
+                                        <p class="setting-row-title">开放用户注册</p>
+                                        <p class="setting-row-hint">新账号固定为普通用户，注册后需要自行登录。</p>
+                                    </div>
+                                    <label class="settings-switch" title="开放用户注册">
+                                        <input
+                                            v-model="systemSettings.start_register"
+                                            type="checkbox"
+                                            class="sr-only peer"
+                                            @change="handleSwitchChange('start_register', systemSettings.start_register)"
+                                        >
+                                        <span class="switch-track"></span>
+                                        <span class="switch-thumb"></span>
+                                    </label>
+                                </div>
+
+                                <div class="settings-toggle-row">
+                                    <div>
+                                        <p class="setting-row-title">启用 PoW 验证</p>
+                                    </div>
+                                    <label class="settings-switch" title="启用 PoW 验证">
+                                        <input
+                                            v-model="systemSettings.pow_verify"
+                                            type="checkbox"
+                                            class="sr-only peer"
+                                            @change="handleSwitchChange('pow_verify', systemSettings.pow_verify)"
+                                        >
+                                        <span class="switch-track"></span>
+                                        <span class="switch-thumb"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="settings-section">
+                            <div class="settings-section-heading settings-section-heading-inline">
                                 <div>
-                                    <p class="setting-row-title">开启图片水印</p>
-                                    <p class="setting-row-hint">
-                                        {{ hasPublicImageDomain ? '已配置图片直链域名，图片水印不会生效。' : '新上传的图片自动添加水印，历史图片不会补加。' }}
+                                    <h3>图片来源保护</h3>
+                                    <p v-if="hasPublicImageDomain" class="text-amber-600 dark:text-amber-300">
+                                        已配置图片直链域名，图片不会经过系统代理，来源白名单无法生效。
                                     </p>
                                 </div>
                                 <label
-                                    class="relative inline-flex items-center self-end md:self-center"
-                                    :class="hasPublicImageDomain ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'"
+                                    class="settings-switch"
+                                    :class="hasPublicImageDomain ? 'cursor-not-allowed opacity-60' : ''"
+                                    title="来源白名单"
                                 >
-                                    <input 
-                                        type="checkbox" 
-                                        v-model="systemSettings.watermark_enable"
-                                        class="sr-only peer"
-                                        :disabled="hasPublicImageDomain"
-                                        @change="handleSwitchChange('watermark_enable', systemSettings.watermark_enable)"
-                                    >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
-                            </div>
-                            <div v-show="activeSettingTab === 'security'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">开启来源白名单</p>
-                                    <p v-if="hasPublicImageDomain" class="setting-row-hint">已配置图片直链域名，直接访问不会经过系统代理。</p>
-                                </div>
-                                <label
-                                    class="relative inline-flex items-center self-end md:self-center"
-                                    :class="hasPublicImageDomain ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'"
-                                >
-                                    <input 
-                                        type="checkbox" 
+                                    <input
                                         v-model="systemSettings.referer_white_enable"
+                                        type="checkbox"
                                         class="sr-only peer"
                                         :disabled="hasPublicImageDomain"
                                         @change="handleSwitchChange('referer_white_enable', systemSettings.referer_white_enable)"
                                     >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
+                                    <span class="switch-track"></span>
+                                    <span class="switch-thumb"></span>
                                 </label>
                             </div>
-                            <div v-show="activeSettingTab === 'api'" class="setting-row">
+
+                            <div class="setting-group mt-5" :class="{ 'opacity-50': refererListDisabled }">
+                                <label class="field-label" for="referer_white_list">允许的来源域名</label>
+                                <textarea
+                                    id="referer_white_list"
+                                    v-model="systemSettings.referer_white_list"
+                                    class="input-modern min-h-[112px] leading-6"
+                                    :disabled="refererListDisabled"
+                                    placeholder="example.com,images.example.com"
+                                    rows="4"
+                                    @blur="handleFieldBlur('referer_white_list', systemSettings.referer_white_list)"
+                                ></textarea>
+                                <p class="field-hint">只填写域名，多个域名使用英文逗号分隔；直接打开图片不受限制。</p>
+                            </div>
+                        </section>
+                    </template>
+
+                    <template v-else-if="activeSettingTab === 'integrations'">
+                        <section v-if="hasSettingPermission('setting:notification')" class="settings-section">
+                            <div class="settings-section-heading settings-section-heading-inline">
                                 <div>
-                                    <p class="setting-row-title">启用 API</p>
-                                    <p class="setting-row-hint">启用 API 前必须先设置 API Token。</p>
+                                    <h3>Telegram 通知</h3>
                                 </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input 
-                                        type="checkbox" 
+                                <label class="settings-switch" title="Telegram 通知">
+                                    <input
+                                        v-model="systemSettings.tg_notice"
+                                        type="checkbox"
+                                        class="sr-only peer"
+                                        @change="handleSwitchChange('tg_notice', systemSettings.tg_notice)"
+                                    >
+                                    <span class="switch-track"></span>
+                                    <span class="switch-thumb"></span>
+                                </label>
+                            </div>
+
+                            <div class="settings-field-grid mt-5">
+                                <div class="setting-group">
+                                    <label class="field-label" for="tg_bot_token">Bot Token</label>
+                                    <input
+                                        id="tg_bot_token"
+                                        v-model="systemSettings.tg_bot_token"
+                                        type="password"
+                                        class="input-modern"
+                                        :placeholder="systemSettings.tg_bot_token_configured ? '已配置，留空表示不修改' : '请输入 Bot Token'"
+                                        @blur="handleFieldBlur('tg_bot_token', systemSettings.tg_bot_token)"
+                                    >
+                                    <p class="field-hint">{{ systemSettings.tg_bot_token_configured ? '当前已配置。' : '启用通知前必须配置。' }}</p>
+                                </div>
+
+                                <div class="setting-group">
+                                    <label class="field-label" for="tg_receivers">通知接收者</label>
+                                    <input
+                                        id="tg_receivers"
+                                        v-model="systemSettings.tg_receivers"
+                                        type="text"
+                                        class="input-modern"
+                                        placeholder="Telegram 用户 ID，多个以英文逗号分隔"
+                                        @blur="handleFieldBlur('tg_receivers', systemSettings.tg_receivers)"
+                                    >
+                                </div>
+
+                                <div class="setting-group md:col-span-2">
+                                    <label class="field-label" for="tg_notice_text">通知文本</label>
+                                    <textarea
+                                        id="tg_notice_text"
+                                        v-model="systemSettings.tg_notice_text"
+                                        class="input-modern min-h-[88px] leading-6"
+                                        rows="2"
+                                        @blur="handleFieldBlur('tg_notice_text', systemSettings.tg_notice_text)"
+                                    ></textarea>
+                                    <p class="field-hint">可使用 {username}、{date}、{filename} 和 {StorageType}。</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section v-if="hasSettingPermission('setting:api')" class="settings-section">
+                            <div class="settings-section-heading settings-section-heading-inline">
+                                <div>
+                                    <h3>上传 API</h3>
+                                    <p>通过 API Token 调用图片上传接口。</p>
+                                </div>
+                                <label class="settings-switch" title="上传 API">
+                                    <input
                                         v-model="systemSettings.start_api"
+                                        type="checkbox"
                                         class="sr-only peer"
                                         @change="handleSwitchChange('start_api', systemSettings.start_api)"
                                     >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
+                                    <span class="switch-track"></span>
+                                    <span class="switch-thumb"></span>
                                 </label>
                             </div>
-                            <div v-show="activeSettingTab === 'upload'" class="setting-row">
-                                <div>
-                                    <p class="setting-row-title">保存源文件名</p>
-                                    <p class="setting-row-hint">启用保存原图功能时将不自动重命名，”上传文件名称”设置也将失效。</p>
-                                </div>
-                                <label class="relative inline-flex cursor-pointer items-center self-end md:self-center">
-                                    <input 
-                                        type="checkbox" 
-                                        v-model="systemSettings.save_original_name"
-                                        class="sr-only peer"
-                                        @change="handleSwitchChange('save_original_name', systemSettings.save_original_name)"
-                                    >
-                                    <div class="switch-track"></div>
-                                    <div class="switch-thumb"></div>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
+                            <div class="setting-group mt-5">
+                                <label class="field-label" for="api_token">API Token</label>
+                                <div class="settings-token-row">
+                                    <input
+                                        id="api_token"
+                                        v-model="systemSettings.api_token"
+                                        type="text"
+                                        class="input-modern min-w-0"
+                                        :placeholder="systemSettings.api_token_configured ? '已配置，输入新 Token 可替换' : '请输入或生成 API Token'"
+                                        @blur="handleFieldBlur('api_token', systemSettings.api_token)"
+                                    >
+                                    <button type="button" class="soft-button shrink-0" @click="generateApiToken">
+                                        <i class="ri-refresh-line"></i>
+                                        生成
+                                    </button>
+                                </div>
+                                <p class="field-hint">
+                                    请求头使用 <code>Authorization: oneimg_token=&lt;API Token&gt;</code>。新 Token 仅在本次页面中显示。
+                                </p>
+                            </div>
+                        </section>
+                    </template>
+
+                    <template v-else-if="activeSettingTab === 'site'">
+                        <section class="settings-section">
+                            <div class="settings-section-heading">
+                                <h3>站点信息</h3>
+                            </div>
+                            <div class="settings-field-grid">
+                                <div class="setting-group">
+                                    <label class="field-label" for="seo_title">网站标题</label>
+                                    <input
+                                        id="seo_title"
+                                        v-model="systemSettings.seo_title"
+                                        type="text"
+                                        class="input-modern"
+                                        @blur="handleFieldBlur('seo_title', systemSettings.seo_title)"
+                                    >
+                                </div>
+
+                                <div class="setting-group">
+                                    <label class="field-label" for="seo_icon">网站图标</label>
+                                    <input
+                                        id="seo_icon"
+                                        v-model="systemSettings.seo_icon"
+                                        type="text"
+                                        class="input-modern"
+                                        placeholder="https://example.com/favicon.ico"
+                                        @blur="handleFieldBlur('seo_icon', systemSettings.seo_icon)"
+                                    >
+                                </div>
+
+                                <div class="setting-group md:col-span-2">
+                                    <label class="field-label" for="seo_description">网站描述</label>
+                                    <textarea
+                                        id="seo_description"
+                                        v-model="systemSettings.seo_description"
+                                        class="input-modern min-h-[96px] leading-6"
+                                        rows="3"
+                                        @blur="handleFieldBlur('seo_description', systemSettings.seo_description)"
+                                    ></textarea>
+                                </div>
+
+                                <div class="setting-group md:col-span-2">
+                                    <label class="field-label" for="seo_keywords">网站关键词</label>
+                                    <textarea
+                                        id="seo_keywords"
+                                        v-model="systemSettings.seo_keywords"
+                                        class="input-modern min-h-[88px] leading-6"
+                                        rows="2"
+                                        @blur="handleFieldBlur('seo_keywords', systemSettings.seo_keywords)"
+                                    ></textarea>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="settings-section">
+                            <div class="settings-section-heading">
+                                <h3>备案信息</h3>
+                            </div>
+                            <div class="settings-field-grid">
+                                <div class="setting-group">
+                                    <label class="field-label" for="seo_icp">ICP备案号</label>
+                                    <input
+                                        id="seo_icp"
+                                        v-model="systemSettings.seo_icp"
+                                        type="text"
+                                        class="input-modern"
+                                        @blur="handleFieldBlur('seo_icp', systemSettings.seo_icp)"
+                                    >
+                                    <p class="field-hint">填写后显示在页面底部。</p>
+                                </div>
+
+                                <div class="setting-group">
+                                    <label class="field-label" for="public_security">公安备案号</label>
+                                    <input
+                                        id="public_security"
+                                        v-model="systemSettings.public_security"
+                                        type="text"
+                                        class="input-modern"
+                                        @blur="handleFieldBlur('public_security', systemSettings.public_security)"
+                                    >
+                                    <p class="field-hint">填写后显示在页面底部。</p>
+                                </div>
+                            </div>
+                        </section>
+                    </template>
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, computed } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import message from '@/utils/message.js'
-// 存储相关
+
+const route = useRoute()
+const router = useRouter()
+
 const presetBuckets = ref([
-  { id: "1", name: '默认存储', type: "default" },
-]);
-// 系统设置项
+    { id: '1', name: '默认存储', type: 'default' },
+])
+
 const systemSettings = reactive({
     id: 1,
     original_image: false,
@@ -758,12 +766,12 @@ const systemSettings = reactive({
     tg_bot_token_configured: false,
     tg_receivers: '',
     tg_notice_text: '',
-    watermark_enable: '',
+    watermark_enable: false,
     watermark_text: '',
     watermark_pos: '',
-    watermark_size: '',
-    watermark_color: '',
-    watermark_opac: '',
+    watermark_size: 10,
+    watermark_color: '#000000',
+    watermark_opac: 0.5,
     referer_white_list: '',
     referer_white_enable: false,
     seo_title: '',
@@ -785,23 +793,29 @@ const systemSettings = reactive({
     default_path: '/uploads/{year}/{moon}',
     file_name: '{random}',
     public_image_domain: '',
-    cdn_domain: ''
 })
 
 const SETTING_TABS = [
-    { key: 'upload', permission: 'setting:upload', label: '上传与存储', icon: 'ri-upload-cloud-2-line' },
-    { key: 'image', permission: 'setting:image', label: '图片处理', icon: 'ri-image-edit-line' },
-    { key: 'security', permission: 'setting:security', label: '安全与登录', icon: 'ri-shield-keyhole-line' },
-    { key: 'notification', permission: 'setting:notification', label: '通知', icon: 'ri-notification-3-line' },
-    { key: 'api', permission: 'setting:api', label: 'API', icon: 'ri-code-box-line' },
-    { key: 'seo', permission: 'setting:seo', label: 'SEO', icon: 'ri-seo-line' },
+    { key: 'storage', permissions: ['setting:upload'], label: '存储设置', icon: 'ri-database-2-line' },
+    { key: 'upload', permissions: ['setting:upload'], label: '上传规则', icon: 'ri-upload-cloud-2-line' },
+    { key: 'image', permissions: ['setting:image'], label: '图片处理', icon: 'ri-image-edit-line' },
+    { key: 'security', permissions: ['setting:security'], label: '访问安全', icon: 'ri-shield-keyhole-line' },
+    { key: 'integrations', permissions: ['setting:notification', 'setting:api'], label: '集成服务', icon: 'ri-plug-line' },
+    { key: 'site', permissions: ['setting:seo'], label: '站点信息', icon: 'ri-global-line' },
 ]
+
 const settingPermissions = ref([])
 const activeSettingTab = ref('')
-const availableSettingTabs = computed(() => SETTING_TABS.filter(tab => settingPermissions.value.includes(tab.permission)))
-const activeSettingTabLabel = computed(() => availableSettingTabs.value.find(tab => tab.key === activeSettingTab.value)?.label || '系统配置')
-
 const updateSetting = reactive({})
+const saveTimers = new Map()
+const saveQueues = new Map()
+
+const hasSettingPermission = (permission) => settingPermissions.value.includes(permission)
+const availableSettingTabs = computed(() => SETTING_TABS.filter(tab => tab.permissions.some(hasSettingPermission)))
+const currentSettingTab = computed(() => availableSettingTabs.value.find(tab => tab.key === activeSettingTab.value))
+const activeSettingTabLabel = computed(() => currentSettingTab.value?.label || '系统设置')
+const activeSettingTabIcon = computed(() => currentSettingTab.value?.icon || 'ri-settings-4-line')
+
 const publicDomainStorageTypes = ['s3', 'r2']
 const publicDomainAffectedSettings = [
     'watermark_enable',
@@ -811,37 +825,62 @@ const publicDomainAffectedSettings = [
     'watermark_opac',
     'watermark_pos',
     'referer_white_enable',
-    'referer_white_list'
+    'referer_white_list',
 ]
 
 const currentDefaultBucket = computed(() => {
     return presetBuckets.value.find(bucket => String(bucket.id) === String(systemSettings.default_storage))
 })
 
+const maxFileSizeReadable = computed(() => {
+    const bytes = Number(systemSettings.max_file_size)
+    if (!Number.isFinite(bytes) || bytes <= 0) return '--'
+
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    let value = bytes
+    let unitIndex = 0
+    while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024
+        unitIndex += 1
+    }
+    const digits = value >= 10 || Number.isInteger(value) ? 0 : 1
+    return `${value.toFixed(digits)} ${units[unitIndex]}`
+})
+
 const supportsPublicImageDomain = computed(() => {
     return publicDomainStorageTypes.includes(currentDefaultBucket.value?.type)
 })
 
-const hasPublicImageDomain = computed(() => {
-    return String(systemSettings.public_image_domain || '').trim() !== ''
-})
-
-const publicImageDomainUnavailable = computed(() => {
-    return !supportsPublicImageDomain.value
-})
-
-const publicImageDomainInputDisabled = computed(() => {
-    return publicImageDomainUnavailable.value && !hasPublicImageDomain.value
-})
+const hasPublicImageDomain = computed(() => String(systemSettings.public_image_domain || '').trim() !== '')
+const publicImageDomainUnavailable = computed(() => !supportsPublicImageDomain.value)
+const publicImageDomainInputDisabled = computed(() => publicImageDomainUnavailable.value && !hasPublicImageDomain.value)
 
 const publicImageDomainHint = computed(() => {
     if (!supportsPublicImageDomain.value) {
         return '当前默认存储不支持图片直链域名，仅 S3/R2 存储可用。'
     }
     if (hasPublicImageDomain.value) {
-        return '启用后图片链接将直接使用该域名，图片水印文本、来源白名单等依赖系统代理的功能不会生效。'
+        return '图片链接将直接使用该域名，水印和来源白名单等代理能力不会生效。'
     }
-    return '填写 S3/R2 绑定的直链域名后，返回给用户的图片链接会直接使用该域名。'
+    return '填写 S3/R2 绑定的直链域名后，返回链接将直接使用该域名。'
+})
+
+const watermarkUnavailableReason = computed(() => {
+    if (hasPublicImageDomain.value) {
+        return '已配置图片直链域名，水印不会生效。'
+    }
+    if (systemSettings.original_image) {
+        return '保存原图已启用，主图不会添加水印。'
+    }
+    return ''
+})
+
+const watermarkFieldsDisabled = computed(() => {
+    return Boolean(watermarkUnavailableReason.value) || !systemSettings.watermark_enable
+})
+
+const refererListDisabled = computed(() => {
+    return hasPublicImageDomain.value || !systemSettings.referer_white_enable
 })
 
 const bucketSupportsPublicImageDomain = (bucketId) => {
@@ -855,118 +894,102 @@ const disabledByPublicImageDomain = (key) => {
 
 const normalizeDomain = (value) => {
     let domain = String(value || '').trim()
-    if (domain === '') {
-        return ''
-    }
-    if (!domain.includes('://')) {
-        domain = `https://${domain}`
-    }
+    if (domain === '') return ''
+    if (!domain.includes('://')) domain = `https://${domain}`
     return domain.replace(/\/+$/, '')
 }
 
-const normalizePublicImageDomain = normalizeDomain
+const getRequestHeaders = () => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+})
 
-// 加载状态
-const isUpdating = ref(false)
-let debounceTimer = null
+const valuesMatch = (left, right) => String(left) === String(right)
 
-// 统一请求头配置（复用）
-const getRequestHeaders = () => {
-    return {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-    }
-}
+const persistSetting = async (key, value) => {
+    const previousValue = updateSetting[key]
+    try {
+        const response = await fetch('/api/settings/update', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ key, value }),
+        })
+        const result = await response.json()
 
-const saveSetting = async (key, value) => {
-    if (updateSetting?.[key] === value && !['tg_bot_token', 'api_token'].includes(key)) {
-        return
-    }
-    clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(async () => {
-        try {
-            if (isUpdating.value) return
-            isUpdating.value = true
-
-            const response = await fetch('/api/settings/update', {
-                method: 'POST',
-                headers: getRequestHeaders(),
-                body: JSON.stringify({
-                    key: key,
-                    value: value
-                })
-            })
-            
-            const result = await response.json()
-            
-            if (response.ok && result.code === 200) {
-                message.success(`更新成功`)
-                if (key === 'tg_bot_token') {
-                    systemSettings.tg_bot_token = ''
-                    systemSettings.tg_bot_token_configured = value !== '' || systemSettings.tg_bot_token_configured
-                    updateSetting.tg_bot_token = ''
-                    updateSetting.tg_bot_token_configured = systemSettings.tg_bot_token_configured
-                } else if (key === 'api_token') {
-                    systemSettings.api_token_configured = value !== '' || systemSettings.api_token_configured
-                    updateSetting.api_token_configured = systemSettings.api_token_configured
-                } else {
-                    updateSetting[key] = value
-                }
-            } else {
-                // 更新失败自动回滚
-                if (Object.prototype.hasOwnProperty.call(updateSetting, key)) {
-                    systemSettings[key] = updateSetting[key]
-                }
-                message.error(`更新失败：${result.message || '未知错误'}`)
-            }
-        } catch (error) {
-            console.error(`保存失败:`, error)
-            message.error(`更新失败：网络异常`)
-        } finally {
-            isUpdating.value = false
+        if (!response.ok || result.code !== 200) {
+            throw new Error(result.message || '未知错误')
         }
-    }, 300)
+
+        if (key === 'tg_bot_token') {
+            if (systemSettings.tg_bot_token === value) systemSettings.tg_bot_token = ''
+            systemSettings.tg_bot_token_configured = value !== '' || systemSettings.tg_bot_token_configured
+            updateSetting.tg_bot_token = ''
+            updateSetting.tg_bot_token_configured = systemSettings.tg_bot_token_configured
+        } else if (key === 'api_token') {
+            systemSettings.api_token_configured = value !== '' || systemSettings.api_token_configured
+            updateSetting.api_token_configured = systemSettings.api_token_configured
+        } else {
+            updateSetting[key] = value
+        }
+        message.success('更新成功')
+    } catch (error) {
+        if (valuesMatch(systemSettings[key], value) && Object.prototype.hasOwnProperty.call(updateSetting, key)) {
+            systemSettings[key] = previousValue
+        }
+        console.error('保存失败:', error)
+        message.error(`更新失败：${error.message || '网络异常'}`)
+    }
 }
 
-/**
- * 获取存储列表
- */
+const enqueueSettingSave = (key, value) => {
+    const previousQueue = saveQueues.get(key) || Promise.resolve()
+    const nextQueue = previousQueue
+        .catch(() => undefined)
+        .then(() => persistSetting(key, value))
+    saveQueues.set(key, nextQueue)
+    nextQueue.finally(() => {
+        if (saveQueues.get(key) === nextQueue) saveQueues.delete(key)
+    })
+}
+
+const saveSetting = (key, value) => {
+    if (valuesMatch(updateSetting[key], value) && !['tg_bot_token', 'api_token'].includes(key)) return
+
+    const existingTimer = saveTimers.get(key)
+    if (existingTimer) clearTimeout(existingTimer)
+    saveTimers.set(key, setTimeout(() => {
+        saveTimers.delete(key)
+        enqueueSettingSave(key, value)
+    }, 300))
+}
+
 const getBucketsList = async () => {
-  try {
-    const response = await fetch(`/api/buckets/list`, {
-      method: 'GET',
-      headers: getRequestHeaders(),
-    });
-    
-    const result = await response.json();
-    if (response.ok && result.code === 200) {
-      presetBuckets.value = result.data || [];
-    } else {
-      throw new Error(result.message || '获取存储列表失败');
+    try {
+        const response = await fetch('/api/buckets/list', {
+            method: 'GET',
+            headers: getRequestHeaders(),
+        })
+        const result = await response.json()
+        if (!response.ok || result.code !== 200) {
+            throw new Error(result.message || '获取存储列表失败')
+        }
+        presetBuckets.value = result.data || []
+    } catch (error) {
+        console.error('获取存储列表失败:', error)
+        message.error(error.message || '获取存储列表失败')
     }
-  } catch (error) {
-    console.error('获取存储列表失败:', error);
-    message.error(error.message || '获取存储列表失败');
-  }
-};
+}
 
 const generateApiToken = () => {
-    const token = generate32BitTokenMixCase();
-    systemSettings.api_token = token;
+    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+    let token = ''
+    for (let i = 0; i < 32; i += 1) {
+        token += chars[Math.floor(Math.random() * chars.length)]
+    }
+    systemSettings.api_token = token
     saveSetting('api_token', token)
 }
 
-const generate32BitTokenMixCase = () => {
-  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-  let token = '';
-  for (let i = 0; i < 32; i++) {
-    const randomIndex = Math.floor(Math.random() * chars.length);
-    token += chars[randomIndex];
-  }
-  return token;
-}
-
-// 开关状态变更统一处理方法
 const handleSwitchChange = (key, value) => {
     if (disabledByPublicImageDomain(key)) {
         message.warning('已配置图片直链域名，该设置不会生效')
@@ -974,45 +997,39 @@ const handleSwitchChange = (key, value) => {
         return
     }
 
-    if (key == "start_api") {
+    if (key === 'start_api' && value) {
         if (systemSettings.api_token === '' && !systemSettings.api_token_configured) {
-            message.warning('请先填写API Token')
+            message.warning('请先配置 API Token')
             systemSettings.start_api = false
             return
         }
     }
 
-    if(key == 'tg_notice' && value === true){
-        const isBotTokenEmpty = systemSettings.tg_bot_token === '' || systemSettings.tg_bot_token === null;
-        if ((isBotTokenEmpty && !systemSettings.tg_bot_token_configured) || systemSettings.tg_receivers === '') {
-            if(systemSettings.tg_notice === true){
-                message.warning('请先配置机器人令牌和接收者')
-                setTimeout(() => {
-                    systemSettings.tg_notice = false
-                    saveSetting("tg_notice", 'false')
-                }, 1500)
-                
-                return
-            }
+    if (key === 'tg_notice' && value) {
+        const tokenEmpty = systemSettings.tg_bot_token === '' || systemSettings.tg_bot_token === null
+        if ((tokenEmpty && !systemSettings.tg_bot_token_configured) || systemSettings.tg_receivers === '') {
+            message.warning('请先配置机器人令牌和接收者')
+            systemSettings.tg_notice = false
+            return
         }
     }
+
     saveSetting(key, value)
 }
 
-// 输入框失去焦点处理
-const handleFieldBlur = (key, value) => {
+const handleFieldBlur = (key, rawValue) => {
     if (disabledByPublicImageDomain(key)) {
         message.warning('已配置图片直链域名，该设置不会生效')
         systemSettings[key] = updateSetting[key]
         return
     }
 
-    if (key === 'public_image_domain' || key === 'cdn_domain') {
-        const normalizedValue = normalizeDomain(value)
-        systemSettings[key] = normalizedValue
-        value = normalizedValue
+    let value = rawValue
+    if (key === 'public_image_domain') {
+        value = normalizeDomain(value)
+        systemSettings[key] = value
 
-        if (key === 'public_image_domain' && publicImageDomainUnavailable.value && normalizedValue !== '') {
+        if (key === 'public_image_domain' && publicImageDomainUnavailable.value && value !== '') {
             message.warning('当前默认存储不支持图片直链域名')
             systemSettings.public_image_domain = updateSetting.public_image_domain || ''
             return
@@ -1026,8 +1043,8 @@ const handleFieldBlur = (key, value) => {
             systemSettings.main_image_quality = updateSetting.main_image_quality ?? 85
             return
         }
-        systemSettings.main_image_quality = quality
         value = quality
+        systemSettings.main_image_quality = quality
     }
 
     if (key === 'skip_compress_formats') {
@@ -1040,36 +1057,33 @@ const handleFieldBlur = (key, value) => {
         systemSettings.skip_compress_formats = value
     }
 
-    if (key == 'tg_bot_token' || key == 'tg_receivers') {
-        const isBotTokenEmpty = systemSettings.tg_bot_token === '' || systemSettings.tg_bot_token === null;
-        if ((isBotTokenEmpty && !systemSettings.tg_bot_token_configured) || systemSettings.tg_receivers === '') {
-            if(systemSettings.tg_notice === true){
-                message.warning('请先配置机器人令牌和接收者')
-                setTimeout(() => {
-                    systemSettings.tg_notice = false
-                    saveSetting("tg_notice", 'false')
-                }, 1500)
-                
-                return
+    if (key === 'tg_bot_token' || key === 'tg_receivers') {
+        const tokenEmpty = systemSettings.tg_bot_token === '' || systemSettings.tg_bot_token === null
+        if ((tokenEmpty && !systemSettings.tg_bot_token_configured) || systemSettings.tg_receivers === '') {
+            if (systemSettings.tg_notice) {
+                message.warning('通知配置不完整，Telegram 通知已关闭')
+                systemSettings.tg_notice = false
+                saveSetting('tg_notice', false)
             }
         }
     }
-    const allowEmptyKeys = ['public_image_domain', 'cdn_domain']
-    if ((value === '' && !allowEmptyKeys.includes(key)) || value === updateSetting[key]) {
+
+    const allowEmptyKeys = ['public_image_domain']
+    if (value === '' && !allowEmptyKeys.includes(key)) {
+        if (Object.prototype.hasOwnProperty.call(updateSetting, key)) {
+            systemSettings[key] = updateSetting[key]
+        }
         return
     }
-    if (key == 'api_token' && value === '') {
-        if (systemSettings.start_api && !systemSettings.api_token_configured) {
-            setTimeout(() => {
-                saveSetting("start_api", false)
-                systemSettings.start_api = false
-            }, 500);
-        }
+    if (valuesMatch(value, updateSetting[key])) return
+
+    if (key === 'api_token' && value === '' && systemSettings.start_api && !systemSettings.api_token_configured) {
+        systemSettings.start_api = false
+        saveSetting('start_api', false)
     }
     saveSetting(key, value)
 }
 
-// 下拉框变更处理
 const handleSelectChange = (key, value) => {
     if (key === 'default_storage' && hasPublicImageDomain.value && !bucketSupportsPublicImageDomain(value)) {
         message.warning('图片直链域名仅支持 S3/R2 存储，请先清空该配置')
@@ -1082,51 +1096,58 @@ const handleSelectChange = (key, value) => {
         systemSettings[key] = updateSetting[key]
         return
     }
-
     saveSetting(key, value)
 }
 
-// 获取系统设置
-const getSettings = async () => { 
+const syncActiveTab = () => {
+    const requestedTab = String(route.query.tab || '')
+    const nextTab = availableSettingTabs.value.some(tab => tab.key === requestedTab)
+        ? requestedTab
+        : availableSettingTabs.value[0]?.key || ''
+
+    activeSettingTab.value = nextTab
+    if (nextTab && requestedTab !== nextTab) {
+        void router.replace({ query: { ...route.query, tab: nextTab } })
+    }
+}
+
+const selectSettingTab = (tab) => {
+    if (!availableSettingTabs.value.some(item => item.key === tab)) return
+    activeSettingTab.value = tab
+    if (route.query.tab !== tab) {
+        void router.replace({ query: { ...route.query, tab } })
+    }
+}
+
+const getSettings = async () => {
     try {
         const response = await fetch('/api/settings/get', {
             method: 'GET',
             headers: getRequestHeaders(),
         })
-        
-        if (!response.ok) {
-            throw new Error(`请求失败：${response.status}`)
-        }
-        
+        if (!response.ok) throw new Error(`请求失败：${response.status}`)
+
         const result = await response.json()
-        
-        if (result.code === 200 && result.data) {
-            settingPermissions.value = Array.isArray(result.data.setting_permissions) ? result.data.setting_permissions : []
-            if (!availableSettingTabs.value.some(tab => tab.key === activeSettingTab.value)) {
-                activeSettingTab.value = availableSettingTabs.value[0]?.key || ''
-            }
-            Object.assign(systemSettings, result.data)
-            Object.assign(updateSetting, result.data)
-        } else {
-            message.error(result.message || '获取设置失败：无数据')
+        if (result.code !== 200 || !result.data) {
+            throw new Error(result.message || '获取设置失败：无数据')
         }
+
+        settingPermissions.value = Array.isArray(result.data.setting_permissions)
+            ? result.data.setting_permissions
+            : []
+        Object.assign(systemSettings, result.data)
+        Object.assign(updateSetting, result.data)
+        syncActiveTab()
     } catch (error) {
         console.error('获取设置失败:', error)
         message.error(error.message || '获取设置失败：网络异常')
     }
 }
 
+watch(() => route.query.tab, syncActiveTab)
+
 onMounted(() => {
-    getSettings();
-    getBucketsList();
+    getSettings()
+    getBucketsList()
 })
 </script>
-
-<style scoped>
-.switch-transition {
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.switch-antialias {
-    transform: translateZ(0);
-}
-</style>

@@ -113,6 +113,7 @@ func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 			auth.POST("/buckets", middlewares.RequirePermission("storage:create"), controllers.AddBuckets)
 			auth.POST("/buckets/test", middlewares.RequireAnyPermission("storage:create", "storage:update"), controllers.TestBucketConnection)
 			auth.POST("/buckets/update/:id", middlewares.RequirePermission("storage:update"), controllers.UpdateBuckets)
+			auth.PUT("/buckets/default/cdn", middlewares.RequirePermission("storage:update"), controllers.UpdateDefaultStorageCDN)
 			auth.DELETE("/buckets/:id", middlewares.RequirePermission("storage:delete"), controllers.DeleteBuckets)
 
 			auth.POST("/sessions/clear", middlewares.RequirePermission("setting:security"), controllers.ClearAllSessions)

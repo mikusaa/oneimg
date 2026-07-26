@@ -42,12 +42,12 @@ var permissionNames = map[string]string{
 	"image:delete":           "删除图片",
 	"image:tag:add":          "添加图片标签",
 	"image:tag:delete":       "删除图片标签",
-	"setting:upload":         "上传与存储",
+	"setting:upload":         "存储与上传",
 	"setting:image":          "图片处理",
-	"setting:security":       "安全与登录",
-	"setting:notification":   "通知",
-	"setting:api":            "API",
-	"setting:seo":            "站点SEO",
+	"setting:security":       "访问安全",
+	"setting:notification":   "Telegram通知",
+	"setting:api":            "上传API",
+	"setting:seo":            "站点信息",
 }
 
 var allPermissionCodes = []string{
