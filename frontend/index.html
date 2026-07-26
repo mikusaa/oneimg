@@ -9,16 +9,16 @@
     <script>
         (function() {
             const storageKey = 'theme-preference'
-            const getTheme = () => {
-                if (localStorage.getItem(storageKey)) {
-                    return localStorage.getItem(storageKey)
-                }
-                return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-            }
+            const savedTheme = localStorage.getItem(storageKey)
+            const theme = ['light', 'dark', 'system'].includes(savedTheme) ? savedTheme : 'system'
+            const useDarkTheme = theme === 'dark'
+                || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+
             // 立即应用主题（在页面渲染前添加 dark 类）
-            if (getTheme() === 'dark') {
+            if (useDarkTheme) {
                 document.documentElement.classList.add('dark')
             }
+            document.documentElement.style.colorScheme = useDarkTheme ? 'dark' : 'light'
         })()
     </script>
 </head>

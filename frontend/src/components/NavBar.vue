@@ -20,14 +20,45 @@
       </div>
 
       <div class="flex shrink-0 items-center gap-1.5 md:gap-2">
-        <button
-          type="button"
-          class="inline-flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-white/20 dark:hover:text-white md:h-9 md:w-auto md:gap-1.5 px-3 py-1.5"
-          @click="toggleTheme"
-        >
-          <i :class="isDark ? 'ri-sun-line' : 'ri-moon-clear-line'"></i>
-          <span class="hidden md:inline">{{ isDark ? '浅色' : '深色' }}</span>
-        </button>
+        <div ref="themeMenuRef" class="relative">
+          <button
+            type="button"
+            class="inline-flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-white/20 dark:hover:text-white md:h-9 md:w-auto md:gap-1.5"
+            :aria-label="`主题：${activeThemeOption.label}`"
+            :aria-expanded="themeMenuOpen"
+            :title="`主题：${activeThemeOption.label}`"
+            aria-haspopup="menu"
+            @click="toggleThemeMenu"
+          >
+            <i :class="activeThemeOption.icon"></i>
+            <span class="hidden md:inline">{{ activeThemeOption.label }}</span>
+            <i class="ri-arrow-down-s-line hidden text-base opacity-60 md:inline" aria-hidden="true"></i>
+          </button>
+
+          <div
+            v-if="themeMenuOpen"
+            class="absolute right-0 top-[calc(100%+8px)] z-50 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg dark:border-white/10 dark:bg-slate-900"
+            role="menu"
+            aria-label="主题设置"
+          >
+            <button
+              v-for="option in themeOptions"
+              :key="option.value"
+              type="button"
+              class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition"
+              :class="themePreference === option.value
+                ? 'bg-slate-100 font-medium text-slate-900 dark:bg-white/10 dark:text-white'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white'"
+              role="menuitemradio"
+              :aria-checked="themePreference === option.value"
+              @click="selectTheme(option.value)"
+            >
+              <i :class="option.icon" class="text-base"></i>
+              <span class="flex-1">{{ option.label }}</span>
+              <i v-if="themePreference === option.value" class="ri-check-line text-base" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
 
         <button
           v-if="isLogin"
@@ -103,10 +134,23 @@ const route = useRoute()
 const seoTitle = ref('初春图床')
 const isLogin = ref(false)
 const isDark = ref(false)
+const themePreference = ref('system')
+const themeMenuOpen = ref(false)
+const themeMenuRef = ref(null)
 const sidebarOpen = ref(false)
 const navItems = ref([])
 const storageKey = 'theme-preference'
+const themeOptions = [
+  { value: 'system', label: '跟随设备', icon: 'ri-computer-line' },
+  { value: 'light', label: '浅色', icon: 'ri-sun-line' },
+  { value: 'dark', label: '深色', icon: 'ri-moon-clear-line' },
+]
+const validThemes = new Set(themeOptions.map(option => option.value))
+let colorSchemeMediaQuery = null
 const activeRoutePath = computed(() => route.matched.length > 0 ? route.path : window.location.pathname)
+const activeThemeOption = computed(() => {
+  return themeOptions.find(option => option.value === themePreference.value) || themeOptions[0]
+})
 
 const refreshNavItems = () => {
   const userInfo = getStoredUser()
@@ -160,25 +204,54 @@ const getFirstWord = (title) => {
 }
 
 const detectUserThemePreference = () => {
-  if (typeof localStorage !== 'undefined' && localStorage.getItem(storageKey)) {
-    return localStorage.getItem(storageKey)
-  }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  const savedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : ''
+  return validThemes.has(savedTheme) ? savedTheme : 'system'
 }
 
-const applyTheme = (theme) => {
+const applyResolvedTheme = () => {
   const htmlElement = document.documentElement
-  isDark.value = theme === 'dark'
+  isDark.value = themePreference.value === 'dark'
+    || (themePreference.value === 'system' && colorSchemeMediaQuery?.matches)
+
   if (isDark.value) {
     htmlElement.classList.add('dark')
   } else {
     htmlElement.classList.remove('dark')
   }
-  localStorage.setItem(storageKey, theme)
+  htmlElement.style.colorScheme = isDark.value ? 'dark' : 'light'
 }
 
-const toggleTheme = () => {
-  applyTheme(isDark.value ? 'light' : 'dark')
+const applyTheme = (theme) => {
+  themePreference.value = validThemes.has(theme) ? theme : 'system'
+  localStorage.setItem(storageKey, themePreference.value)
+  applyResolvedTheme()
+}
+
+const toggleThemeMenu = () => {
+  themeMenuOpen.value = !themeMenuOpen.value
+}
+
+const selectTheme = (theme) => {
+  applyTheme(theme)
+  themeMenuOpen.value = false
+}
+
+const handleSystemThemeChange = () => {
+  if (themePreference.value === 'system') {
+    applyResolvedTheme()
+  }
+}
+
+const handleDocumentClick = (event) => {
+  if (themeMenuOpen.value && !themeMenuRef.value?.contains(event.target)) {
+    themeMenuOpen.value = false
+  }
+}
+
+const handleDocumentKeydown = (event) => {
+  if (event.key === 'Escape') {
+    themeMenuOpen.value = false
+  }
 }
 
 const openSidebar = () => {
@@ -232,7 +305,13 @@ const handleResize = () => {
 }
 
 onMounted(() => {
+  colorSchemeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   applyTheme(detectUserThemePreference())
+  if (typeof colorSchemeMediaQuery.addEventListener === 'function') {
+    colorSchemeMediaQuery.addEventListener('change', handleSystemThemeChange)
+  } else {
+    colorSchemeMediaQuery.addListener(handleSystemThemeChange)
+  }
   refreshNavItems()
   window.refreshNavItems = refreshNavItems
   window.seoBus?.onUpdate(handleSeoUpdate)
@@ -240,13 +319,22 @@ onMounted(() => {
     seoTitle.value = window.seoStting.seo_title
   }
   window.addEventListener('resize', handleResize)
+  document.addEventListener('click', handleDocumentClick)
+  document.addEventListener('keydown', handleDocumentKeydown)
 })
 
 onUnmounted(() => {
   if (window.seoBus?.callbacks) {
     window.seoBus.callbacks = window.seoBus.callbacks.filter((cb) => cb !== handleSeoUpdate)
   }
+  if (typeof colorSchemeMediaQuery?.removeEventListener === 'function') {
+    colorSchemeMediaQuery.removeEventListener('change', handleSystemThemeChange)
+  } else {
+    colorSchemeMediaQuery?.removeListener(handleSystemThemeChange)
+  }
   window.removeEventListener('resize', handleResize)
+  document.removeEventListener('click', handleDocumentClick)
+  document.removeEventListener('keydown', handleDocumentKeydown)
   document.body.style.overflow = ''
   delete window.refreshNavItems
 })
