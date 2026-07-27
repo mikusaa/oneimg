@@ -100,64 +100,18 @@
 
             <div class="control-group control-group-compact">
             <p class="control-group-title">上传标签</p>
-
-            <div class="mt-2.5 space-y-2">
-              <select 
-                class="input-modern"
-                v-model="selectedPresetTag"
-                @change="addPresetTag"
+            <div class="mt-2.5">
+              <TagSelector
+                :model-value="selectedTags"
+                :options="uploadTagOptions"
                 :disabled="isUploading"
-              >
-                <option value="" selected>请选择...</option>
-                <option 
-                  v-for="presetTag in presetTags" 
-                  :key="presetTag.id"
-                  :value="presetTag.name"
-                >{{ presetTag.name }}</option>
-              </select>
-
-              <div class="relative flex w-full">
-                <input 
-                  type="text" 
-                  placeholder="输入自定义标签"
-                  class="input-modern flex-1 pr-14"
-                  v-model="customTagInput"
-                  @keyup.enter="addCustomTag"
-                  maxlength="10"
-                  :disabled="isUploading"
-                >
-                <button 
-                  class="absolute right-1 top-1 inline-flex h-[calc(100%-8px)] items-center justify-center rounded-[16px] bg-slate-900 px-3.5 text-white transition hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
-                  @click="addCustomTag"
-                  :disabled="isUploading || !customTagInput.trim()"
-                >
-                  <i class="ri-add-line"></i>
-                </button>
-              </div>
-
-              <div class="tag-list flex flex-wrap gap-1">
-                <div 
-                  v-for="(tag, index) in selectedTags" 
-                  :key="index"
-                  class="flex items-center rounded-full bg-slate-900 px-2.5 py-1 text-sm text-white dark:bg-white dark:text-slate-900"
-                >
-                  <span>{{ tag }}</span>
-                  <button 
-                    class="ml-2 text-white/70 transition-colors hover:text-white dark:text-slate-500 dark:hover:text-slate-900"
-                    @click="removeTag(index)"
-                    :disabled="isUploading"
-                  >
-                    <i class="ri-close-line text-xs"></i>
-                  </button>
-                </div>
-                <div v-if="selectedTags.length === 0" class="text-sm text-secondary italic">
-                  暂无已选标签
-                </div>
-              </div>
-
-              <div v-if="tagError" class="text-xs text-red-500 dark:text-red-400">
-                {{ tagError }}
-              </div>
+                :create-option="createUploadTag"
+                multiple
+                confirm
+                allow-create
+                empty-label="选择标签"
+                @update:model-value="selectedTags = $event"
+              />
             </div>
             </div>
           </div>
@@ -276,12 +230,51 @@
       </div>
       </section>
     </div>
+
+    <AppDialog v-model="urlUploadOpen" title="从 URL 上传图片" width-class="max-w-md">
+      <form id="url-upload-form" class="space-y-4" @submit.prevent="submitUrlUpload">
+        <div>
+          <label class="field-label" for="url-upload-input">图片链接</label>
+          <input
+            id="url-upload-input"
+            v-model.trim="urlUploadUrl"
+            type="url"
+            class="input-modern"
+            placeholder="https://example.com/image.jpg"
+            required
+            autofocus
+          />
+        </div>
+        <div>
+          <label class="field-label">标签</label>
+          <TagSelector v-model="urlUploadTag" :options="urlTagOptions" empty-label="不添加标签" />
+        </div>
+        <div>
+          <label class="field-label" for="url-upload-bucket">存储</label>
+          <select id="url-upload-bucket" v-model="urlUploadBucket" class="input-modern" required>
+            <option v-for="bucket in presetBuckets" :key="bucket.id" :value="bucket.id">
+              {{ bucket.name }} ({{ bucket.type }})
+            </option>
+          </select>
+        </div>
+      </form>
+
+      <template #footer>
+        <button type="button" class="soft-button" :disabled="urlUploadLoading" @click="urlUploadOpen = false">取消</button>
+        <button type="submit" form="url-upload-form" class="primary-button" :disabled="urlUploadLoading || !urlUploadUrl">
+          <i v-if="urlUploadLoading" class="ri-loader-4-line animate-spin"></i>
+          上传
+        </button>
+      </template>
+    </AppDialog>
   </div>
 </template>
 
 <script setup>
 import errorImg from '@/assets/images/error.webp';
-import { ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { computed, ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import AppDialog from '@/components/AppDialog.vue'
+import TagSelector from '@/components/TagSelector.vue'
 import { getStorageSyncSummary } from '@/utils/storageStatus.js'
 
 // ====================== 常量定义 ======================
@@ -299,10 +292,12 @@ const fileInput = ref(null);
 
 // 标签相关
 const presetTags = ref([]);
-const selectedPresetTag = ref('');
-const customTagInput = ref('');
 const selectedTags = ref([]);
-const tagError = ref('');
+const urlUploadOpen = ref(false);
+const urlUploadUrl = ref('');
+const urlUploadTag = ref(0);
+const urlUploadBucket = ref('1');
+const urlUploadLoading = ref(false);
 
 // 存储相关
 const presetBuckets = ref([
@@ -316,6 +311,12 @@ let previewCopyMenu = false;
 let currentPreviewImage = null;
 let previewModalInstance = null;
 let progressInterval = null; // 上传进度定时器
+
+const uploadTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.name, label: tag.name })));
+const urlTagOptions = computed(() => [
+  { value: 0, label: '不添加标签' },
+  ...presetTags.value.map(tag => ({ value: tag.id, label: tag.name }))
+]);
 
 // ====================== 工具函数 ======================
 /**
@@ -382,6 +383,9 @@ const getTypeText = (type) => {
 };
 
 const getImageAltText = (image) => image?.original_filename || image?.filename || '图片';
+const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+})[character]);
 
 /**
  * 生成HTML代码
@@ -744,65 +748,18 @@ const uploadFiles = async (files) => {
   }
 };
 
-/**
- * 标签相关处理
- */
-const addPresetTag = () => {
-  const tag = selectedPresetTag.value;
-  if (!tag) return;
-  
-  tagError.value = '';
-  
-  if (selectedTags.value.includes(tag)) {
-    tagError.value = '该标签已添加';
-    selectedPresetTag.value = '';
-    return;
-  }
-  
-  selectedTags.value.push(tag);
-  selectedPresetTag.value = ''; // 清空选择
-};
-
-const addCustomTag = async () => {
-  const tag = customTagInput.value.trim();
-  if (!tag) {
-    tagError.value = '标签不能为空';
-    return;
-  }
-  
-  // 校验标签长度
-  if (tag.length > 10) {
-    tagError.value = '标签长度不能超过10个字符';
-    return;
-  }
-  
-  // 校验标签不重复
-  if (selectedTags.value.includes(tag)) {
-    tagError.value = '该标签已添加';
-
-    return;
-  }
-  
+const createUploadTag = async name => {
   try {
-    // 添加到服务器
-    const newTag = await addTagToServer(tag);
-    
-    // 更新本地列表
-    selectedTags.value.push(tag);
-    presetTags.value.push(newTag);
-    customTagInput.value = ''; // 清空输入框
-    tagError.value = '';
-    
+    const newTag = await addTagToServer(name);
+    if (!presetTags.value.some(tag => tag.id === newTag.id)) {
+      presetTags.value.push(newTag);
+    }
     Message.success('标签添加成功');
+    return { value: newTag.name, label: newTag.name };
   } catch (error) {
-    tagError.value = error.message || '添加标签失败';
     Message.error(error.message || '添加标签失败');
+    throw error;
   }
-};
-
-const removeTag = (index) => {
-  selectedTags.value.splice(index, 1);
-  tagError.value = '';
 };
 
 /**
@@ -958,9 +915,11 @@ const previewImage = (image) => {
   
   currentPreviewImage = image;
 
-  const tagsHtml = image.tags?.map(tag => `
-    <div class="px-2 py-0.5 rounded bg-primary/10 dark:bg-primary/20 text-primary text-xs">
-      <span>${tag.name}</span>
+  const imageTags = image.tags || [];
+  const extraTagCount = Math.max(0, imageTags.length - 2);
+  const tagsHtml = imageTags.map((tag, index) => `
+    <div class="${index >= 2 ? 'home-preview-extra-tag hidden ' : ''}px-2 py-0.5 rounded bg-primary/10 dark:bg-primary/20 text-primary text-xs">
+      <span>${escapeHtml(tag.name)}</span>
     </div>
   `).join('') || '';
   
@@ -1036,10 +995,17 @@ const previewImage = (image) => {
           </button>
       </div>
 
-      <!-- Tags -->
+      <!-- 标签 -->
       <div class="pt-2 flex flex-wrap gap-2 items-center">
-        <p class="mr-1 text-xs text-secondary font-semibold">Tags：</p>
+        <p class="mr-1 text-xs text-secondary font-semibold">标签：</p>
         ${tagsHtml}
+        ${extraTagCount > 0 ? `<button
+          type="button"
+          onclick="window.toggleHomePreviewTags(this)"
+          data-count="${extraTagCount}"
+          class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-xs hover:text-slate-900 dark:bg-white/10 dark:text-slate-300 dark:hover:text-white">
+          +${extraTagCount}
+        </button>` : ''}
       </div>
       
       <!-- 底部信息栏 -->
@@ -1063,6 +1029,13 @@ const previewImage = (image) => {
   // 注册预览相关全局函数
   window.copyPreviewImageLink = (type) => copyImageLink(currentPreviewImage, type);
   window.downloadPreviewImage = () => downloadImage(currentPreviewImage);
+  window.toggleHomePreviewTags = button => {
+    const container = button.closest('.image-preview-popup');
+    const extraTags = container?.querySelectorAll('.home-preview-extra-tag') || [];
+    const shouldExpand = Array.from(extraTags).some(tag => tag.classList.contains('hidden'));
+    extraTags.forEach(tag => tag.classList.toggle('hidden', !shouldExpand));
+    button.textContent = shouldExpand ? '收起' : `+${button.dataset.count}`;
+  };
   window.deletePreviewImage = () => {
     deleteImage(currentPreviewImage.id);
     closePreviewModal();
@@ -1105,70 +1078,26 @@ const previewImage = (image) => {
  * 从URL上传图片
  */
 const uploadbyurlmodal = () => {
-  // 构建标签选项
-  const tagList = [
-    { value: "0", label: "不添加"}
-  ];
-  presetTags.value.forEach(tag => {
-    tagList.push({ value: tag.id, label: tag.name });
-  });
-  const storageList = [];
-  presetBuckets.value.forEach(storage => {
-    storageList.push({ value: storage.id, label: storage.name });
-  })
-  const modal = new PopupModal({
-    title: '从URL上传图片',
-    type: 'form',
-    formFields: [
-      {
-        name: 'url',
-        label: '图片链接',
-        type: 'text',
-        required: true,
-        placeholder: '请输入图片链接'
-      },
-      {
-        name: 'tag_id',
-        label: 'Tag标签',
-        type: 'select',
-        required: true,
-        defaultValue: "0",
-        options: tagList
-      },
-      {
-        name: 'bucket_id',
-        label: '存储',
-        type: 'select',
-        required: true,
-        defaultValue: "1",
-        options: storageList
-      }
-    ],
-    buttons: [
-      {
-        text: '取消',
-        type: 'default',
-        callback: (modal) => {
-          modal.close();
-        }
-      },
-      {
-        text: '确定',
-        type: 'primary',
-        callback: (modal) => {
-          const formData = serializeForm(modal);
-          if(formData['url'].length === 0) {
-            Message.error('请输入图片链接');
-            return
-          }
-          postuploadbyurl(formData);
-          modal.close();
-        }
-      }
-    ]
-  });
-  modal.open();
+  urlUploadUrl.value = '';
+  urlUploadTag.value = 0;
+  urlUploadBucket.value = selectedBucket.value || '1';
+  urlUploadOpen.value = true;
 }
+
+const submitUrlUpload = async () => {
+  if (!urlUploadUrl.value || urlUploadLoading.value) return;
+  urlUploadLoading.value = true;
+  try {
+    const succeeded = await postuploadbyurl({
+      url: urlUploadUrl.value,
+      tag_id: urlUploadTag.value || 0,
+      bucket_id: urlUploadBucket.value || '1'
+    });
+    if (succeeded) urlUploadOpen.value = false;
+  } finally {
+    urlUploadLoading.value = false;
+  }
+};
 
 const postuploadbyurl = async (formData) => {
   try {
@@ -1184,52 +1113,16 @@ const postuploadbyurl = async (formData) => {
     if (res.ok && result.code === 200) {
       await loadRecentImages();
       showUploadResultMessage(result.data?.file ? [result.data.file] : []);
+      return true;
     } else {
       throw new Error(result.message || '上传失败');
     }
   } catch (err) {
     console.error(err);
     Message.error(err.message || '上传失败');
+    return false;
   }
 }
-
-/**
- * 序列化表单数据
- * @param {Object} modal - 弹窗实例
- * @returns {Object} 表单数据对象
- */
-const serializeForm = (modal) => {
-  const form = modal.content?.querySelector('form');
-  if (!form) {
-    console.warn('未找到表单元素');
-    return {};
-  }
-
-  return Array.from(form.elements).reduce((acc, element) => {
-    const { name, disabled, type, checked, value } = element;
-    
-    // 跳过无name、禁用的元素
-    if (!name || disabled) return acc;
-    
-    // 处理复选框/单选框
-    if ((type === 'checkbox' || type === 'radio') && !checked) return acc;
-    
-    // 处理文件输入
-    if (type === 'file') {
-      acc[name] = element.files.length > 0 ? element.files[0].name : '';
-      return acc;
-    }
-    
-    // 处理多值字段
-    if (acc[name]) {
-      acc[name] = Array.isArray(acc[name]) ? [...acc[name], value] : [acc[name], value];
-    } else {
-      acc[name] = value;
-    }
-    
-    return acc;
-  }, {});
-};
 
 /**
  * 清理预览相关资源
@@ -1240,6 +1133,7 @@ const cleanupPreview = () => {
   window.downloadPreviewImage = null;
   window.deletePreviewImage = null;
   window.closePreviewModal = null;
+  window.toggleHomePreviewTags = null;
   
   // 重置状态
   currentPreviewImage = null;

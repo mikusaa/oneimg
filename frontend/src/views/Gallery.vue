@@ -10,7 +10,7 @@
       <div class="content-panel gallery-panel-compact gallery-topbar-compact space-y-2">
         <div class="gallery-topbar-minimal">
           <div class="gallery-topbar-filters">
-            <div v-if="isAdmin" class="gallery-inline-control">
+            <div v-if="isAdmin" class="gallery-inline-control gallery-inline-control-role">
               <span class="gallery-inline-label">角色</span>
               <div class="role-buttons grid w-full grid-cols-4 overflow-hidden rounded-[16px] border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto">
             <button
@@ -76,9 +76,9 @@
           </select>
             </div>
 
-            <div class="gallery-inline-control gallery-inline-control-select">
+            <div class="gallery-inline-control gallery-inline-control-search">
               <span class="gallery-inline-label">搜索</span>
-              <div class="flex w-full gap-1.5 sm:w-72">
+              <div class="flex w-full gap-1.5 sm:w-72 lg:w-full">
                 <input
                   v-model.trim="searchKeyword"
                   class="input-modern min-w-0 flex-1"
@@ -97,21 +97,16 @@
 
             <div class="gallery-inline-control gallery-inline-control-tags">
               <span class="gallery-inline-label">标签</span>
-          <div class="flex flex-wrap gap-1.5">
-            <div class="filter-chip"
-            :class="isTagSelected(0) ? 'filter-chip-active' : ''"
-            @click="handleTagSelection(0)">
-                <span>默认</span>
-            </div>
-            <div
-            v-if="presetTags.length > 0"
-            v-for="tag in presetTags"
-            class="filter-chip"
-            :class="isTagSelected(tag.id) ? 'filter-chip-active' : ''"
-            @click="handleTagSelection(tag.id)">
-                <span>{{tag.name}}</span>
-            </div>
-          </div>
+              <div class="w-full sm:w-72 lg:w-full">
+                <TagSelector
+                  :model-value="selectedTags"
+                  :options="galleryTagOptions"
+                  multiple
+                  confirm
+                  empty-label="全部标签"
+                  @update:model-value="applyTagFilter"
+                />
+              </div>
             </div>
           </div>
 
@@ -141,7 +136,7 @@
             @click="handleBatchSetTag"
             class="soft-button">
                 <i class="ri-bookmark-2-fill"></i>
-                批量设置Tag
+                批量设置标签
             </button>
             <!-- 批量删除按钮 - 游客和管理员都可见 -->
             <button
@@ -282,12 +277,61 @@
       </div>
       </section>
     </div>
+
+    <AppDialog
+      v-model="tagDialogOpen"
+      :title="tagDialogMode === 'batch' ? '批量编辑标签' : '添加标签'"
+      width-class="max-w-md"
+      @close="handleTagDialogClose"
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="field-label">选择标签</label>
+          <TagSelector
+            v-model="tagDialogValue"
+            :options="actionTagOptions"
+            empty-label="选择标签"
+          />
+        </div>
+        <div v-if="tagDialogMode === 'batch'" class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-950">
+          <p class="text-sm font-medium text-slate-700 dark:text-slate-200">已选择 {{ batchEditableImages.length }} 张图片</p>
+          <p class="mt-1.5 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+            {{ batchEditableImages.map(image => image.filename).join('、') }}
+          </p>
+        </div>
+      </div>
+
+      <template #footer>
+        <button type="button" class="soft-button" :disabled="tagActionLoading" @click="cancelTagDialog">取消</button>
+        <button
+          v-if="tagDialogMode === 'batch'"
+          type="button"
+          class="danger-button"
+          :disabled="tagDialogValue === null || tagActionLoading"
+          @click="runBatchTagAction('delete')"
+        >
+          <i v-if="tagActionLoading" class="ri-loader-4-line animate-spin"></i>
+          删除标签
+        </button>
+        <button
+          type="button"
+          class="primary-button"
+          :disabled="tagDialogValue === null || tagActionLoading"
+          @click="tagDialogMode === 'batch' ? runBatchTagAction('add') : submitImageTag()"
+        >
+          <i v-if="tagActionLoading" class="ri-loader-4-line animate-spin"></i>
+          添加标签
+        </button>
+      </template>
+    </AppDialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, onUnmounted, unref, watch } from 'vue'
+import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import AppDialog from '@/components/AppDialog.vue'
+import TagSelector from '@/components/TagSelector.vue'
 import errorImg from '@/assets/images/error.webp';
 import { getStorageSyncSummary, renderStorageStatusesHtml } from '@/utils/storageStatus.js';
 import { getStoredUser, hasPermission, isSuperAdmin, ROLE_ADMIN, ROLE_GUEST } from '@/utils/permissions.js';
@@ -372,44 +416,6 @@ const getRoleTagClass = (image) => {
   return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
 };
 
-/**
- * 序列化表单数据
- * @param {Object} modal - 弹窗实例
- * @returns {Object} 表单数据对象
- */
-const serializeForm = (modal) => {
-  const form = modal.content?.querySelector('form');
-  if (!form) {
-    console.warn('未找到表单元素');
-    return {};
-  }
-
-  return Array.from(form.elements).reduce((acc, element) => {
-    const { name, disabled, type, checked, value } = element;
-    
-    // 跳过无name、禁用的元素
-    if (!name || disabled) return acc;
-    
-    // 处理复选框/单选框
-    if ((type === 'checkbox' || type === 'radio') && !checked) return acc;
-    
-    // 处理文件输入
-    if (type === 'file') {
-      acc[name] = element.files.length > 0 ? element.files[0].name : '';
-      return acc;
-    }
-    
-    // 处理多值字段
-    if (acc[name]) {
-      acc[name] = Array.isArray(acc[name]) ? [...acc[name], value] : [acc[name], value];
-    } else {
-      acc[name] = value;
-    }
-    
-    return acc;
-  }, {});
-};
-
 // ====================== 响应式数据 ======================
 const images = ref([]);
 const loading = ref(false);
@@ -426,6 +432,11 @@ const selectedTags = ref([]); // 选中的标签ID数组
 const searchKeyword = ref('');
 const selectAll = ref(false); // 全选状态
 const currentPreviewImage = ref(null);
+const tagDialogOpen = ref(false);
+const tagDialogMode = ref('batch');
+const tagDialogValue = ref(null);
+const tagDialogImageId = ref(null);
+const tagActionLoading = ref(false);
 const currentUser = getStoredUser();
 
 // 路由实例
@@ -460,6 +471,15 @@ const canManageImage = (image, permission) => {
 };
 
 const selectedImageRecords = computed(() => images.value.filter(image => selectedImages.value.includes(image.id)));
+const galleryTagOptions = computed(() => [
+  { value: 0, label: '默认' },
+  ...presetTags.value.map(tag => ({ value: tag.id, label: tag.name }))
+]);
+const actionTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.id, label: tag.name })));
+const batchEditableImages = computed(() => images.value.filter(image => (
+  selectedImages.value.includes(image.id)
+  && (canManageImage(image, 'image:tag:add') || canManageImage(image, 'image:tag:delete'))
+)));
 const canBatchDelete = computed(() => selectedImageRecords.value.some(image => canManageImage(image, 'image:delete')));
 const canBatchTag = computed(() => selectedImageRecords.value.some(image =>
   canManageImage(image, 'image:tag:add') || canManageImage(image, 'image:tag:delete')
@@ -638,7 +658,7 @@ const deleteAsync = async (id) => {
 const pustImageTag = async (imageId, values) => {
   const { tag } = values;
   if (tag === '0') {
-    Message.warning('请选择Tag标签');
+    Message.warning('请选择标签');
     return;
   }
   
@@ -657,9 +677,9 @@ const pustImageTag = async (imageId, values) => {
       // 更新本地数据
       const image = images.value.find(item => item.id === imageId);
       if (image) {
-        // 移除默认Tag
+        // 移除默认标签
         image.tags = image.tags.filter(item => item.id !== 0);
-        // 添加新Tag
+        // 添加新标签
         const newTag = presetTags.value.find(item => item.id === Number(tag));
         if (newTag) image.tags.push(newTag);
         // 更新预览图片
@@ -694,9 +714,9 @@ const deleteImageTagAsync = async (imageId, tagId) => {
       // 更新本地数据
       const image = images.value.find(item => item.id === imageId);
       if (image) {
-        // 移除Tag
+        // 移除标签
         image.tags = image.tags.filter(item => item.id !== tagId);
-        // 如果全部移除则添加默认Tag
+        // 如果全部移除则添加默认标签
         if(image.tags.length === 0){
             image.tags.push({ id: 0, name: '默认' });
         }
@@ -767,28 +787,12 @@ const isImageSelected = (imageId) => {
   return selectedImages.value.includes(imageId);
 };
 
-/**
- * 检查Tag是否被选中
- * @param {string|number} tagId - Tag ID
- * @returns {boolean} 是否选中
- */
-const isTagSelected = (tagId) => {
-  return selectedTags.value.includes(tagId);
-};
-
-/**
- * 处理单个Tag选择
- * @param {string|number} tagId - Tag ID
- * @param {boolean} isChecked - 是否选中
- */
-const handleTagSelection = (tagId) => {
-    if (!selectedTags.value.includes(tagId)) {
-        selectedTags.value.push(tagId);
-    }else{
-        selectedTags.value = selectedTags.value.filter(id => id !== tagId);
-    }
-    // 加载图片
-    loadImages();
+const applyTagFilter = tags => {
+  selectedTags.value = tags;
+  currentPage.value = 1;
+  selectedImages.value = [];
+  selectAll.value = false;
+  loadImages();
 };
 
 /**
@@ -960,68 +964,22 @@ const handleBatchSetTag = () => {
       return;
     }
 
-    // 构建标签选项
-    const tagList = [
-        { value: "0", label: "请选择Tag", disabled: true }
-    ];
-    presetTags.value.forEach(tag => {
-        tagList.push({ value: tag.id, label: tag.name });
-    });
-
-    const modal = new showFormModal({
-        title: '批量编辑Tag',
-        formFields: [
-        {
-            name: 'tag',
-            label: 'Tag标签',
-            type: 'select',
-            required: true,
-            defaultValue: "0",
-            options: tagList,
-            tip: "已选择的图片：<br>" + images.value.filter(item => imageId.includes(item.id)).map(item => item.filename).join("<br>")
-        },
-        ],
-        buttons: [
-        {
-            text: '取消',
-            type: 'default',
-            callback: (modal) => {
-            modal.close();
-            }
-        },
-        {
-            text: '删除Tag',
-            type: 'danger',
-            callback: (modal) => {
-            const formData = serializeForm(modal);
-            batchDeleteTag(formData);
-            modal.close();
-            }
-        },
-        {
-            text: '添加Tag',
-            type: 'primary',
-            callback: (modal) => {
-            const formData = serializeForm(modal);
-            batchAddTag(formData);
-            modal.close();
-            }
-        }
-        ]
-    });
-    modal.open();
+    tagDialogMode.value = 'batch';
+    tagDialogValue.value = null;
+    tagDialogImageId.value = null;
+    tagDialogOpen.value = true;
 }
 
-const batchDeleteTag = async (formData) => {
-    if (formData.tag === "0") {
-        Message.warning("请选择Tag");
-        return;
+const batchDeleteTag = async (tagId) => {
+    if (tagId === null) {
+        Message.warning("请选择标签");
+        return false;
     }
 
     const imageIds = selectedImages.value.filter(id => canManageImage(images.value.find(item => item.id === id), 'image:tag:delete'));
     if (imageIds.length === 0) {
         Message.warning('你没有权限删除选中图片的标签');
-        return;
+        return false;
     }
     try {
         const response = await fetch(`${API_BASE_URL}/api/images/tags`, {
@@ -1031,33 +989,35 @@ const batchDeleteTag = async (formData) => {
             },
             body: JSON.stringify({
                 image_ids: imageIds,
-                tag_id: formData.tag
+                tag_id: tagId
             })
         });
         
         const result = await response.json();
         if (response.ok && result.code === 200) {
-            Message.success('删除Tag成功');
+            Message.success('删除标签成功');
             // 刷新列表
             await loadImages();
+            return true;
         } else {
-            throw new Error(result.message || '删除Tag失败');
+            throw new Error(result.message || '删除标签失败');
         }
     } catch (error) {
-        console.error('删除Tag失败:', error);
-        Message.error(error.message || '删除Tag失败');
+        console.error('删除标签失败:', error);
+        Message.error(error.message || '删除标签失败');
+        return false;
     }
 }
 
-const batchAddTag = async (formData) => {
-    if (formData.tag === "0") {
-        Message.warning("请选择Tag");
-        return;
+const batchAddTag = async (tagId) => {
+    if (tagId === null) {
+        Message.warning("请选择标签");
+        return false;
     }
     const imageIds = selectedImages.value.filter(id => canManageImage(images.value.find(item => item.id === id), 'image:tag:add'));
     if (imageIds.length === 0) {
         Message.warning('你没有权限给选中的图片添加标签');
-        return;
+        return false;
     }
     try {
         const response = await fetch(`${API_BASE_URL}/api/images/tags`, {
@@ -1067,23 +1027,65 @@ const batchAddTag = async (formData) => {
             },
             body: JSON.stringify({
                 image_ids: imageIds,
-                tag_id: formData.tag
+                tag_id: tagId
             })
         });
         
         const result = await response.json();
         if (response.ok && result.code === 200) {
-            Message.success('添加Tag成功');
+            Message.success('添加标签成功');
             // 刷新列表
             await loadImages();
+            return true;
         } else {
-            throw new Error(result.message || '添加Tag失败');
+            throw new Error(result.message || '添加标签失败');
         }
     } catch (error) {
-        console.error('添加Tag失败:', error);
-        Message.error(error.message || '添加Tag失败');
+        console.error('添加标签失败:', error);
+        Message.error(error.message || '添加标签失败');
+        return false;
     }
 }
+
+const closeTagDialog = () => {
+  tagDialogOpen.value = false;
+};
+
+const handleTagDialogClose = () => {
+  if (tagDialogMode.value === 'image' && currentPreviewImage.value) {
+    openPreview(currentPreviewImage.value);
+  }
+};
+
+const cancelTagDialog = () => {
+  closeTagDialog();
+  handleTagDialogClose();
+};
+
+const runBatchTagAction = async action => {
+  if (tagDialogValue.value === null || tagActionLoading.value) return;
+  tagActionLoading.value = true;
+  try {
+    const succeeded = action === 'delete'
+      ? await batchDeleteTag(tagDialogValue.value)
+      : await batchAddTag(tagDialogValue.value);
+    if (succeeded) closeTagDialog();
+  } finally {
+    tagActionLoading.value = false;
+  }
+};
+
+const submitImageTag = async () => {
+  if (tagDialogValue.value === null || tagActionLoading.value) return;
+  tagActionLoading.value = true;
+  const imageId = tagDialogImageId.value;
+  closeTagDialog();
+  try {
+    await pustImageTag(imageId, { tag: tagDialogValue.value });
+  } finally {
+    tagActionLoading.value = false;
+  }
+};
 
 /**
  * 图片加载完成处理
@@ -1137,7 +1139,7 @@ const openPreview = (image) => {
   });
 
   // 注册弹窗操作函数
-  registerPreviewGlobalFunctions(customModal, image.id);
+  registerPreviewGlobalFunctions(customModal);
 
   customModal.open();
 };
@@ -1158,9 +1160,10 @@ const generatePreviewContent = (image) => {
       ? 'background-color: #e0e7ff; color: #3730a3;'
       : 'background-color: #dcfce7; color: #166534; dark:background-color: #14532d; dark:color: #bbf7d0;';
   
-  // 生成标签HTML
-  const tagsHtml = image.tags?.map(tag => `
-    <div class="px-2 py-0.5 rounded bg-primary/10 dark:bg-primary/20 text-primary text-xs" data-tag-id="${tag.id}" data-image-id="${image.id}">
+  const imageTags = image.tags || [];
+  const extraTagCount = Math.max(0, imageTags.length - 2);
+  const tagsHtml = imageTags.map((tag, index) => `
+    <div class="${index >= 2 ? 'preview-extra-tag hidden ' : ''}px-2 py-0.5 rounded bg-primary/10 dark:bg-primary/20 text-primary text-xs" data-tag-id="${tag.id}" data-image-id="${image.id}">
       <span>${escapeHtml(tag.name)}</span>
       ${canDeleteTag ? `<button
         onclick="window.deleteImageTag(event, ${image.id}, ${tag.id})"
@@ -1245,10 +1248,17 @@ const generatePreviewContent = (image) => {
         </button>
       </div>
 
-      <!-- Tags -->
+      <!-- 标签 -->
       <div class="pt-2 flex flex-wrap gap-2 items-center">
-        <p class="mr-1 text-xs text-secondary font-semibold">Tags：</p>
+        <p class="mr-1 text-xs text-secondary font-semibold">标签：</p>
         ${tagsHtml}
+        ${extraTagCount > 0 ? `<button
+          type="button"
+          onclick="window.togglePreviewTags(this)"
+          data-count="${extraTagCount}"
+          class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-xs hover:text-slate-900 dark:bg-white/10 dark:text-slate-300 dark:hover:text-white">
+          +${extraTagCount}
+        </button>` : ''}
         ${canAddTag ? `<button
           onclick="window.addImageTag(${image.id})"
           class="flex items-center px-2 py-1 bg-success/10 dark:bg-success/20 text-success rounded-full text-xs hover:text-success/30 transition-colors">
@@ -1290,9 +1300,8 @@ const generatePreviewContent = (image) => {
 /**
  * 注册预览弹窗全局函数
  * @param {Object} modal - 弹窗实例
- * @param {string|number} imageId - 图片ID
  */
-const registerPreviewGlobalFunctions = (modal, imageId) => {
+const registerPreviewGlobalFunctions = modal => {
   // 复制图片链接
   window.copyPreviewImageLink = (type) => {
     if (!currentPreviewImage.value) return;
@@ -1348,24 +1357,24 @@ const registerPreviewGlobalFunctions = (modal, imageId) => {
     addImageTagModal(id);
   };
 
+  window.togglePreviewTags = button => {
+    const container = button.closest('.image-preview-popup');
+    const extraTags = container?.querySelectorAll('.preview-extra-tag') || [];
+    const shouldExpand = Array.from(extraTags).some(tag => tag.classList.contains('hidden'));
+    extraTags.forEach(tag => tag.classList.toggle('hidden', !shouldExpand));
+    button.textContent = shouldExpand ? '收起' : `+${button.dataset.count}`;
+  };
+
   // 删除标签
   window.deleteImageTag = async (event, imgId, tagId) => {
     if (tagId == 0) {
-      Message.warning("无法删除默认Tag");
+      Message.warning("无法删除默认标签");
       return;
     }
     event.preventDefault();
     if (await deleteImageTagAsync(imgId, tagId)) {
-        const tagDiv = document.querySelector(`[data-image-id="${imageId}"][data-tag-id="${tagId}"]`);
-        // 如果当前标签是最后一个，则修改为默认
-        if(currentPreviewImage.value.tags.length <= 1){
-            tagDiv.querySelector('span').textContent = "默认";
-            tagDiv.setAttribute('data-tag-id', '0');
-            // 修改删除调用函数
-            tagDiv.querySelector('button').setAttribute("onclick", `window.deleteImageTag(event, ${imageId}, 0)`);
-        } else {
-            if (tagDiv) tagDiv.remove();
-        }
+      modal.close();
+      openPreview(currentPreviewImage.value);
     }
   };
 
@@ -1398,7 +1407,8 @@ const cleanPreviewGlobalFunctions = () => {
     'downloadPreviewImage',
     'deletePreviewImage',
     'addImageTag',
-    'deleteImageTag'
+    'deleteImageTag',
+    'togglePreviewTags'
   ].forEach(fnName => delete window[fnName]);
 };
 
@@ -1442,50 +1452,11 @@ const deleteImage = async (imageId) => {
  * 打开添加标签弹窗
  * @param {string|number} imageId - 图片ID
  */
-const addImageTagModal = async (imageId) => {
-  // 构建标签选项
-  const tagList = [
-    { value: "0", label: "请选择Tag", disabled: true }
-  ];
-  presetTags.value.forEach(tag => {
-    tagList.push({ value: tag.id, label: tag.name });
-  });
-
-  const modal = new showFormModal({
-    title: '添加Tag',
-    formFields: [
-      {
-        name: 'tag',
-        label: 'Tag标签',
-        type: 'select',
-        required: true,
-        defaultValue: "0",
-        options: tagList
-      },
-    ],
-    buttons: [
-      {
-        text: '取消',
-        type: 'default',
-        callback: (modal) => {
-          modal.close();
-          // 重新打开预览
-          const image = currentPreviewImage.value;
-          if (image) openPreview(image);
-        }
-      },
-      {
-        text: '添加',
-        type: 'primary',
-        callback: (modal) => {
-          const formData = serializeForm(modal);
-          pustImageTag(imageId, formData);
-          modal.close();
-        }
-      }
-    ]
-  });
-  modal.open();
+const addImageTagModal = imageId => {
+  tagDialogMode.value = 'image';
+  tagDialogValue.value = null;
+  tagDialogImageId.value = imageId;
+  tagDialogOpen.value = true;
 };
 
 // ====================== 生命周期 ======================
