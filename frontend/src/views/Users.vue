@@ -337,7 +337,7 @@ const PERMISSION_GROUPS = [
   ]},
   { title: '系统设置', items: [
     { code: 'setting:upload', name: '存储与上传' }, { code: 'setting:image', name: '图片处理' },
-    { code: 'setting:security', name: '访问安全' }, { code: 'setting:notification', name: 'Telegram 通知' },
+    { code: 'setting:security', name: '访问安全' },
     { code: 'setting:api', name: '上传 API' }, { code: 'setting:seo', name: '站点信息' }
   ]}
 ]

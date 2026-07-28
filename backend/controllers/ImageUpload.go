@@ -17,7 +17,6 @@ import (
 	"oneimg/backend/utils/md5"
 	"oneimg/backend/utils/result"
 	"oneimg/backend/utils/settings"
-	"oneimg/backend/utils/telegram"
 	"oneimg/backend/utils/uploads"
 	"path/filepath"
 	"strconv"
@@ -208,27 +207,6 @@ func UploadImages(c *gin.Context) {
 		responseResult.ThumbnailURL = applyThumbnailURL(setting, buckets.Type, bucketID, fileResult.ThumbnailURL)
 		uploadResults = append(uploadResults, responseResult)
 
-		if !fileResult.Duplicate && setting.TGNotice {
-			placeholderData := telegram.PlaceholderData{
-				Username:    c.GetString("username"),
-				Date:        time.Now().Format("2006-01-02 15:04:05"),
-				Filename:    fileResult.FileName,
-				StorageType: buckets.Type,
-				URL:         buildImageResponseURL(c, setting, buckets.Type, bucketID, fileResult.URL),
-			}
-
-			err := telegram.SendSimpleMsg(
-				setting.TGBotToken,   // 机器人Token
-				setting.TGReceivers,  // 接收者ChatID
-				setting.TGNoticeText, // 模板文本
-				placeholderData,      // 占位符数据
-			)
-			if err != nil {
-				log.Println(err)
-				// 忽略错误
-			}
-		}
-
 		successCount++
 	}
 
@@ -372,19 +350,6 @@ func uploadImagesMultiStorage(c *gin.Context, setting models.Settings, existingT
 		responseResult.ThumbnailURL = applyThumbnailURL(setting, localBucket.Type, localBucket.Id, fileResult.ThumbnailURL)
 		uploadResults = append(uploadResults, responseResult)
 
-		if !fileResult.Duplicate && setting.TGNotice {
-			placeholderData := telegram.PlaceholderData{
-				Username:    c.GetString("username"),
-				Date:        time.Now().Format("2006-01-02 15:04:05"),
-				Filename:    fileResult.FileName,
-				StorageType: localBucket.Type,
-				URL:         buildImageResponseURL(c, setting, localBucket.Type, localBucket.Id, fileResult.URL),
-			}
-			if err := telegram.SendSimpleMsg(setting.TGBotToken, setting.TGReceivers, setting.TGNoticeText, placeholderData); err != nil {
-				log.Println(err)
-			}
-		}
-
 		successCount++
 	}
 
@@ -404,11 +369,30 @@ func UploadImage(c *gin.Context) {
 	UploadImages(c)
 }
 
+type tagRequestID int
+
+func (id *tagRequestID) UnmarshalJSON(data []byte) error {
+	value := strings.TrimSpace(string(data))
+	if len(value) > 0 && value[0] == '"' {
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		value = strings.TrimSpace(value)
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fmt.Errorf("标签ID必须是有效数字")
+	}
+	*id = tagRequestID(parsed)
+	return nil
+}
+
 func AddImageTag(c *gin.Context) {
 	// 获取请求参数
 	type TagRequest struct {
-		Id  int    `json:"id"`  // 图片ID
-		Tag string `json:"tag"` // 标签ID（前端传字符串，后端转换）
+		Id  int          `json:"id"`  // 图片ID
+		Tag tagRequestID `json:"tag"` // 标签ID
 	}
 
 	var req TagRequest
@@ -418,17 +402,12 @@ func AddImageTag(c *gin.Context) {
 	}
 
 	// 参数非空校验
-	if req.Id <= 0 || req.Tag == "" {
+	if req.Id <= 0 || req.Tag <= 0 {
 		c.JSON(http.StatusBadRequest, result.Error(400, "参数错误"))
 		return
 	}
 
-	// 转换并校验图片ID
-	tagId, err := strconv.Atoi(req.Tag)
-	if err != nil || tagId <= 0 {
-		c.JSON(http.StatusBadRequest, result.Error(400, "标签ID无效"))
-		return
-	}
+	tagId := int(req.Tag)
 	imageId := req.Id
 
 	// 获取数据库连接
@@ -542,8 +521,8 @@ func DeleteImageTag(c *gin.Context) {
 // 批量删除tag
 func DeleteImageTags(c *gin.Context) {
 	type Request struct {
-		Images []int  `json:"image_ids"`
-		Tag    string `json:"tag_id"`
+		Images []int        `json:"image_ids"`
+		Tag    tagRequestID `json:"tag_id"`
 	}
 
 	var req Request
@@ -553,11 +532,7 @@ func DeleteImageTags(c *gin.Context) {
 		return
 	}
 
-	tagID, err := strconv.Atoi(req.Tag)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, result.Error(400, "tag_id必须是有效数字"))
-		return
-	}
+	tagID := int(req.Tag)
 
 	if len(req.Images) <= 0 || tagID <= 0 {
 		c.JSON(http.StatusBadRequest, result.Error(400, "参数错误"))
@@ -581,8 +556,8 @@ func DeleteImageTags(c *gin.Context) {
 // 批量添加tag
 func AddImageTags(c *gin.Context) {
 	type Request struct {
-		Images []int  `json:"image_ids"`
-		Tag    string `json:"tag_id"`
+		Images []int        `json:"image_ids"`
+		Tag    tagRequestID `json:"tag_id"`
 	}
 
 	var req Request
@@ -592,11 +567,7 @@ func AddImageTags(c *gin.Context) {
 		return
 	}
 
-	tagID, err := strconv.Atoi(req.Tag)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, result.Error(400, "tag_id必须是有效数字"))
-		return
-	}
+	tagID := int(req.Tag)
 
 	if len(req.Images) <= 0 || tagID <= 0 {
 		c.JSON(http.StatusBadRequest, result.Error(400, "参数错误"))
@@ -990,20 +961,6 @@ func UploadImagesByURL(c *gin.Context) {
 	if req.Tag != "" && req.Tag != "0" && imageModel.Id > 0 {
 		if tagID, err := strconv.Atoi(req.Tag); err == nil {
 			db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.ImageToTags{ImageId: imageModel.Id, TagId: tagID})
-		}
-	}
-
-	// TG通知
-	if !fileResult.Duplicate && setting.TGNotice {
-		placeholderData := telegram.PlaceholderData{
-			Username:    c.GetString("username"),
-			Date:        time.Now().Format("2006-01-02 15:04:05"),
-			Filename:    fileResult.FileName,
-			StorageType: buckets.Type,
-			URL:         buildImageResponseURL(c, setting, buckets.Type, bucketID, fileResult.URL),
-		}
-		if err := telegram.SendSimpleMsg(setting.TGBotToken, setting.TGReceivers, setting.TGNoticeText, placeholderData); err != nil {
-			log.Println(err)
 		}
 	}
 

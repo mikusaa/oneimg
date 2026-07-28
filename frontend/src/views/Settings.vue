@@ -553,63 +553,6 @@
                     </template>
 
                     <template v-else-if="activeSettingTab === 'integrations'">
-                        <section v-if="hasSettingPermission('setting:notification')" class="settings-section">
-                            <div class="settings-section-heading settings-section-heading-inline">
-                                <div>
-                                    <h3>Telegram 通知</h3>
-                                </div>
-                                <label class="settings-switch" title="Telegram 通知">
-                                    <input
-                                        v-model="systemSettings.tg_notice"
-                                        type="checkbox"
-                                        class="sr-only peer"
-                                        @change="handleSwitchChange('tg_notice', systemSettings.tg_notice)"
-                                    >
-                                    <span class="switch-track"></span>
-                                    <span class="switch-thumb"></span>
-                                </label>
-                            </div>
-
-                            <div class="settings-field-grid mt-5">
-                                <div class="setting-group">
-                                    <label class="field-label" for="tg_bot_token">Bot Token</label>
-                                    <input
-                                        id="tg_bot_token"
-                                        v-model="systemSettings.tg_bot_token"
-                                        type="password"
-                                        class="input-modern"
-                                        :placeholder="systemSettings.tg_bot_token_configured ? '已配置，留空表示不修改' : '请输入 Bot Token'"
-                                        @blur="handleFieldBlur('tg_bot_token', systemSettings.tg_bot_token)"
-                                    >
-                                    <p class="field-hint">{{ systemSettings.tg_bot_token_configured ? '当前已配置。' : '启用通知前必须配置。' }}</p>
-                                </div>
-
-                                <div class="setting-group">
-                                    <label class="field-label" for="tg_receivers">通知接收者</label>
-                                    <input
-                                        id="tg_receivers"
-                                        v-model="systemSettings.tg_receivers"
-                                        type="text"
-                                        class="input-modern"
-                                        placeholder="Telegram 用户 ID，多个以英文逗号分隔"
-                                        @blur="handleFieldBlur('tg_receivers', systemSettings.tg_receivers)"
-                                    >
-                                </div>
-
-                                <div class="setting-group md:col-span-2">
-                                    <label class="field-label" for="tg_notice_text">通知文本</label>
-                                    <textarea
-                                        id="tg_notice_text"
-                                        v-model="systemSettings.tg_notice_text"
-                                        class="input-modern min-h-[88px] leading-6"
-                                        rows="2"
-                                        @blur="handleFieldBlur('tg_notice_text', systemSettings.tg_notice_text)"
-                                    ></textarea>
-                                    <p class="field-hint">可使用 {username}、{date}、{filename} 和 {StorageType}。</p>
-                                </div>
-                            </div>
-                        </section>
-
                         <section v-if="hasSettingPermission('setting:api')" class="settings-section">
                             <div class="settings-section-heading settings-section-heading-inline">
                                 <div>
@@ -760,12 +703,7 @@ const systemSettings = reactive({
     thumbnail: false,
     tourist: false,
     start_register: false,
-    tg_notice: false,
     pow_verify: false,
-    tg_bot_token: '',
-    tg_bot_token_configured: false,
-    tg_receivers: '',
-    tg_notice_text: '',
     watermark_enable: false,
     watermark_text: '',
     watermark_pos: '',
@@ -800,7 +738,7 @@ const SETTING_TABS = [
     { key: 'upload', permissions: ['setting:upload'], label: '上传规则', icon: 'ri-upload-cloud-2-line' },
     { key: 'image', permissions: ['setting:image'], label: '图片处理', icon: 'ri-image-edit-line' },
     { key: 'security', permissions: ['setting:security'], label: '访问安全', icon: 'ri-shield-keyhole-line' },
-    { key: 'integrations', permissions: ['setting:notification', 'setting:api'], label: '集成服务', icon: 'ri-plug-line' },
+    { key: 'integrations', permissions: ['setting:api'], label: '集成服务', icon: 'ri-plug-line' },
     { key: 'site', permissions: ['setting:seo'], label: '站点信息', icon: 'ri-global-line' },
 ]
 
@@ -920,12 +858,7 @@ const persistSetting = async (key, value) => {
             throw new Error(result.message || '未知错误')
         }
 
-        if (key === 'tg_bot_token') {
-            if (systemSettings.tg_bot_token === value) systemSettings.tg_bot_token = ''
-            systemSettings.tg_bot_token_configured = value !== '' || systemSettings.tg_bot_token_configured
-            updateSetting.tg_bot_token = ''
-            updateSetting.tg_bot_token_configured = systemSettings.tg_bot_token_configured
-        } else if (key === 'api_token') {
+        if (key === 'api_token') {
             systemSettings.api_token_configured = value !== '' || systemSettings.api_token_configured
             updateSetting.api_token_configured = systemSettings.api_token_configured
         } else {
@@ -953,7 +886,7 @@ const enqueueSettingSave = (key, value) => {
 }
 
 const saveSetting = (key, value) => {
-    if (valuesMatch(updateSetting[key], value) && !['tg_bot_token', 'api_token'].includes(key)) return
+    if (valuesMatch(updateSetting[key], value) && key !== 'api_token') return
 
     const existingTimer = saveTimers.get(key)
     if (existingTimer) clearTimeout(existingTimer)
@@ -1005,15 +938,6 @@ const handleSwitchChange = (key, value) => {
         }
     }
 
-    if (key === 'tg_notice' && value) {
-        const tokenEmpty = systemSettings.tg_bot_token === '' || systemSettings.tg_bot_token === null
-        if ((tokenEmpty && !systemSettings.tg_bot_token_configured) || systemSettings.tg_receivers === '') {
-            message.warning('请先配置机器人令牌和接收者')
-            systemSettings.tg_notice = false
-            return
-        }
-    }
-
     saveSetting(key, value)
 }
 
@@ -1055,17 +979,6 @@ const handleFieldBlur = (key, rawValue) => {
             return
         }
         systemSettings.skip_compress_formats = value
-    }
-
-    if (key === 'tg_bot_token' || key === 'tg_receivers') {
-        const tokenEmpty = systemSettings.tg_bot_token === '' || systemSettings.tg_bot_token === null
-        if ((tokenEmpty && !systemSettings.tg_bot_token_configured) || systemSettings.tg_receivers === '') {
-            if (systemSettings.tg_notice) {
-                message.warning('通知配置不完整，Telegram 通知已关闭')
-                systemSettings.tg_notice = false
-                saveSetting('tg_notice', false)
-            }
-        }
     }
 
     const allowEmptyKeys = ['public_image_domain']

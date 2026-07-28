@@ -192,7 +192,7 @@ const refreshNavItems = () => {
     if (hasPermission('user:list', userInfo)) {
       navItems.value.push({ path: '/users', icon: 'user-line', name: '用户管理' })
     }
-    if (hasAnyPermission(['setting:upload', 'setting:image', 'setting:security', 'setting:notification', 'setting:api', 'setting:seo'], userInfo)) {
+    if (hasAnyPermission(['setting:upload', 'setting:image', 'setting:security', 'setting:api', 'setting:seo'], userInfo)) {
       navItems.value.push({ path: '/settings', icon: 'settings-4-line', name: '系统设置' })
     }
   }

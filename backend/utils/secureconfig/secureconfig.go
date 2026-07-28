@@ -34,8 +34,7 @@ var bucketSensitiveKeys = map[string]struct{}{
 }
 
 var settingsSensitiveKeys = map[string]struct{}{
-	"api_token":    {},
-	"tg_bot_token": {},
+	"api_token": {},
 }
 
 func EncryptBucketConfigValues(configMap map[string]any) (map[string]any, error) {
@@ -63,56 +62,46 @@ func IsSettingsSensitiveKey(key string) bool {
 const ConfiguredStatus = ""
 
 func SanitizeSettingsForResponse(setting models.Settings) map[string]any {
-	tgBotTokenStatus := ""
-	if strings.TrimSpace(setting.TGBotToken) != "" {
-		tgBotTokenStatus = ConfiguredStatus
-	}
-
 	apiTokenStatus := ""
 	if strings.TrimSpace(setting.APITokenHash) != "" {
 		apiTokenStatus = ConfiguredStatus
 	}
 	return map[string]any{
-		"id":                      setting.ID,
-		"original_image":          setting.OriginalImage,
-		"save_webp":               setting.SaveWebp,
-		"thumbnail":               setting.Thumbnail,
-		"tourist":                 setting.Tourist,
-		"start_register":          setting.StartRegister,
-		"tg_notice":               setting.TGNotice,
-		"pow_verify":              setting.PowVerify,
-		"tg_bot_token":            tgBotTokenStatus,
-		"tg_bot_token_configured": strings.TrimSpace(setting.TGBotToken) != "",
-		"tg_receivers":            setting.TGReceivers,
-		"tg_notice_text":          setting.TGNoticeText,
-		"start_api":               setting.StartAPI,
-		"api_token":               apiTokenStatus,
-		"api_token_configured":    strings.TrimSpace(setting.APITokenHash) != "",
-		"save_original_name":      setting.SaveOriginalName,
-		"default_storage":         setting.DefaultStorage,
-		"multi_storage_sync":      setting.MultiStorageSync,
-		"max_file_size":           setting.MaxFileSize,
-		"allowed_types":           setting.AllowedTypes,
-		"main_image_quality":      setting.MainImageQuality,
-		"skip_compress_formats":   setting.SkipCompressFormat,
-		"public_image_domain":     setting.PublicImageDomain,
-		"cdn_domain":              setting.CDNDomain,
-		"watermark_enable":        setting.WatermarkEnable,
-		"watermark_text":          setting.WatermarkText,
-		"watermark_pos":           setting.WatermarkPos,
-		"watermark_size":          setting.WatermarkSize,
-		"watermark_color":         setting.WatermarkColor,
-		"watermark_opac":          setting.WatermarkOpac,
-		"referer_white_enable":    setting.RefererWhiteEnable,
-		"referer_white_list":      setting.RefererWhiteList,
-		"seo_title":               setting.SEOTitle,
-		"seo_description":         setting.SEODescription,
-		"seo_keywords":            setting.SEOKeywords,
-		"seo_icp":                 setting.SEOICP,
-		"public_security":         setting.PublicSecurity,
-		"seo_icon":                setting.SEOicon,
-		"default_path":            setting.DefaultPath,
-		"file_name":               setting.FileName,
+		"id":                    setting.ID,
+		"original_image":        setting.OriginalImage,
+		"save_webp":             setting.SaveWebp,
+		"thumbnail":             setting.Thumbnail,
+		"tourist":               setting.Tourist,
+		"start_register":        setting.StartRegister,
+		"pow_verify":            setting.PowVerify,
+		"start_api":             setting.StartAPI,
+		"api_token":             apiTokenStatus,
+		"api_token_configured":  strings.TrimSpace(setting.APITokenHash) != "",
+		"save_original_name":    setting.SaveOriginalName,
+		"default_storage":       setting.DefaultStorage,
+		"multi_storage_sync":    setting.MultiStorageSync,
+		"max_file_size":         setting.MaxFileSize,
+		"allowed_types":         setting.AllowedTypes,
+		"main_image_quality":    setting.MainImageQuality,
+		"skip_compress_formats": setting.SkipCompressFormat,
+		"public_image_domain":   setting.PublicImageDomain,
+		"cdn_domain":            setting.CDNDomain,
+		"watermark_enable":      setting.WatermarkEnable,
+		"watermark_text":        setting.WatermarkText,
+		"watermark_pos":         setting.WatermarkPos,
+		"watermark_size":        setting.WatermarkSize,
+		"watermark_color":       setting.WatermarkColor,
+		"watermark_opac":        setting.WatermarkOpac,
+		"referer_white_enable":  setting.RefererWhiteEnable,
+		"referer_white_list":    setting.RefererWhiteList,
+		"seo_title":             setting.SEOTitle,
+		"seo_description":       setting.SEODescription,
+		"seo_keywords":          setting.SEOKeywords,
+		"seo_icp":               setting.SEOICP,
+		"public_security":       setting.PublicSecurity,
+		"seo_icon":              setting.SEOicon,
+		"default_path":          setting.DefaultPath,
+		"file_name":             setting.FileName,
 	}
 }
 
@@ -148,14 +137,6 @@ func CompareSecretHash(hashValue, rawValue string) bool {
 func TryMigrateSettingsSecrets(setting *models.Settings) (bool, error) {
 	changed := false
 
-	if strings.TrimSpace(setting.TGBotToken) != "" && !IsEncryptedValue(setting.TGBotToken) {
-		encrypted, err := encryptString(setting.TGBotToken)
-		if err != nil {
-			return false, err
-		}
-		setting.TGBotToken = encrypted
-		changed = true
-	}
 	if strings.TrimSpace(setting.APIToken) != "" && strings.TrimSpace(setting.APITokenHash) == "" {
 		hash, err := bcrypt.GenerateFromPassword([]byte(setting.APIToken), bcrypt.DefaultCost)
 		if err != nil {

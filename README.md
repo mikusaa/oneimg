@@ -65,16 +65,13 @@ docker run -d \
 mikusaa/oneimg
 ```
 
-### 获取TelegramID
-使用机器人[@userinfobot](https://t.me/userinfobot) 发送/start 即可获取TelegramID
-
 ### 数据持久化
 系统数据和上传的图片通过 Docker 数据卷保持持久化：
 - 上传的图片存储在 `./uploads` 目录
 - 数据库文件存储在 `./data` 目录
 
 ### 自定义配置
-如需修改配置，可以通过环境变量或直接编辑 `.env` 文件：
+如需修改配置，可以通过环境变量或直接编辑 `data/.env` 文件。已有根目录 `.env` 的部署仍会优先读取原文件。
 
 ## 功能特性
 

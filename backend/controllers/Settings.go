@@ -213,9 +213,6 @@ func updateSensitiveSettingsField(settings *models.Settings, key string, value a
 		settings.APIToken = ""
 		settings.APITokenHash = stringValue
 		return nil
-	case "tg_bot_token":
-		settings.TGBotToken = stringValue
-		return nil
 	default:
 		return fmt.Errorf("设置项 %s 不支持敏感更新", key)
 	}
@@ -230,8 +227,6 @@ func buildSettingsUpdate(key string, value any, fieldName string, fieldType refl
 	switch key {
 	case "api_token":
 		return "api_token_hash", normalizedValue, nil
-	case "tg_bot_token":
-		return key, normalizedValue, nil
 	case "public_image_domain":
 		domain, err := publicurl.NormalizeDomain(fmt.Sprintf("%v", value))
 		if err != nil {
@@ -641,8 +636,6 @@ var settingKeyPermissions = map[string]string{
 	"watermark_opac": "setting:image", "watermark_pos": "setting:image",
 	"pow_verify": "setting:security", "tourist": "setting:security", "start_register": "setting:security",
 	"referer_white_enable": "setting:security", "referer_white_list": "setting:security",
-	"tg_notice": "setting:notification", "tg_bot_token": "setting:notification", "tg_receivers": "setting:notification",
-	"tg_notice_text": "setting:notification", "tg_bot_token_configured": "setting:notification",
 	"start_api": "setting:api", "api_token": "setting:api", "api_token_configured": "setting:api",
 	"seo_title": "setting:seo", "seo_description": "setting:seo", "seo_keywords": "setting:seo",
 	"seo_icp": "setting:seo", "public_security": "setting:seo", "seo_icon": "setting:seo",
@@ -657,7 +650,7 @@ func currentSettingPermissions(c *gin.Context) []string {
 	if !ok || user.Role != models.RoleAdmin {
 		return []string{}
 	}
-	groups := []string{"setting:upload", "setting:image", "setting:security", "setting:notification", "setting:api", "setting:seo"}
+	groups := []string{"setting:upload", "setting:image", "setting:security", "setting:api", "setting:seo"}
 	if user.ID == models.SuperAdminID {
 		return groups
 	}

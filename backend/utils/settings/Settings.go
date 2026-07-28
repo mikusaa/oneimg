@@ -20,18 +20,10 @@ func GetSettings() (models.Settings, error) {
 
 	if changed, migrateErr := secureconfig.TryMigrateSettingsSecrets(&settings); migrateErr == nil && changed {
 		_ = db.DB.Model(&settings).Updates(map[string]any{
-			"tg_bot_token":   settings.TGBotToken,
 			"api_token":      settings.APIToken,
 			"api_token_hash": settings.APITokenHash,
 		}).Error
 	}
 
-	if settings.TGBotToken != "" {
-		decrypted, decryptErr := secureconfig.DecryptSettingValue("tg_bot_token", settings.TGBotToken)
-		if decryptErr != nil {
-			return settings, decryptErr
-		}
-		settings.TGBotToken = decrypted
-	}
 	return settings, nil
 }

@@ -45,7 +45,6 @@ var permissionNames = map[string]string{
 	"setting:upload":         "存储与上传",
 	"setting:image":          "图片处理",
 	"setting:security":       "访问安全",
-	"setting:notification":   "Telegram通知",
 	"setting:api":            "上传API",
 	"setting:seo":            "站点信息",
 }
@@ -55,7 +54,7 @@ var allPermissionCodes = []string{
 	"tag:create", "tag:update", "tag:delete",
 	"storage:create", "storage:update", "storage:delete",
 	"image:delete", "image:tag:add", "image:tag:delete",
-	"setting:upload", "setting:image", "setting:security", "setting:notification", "setting:api", "setting:seo",
+	"setting:upload", "setting:image", "setting:security", "setting:api", "setting:seo",
 }
 
 // Permission 保存后台功能权限及用户可使用的存储桶。

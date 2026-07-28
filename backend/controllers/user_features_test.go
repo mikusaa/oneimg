@@ -171,6 +171,52 @@ func TestUpdateTagValidation(t *testing.T) {
 	}
 }
 
+func TestImageTagRequestsAcceptNumericIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupFeatureTestDB(t)
+	db := database.GetDB().DB
+	tag := models.Tags{Name: "historical"}
+	if err := db.Create(&tag).Error; err != nil {
+		t.Fatal(err)
+	}
+	images := []models.Image{
+		{Url: "/uploads/old-a.png", FileName: "old-a.png", FileSize: 1, BucketId: 1, UserId: models.SuperAdminID},
+		{Url: "/uploads/old-b.png", FileName: "old-b.png", FileSize: 1, BucketId: 1, UserId: models.SuperAdminID},
+	}
+	if err := db.Create(&images).Error; err != nil {
+		t.Fatal(err)
+	}
+	contextValues := map[string]any{"user_id": models.SuperAdminID, "user_role": models.RoleAdmin}
+
+	single := performJSONRequest(AddImageTag, http.MethodPost, "/api/images/tag", map[string]any{
+		"id": images[0].Id, "tag": tag.Id,
+	}, contextValues)
+	if single.Code != http.StatusOK {
+		t.Fatalf("numeric single tag status = %d, body = %s", single.Code, single.Body.String())
+	}
+
+	batchBody := map[string]any{"image_ids": []int{images[1].Id}, "tag_id": tag.Id}
+	batch := performJSONRequest(AddImageTags, http.MethodPost, "/api/images/tags", batchBody, contextValues)
+	if batch.Code != http.StatusOK {
+		t.Fatalf("numeric batch tag status = %d, body = %s", batch.Code, batch.Body.String())
+	}
+	deleted := performJSONRequest(DeleteImageTags, http.MethodDelete, "/api/images/tags", batchBody, contextValues)
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("numeric batch delete status = %d, body = %s", deleted.Code, deleted.Body.String())
+	}
+
+	var firstCount, secondCount int64
+	if err := db.Model(&models.ImageToTags{}).Where("image_id = ? AND tag_id = ?", images[0].Id, tag.Id).Count(&firstCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&models.ImageToTags{}).Where("image_id = ? AND tag_id = ?", images[1].Id, tag.Id).Count(&secondCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if firstCount != 1 || secondCount != 0 {
+		t.Fatalf("unexpected tag relations: first=%d second=%d", firstCount, secondCount)
+	}
+}
+
 func TestUpdateUserPermissionPreservesOmittedCodes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupFeatureTestDB(t)
@@ -242,6 +288,9 @@ func TestSettingsResponseKeysHavePermissionGroups(t *testing.T) {
 		lowerKey := strings.ToLower(key)
 		if strings.Contains(lowerKey, "oidc") || strings.Contains(lowerKey, "cas") {
 			t.Errorf("external authentication setting %q is still exposed", key)
+		}
+		if strings.Contains(lowerKey, "telegram") || strings.HasPrefix(lowerKey, "tg_") {
+			t.Errorf("removed Telegram setting %q is still exposed", key)
 		}
 		if key == "id" {
 			continue

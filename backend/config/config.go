@@ -51,16 +51,27 @@ type Config struct {
 // 全局配置实例
 var App *Config
 
+func envFilePath() string {
+	if configured := strings.TrimSpace(os.Getenv("ONEIMG_ENV_FILE")); configured != "" {
+		return configured
+	}
+	if _, err := os.Stat(".env"); err == nil {
+		return ".env"
+	}
+	return filepath.Join("data", ".env")
+}
+
 // 检查.env文件/目录状态
 func EnvExists() bool {
-	info, err := os.Stat(".env")
+	envPath := envFilePath()
+	info, err := os.Stat(envPath)
 	if os.IsNotExist(err) {
 		return false
 	}
 	// 如果存在但不是文件，先删除目录
 	if err == nil && info.IsDir() {
-		log.Printf("发现.env是目录，正在删除...")
-		if err := os.RemoveAll(".env"); err != nil {
+		log.Printf("发现%s是目录，正在删除...", envPath)
+		if err := os.RemoveAll(envPath); err != nil {
 			log.Fatalf("删除.env目录失败：%v", err)
 		}
 		return false
@@ -70,9 +81,9 @@ func EnvExists() bool {
 
 // 创建默认.env文件
 func CreateDefaultEnv() {
-	// 创建data目录（避免SQLite路径报错）
-	if err := os.MkdirAll("./data", 0755); err != nil {
-		log.Fatalf("创建data目录失败：%v", err)
+	envPath := envFilePath()
+	if err := os.MkdirAll(filepath.Dir(envPath), 0755); err != nil {
+		log.Fatalf("创建配置目录失败：%v", err)
 	}
 
 	// 生成随机的SESSION_SECRET（32位base64编码）
@@ -118,22 +129,20 @@ CONFIG_SECRET=
 	envContent = strings.Replace(envContent, "CONFIG_SECRET=", "CONFIG_SECRET="+configSecret, 1)
 
 	// 写入.env文件
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("获取当前工作目录失败：%v", err)
-	}
-	envPath := filepath.Join(wd, ".env")
-
 	// 确保目标路径不是目录
 	if info, err := os.Stat(envPath); err == nil && info.IsDir() {
 		log.Fatalf("无法写入.env文件：%s 是一个目录", envPath)
 	}
 
-	if err := os.WriteFile(envPath, []byte(envContent), 0644); err != nil {
+	if err := os.WriteFile(envPath, []byte(envContent), 0600); err != nil {
 		log.Fatalf("生成默认.env文件失败：%v", err)
 	}
 
-	log.Printf("✅ 首次启动：自动生成.env文件（路径：%s）", envPath)
+	absPath, err := filepath.Abs(envPath)
+	if err != nil {
+		absPath = envPath
+	}
+	log.Printf("✅ 首次启动：自动生成.env文件（路径：%s）", absPath)
 }
 
 // 生成指定长度的随机密钥（base64编码）
@@ -154,7 +163,8 @@ func NewConfig() {
 	}
 
 	// 2. 加载.env文件（此时必存在）
-	err := godotenv.Load()
+	envPath := envFilePath()
+	err := godotenv.Load(envPath)
 	if err != nil {
 		log.Fatalf("加载.env文件失败：%v", err)
 	}

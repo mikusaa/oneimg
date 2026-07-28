@@ -100,7 +100,7 @@ const routes = [
     component: () => import('@/views/Settings.vue'),
     meta: { 
       title: '系统设置',
-      permissions: ['setting:upload', 'setting:image', 'setting:security', 'setting:notification', 'setting:api', 'setting:seo']
+      permissions: ['setting:upload', 'setting:image', 'setting:security', 'setting:api', 'setting:seo']
     }
   }
 ]

@@ -985,6 +985,7 @@ const batchDeleteTag = async (tagId) => {
         const response = await fetch(`${API_BASE_URL}/api/images/tags`, {
         method: 'DELETE',
         headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
             },
             body: JSON.stringify({
@@ -1023,6 +1024,7 @@ const batchAddTag = async (tagId) => {
         const response = await fetch(`${API_BASE_URL}/api/images/tags`, {
         method: 'POST',
         headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
             },
             body: JSON.stringify({
