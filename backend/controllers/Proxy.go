@@ -21,7 +21,6 @@ import (
 	"oneimg/backend/utils/result"
 	"oneimg/backend/utils/s3"
 	"oneimg/backend/utils/settings"
-	"oneimg/backend/utils/telegram"
 	"oneimg/backend/utils/watermark"
 	"oneimg/backend/utils/webdav"
 
@@ -129,9 +128,6 @@ func ImageProxy(c *gin.Context) bool {
 
 	case "ftp":
 		proxyFTPFile(c, imageUrl, mimeType, bucket, watermarkCfg)
-
-	case "telegram":
-		ProxyTelegramFile(c, imageUrl, imageModel.FileName, mimeType, setting, bucket, watermarkCfg)
 
 	default:
 		c.JSON(http.StatusUnprocessableEntity, result.Error(422, fmt.Sprintf("不支持的存储类型: %s", imageModel.Storage)))
@@ -599,132 +595,6 @@ func proxyFTPFile(c *gin.Context, ftpPath string, mimeType string, bucket models
 			break
 		}
 		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
-			break
-		}
-	}
-	c.Writer.Flush()
-	c.Abort()
-}
-
-// Telegram 代理（添加水印支持）
-func ProxyTelegramFile(c *gin.Context, realPath string, telegramFileName string, mimeType string, cfg models.Settings, bucket models.Buckets, watermarkCfg watermark.WatermarkConfig) {
-	// 1. 统一响应头
-	if !watermarkCfg.Enable {
-		c.Header("Transfer-Encoding", "chunked")
-		c.Writer.Header().Del("Content-Length")
-	}
-	c.Header("Content-Type", mimeType)
-	c.Header("Cache-Control", "public, max-age=31536000")
-	c.Header("X-Storage-Type", "telegram")
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Connection", "close")
-
-	// 获取存储配置
-
-	storageConfig := buckets.ConvertToTelegramBucket(bucket.Config)
-
-	// 校验Telegram配置，弃用
-	// if storageConfig.TGBotToken == "" {
-	// 	log.Printf("Telegram BotToken 为空")
-	// 	c.AbortWithStatusJSON(http.StatusBadGateway, result.Error(502, "telegram配置异常：bot token为空"))
-	// 	return
-	// }
-
-	// 获取数据库
-	db := database.GetDB()
-	if db == nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, result.Error(500, "获取数据库连接失败"))
-		return
-	}
-	var telegramModel models.ImageTeleGram
-	if err := db.DB.Where("file_name = ?", telegramFileName).First(&telegramModel).Error; err != nil {
-		if strings.Contains(err.Error(), "record not found") {
-			c.AbortWithStatusJSON(http.StatusBadGateway, result.Error(502, "telegram文件不存在或file id无效"))
-		} else {
-			log.Printf("查询telegram文件信息失败：%v", err)
-			c.AbortWithStatusJSON(http.StatusInternalServerError, result.Error(500, "查询telegram文件信息失败"))
-		}
-		return
-	}
-
-	if telegramModel.TGFileId == "" {
-		c.AbortWithStatusJSON(http.StatusBadGateway, result.Error(502, "telegram文件无有效file id"))
-		return
-	}
-
-	// 3. 调用telegram包解析FileId
-	var fileId string
-	if isThumbnailPath(realPath) {
-		fileId = telegram.ParseFileIdFromTelegramPath(telegramModel.TGThumbnailFileId)
-	} else {
-		fileId = telegram.ParseFileIdFromTelegramPath(telegramModel.TGFileId)
-	}
-
-	if fileId == "" {
-		log.Printf("无效的Telegram路径：%s", telegramModel.TGFileId)
-		c.AbortWithStatusJSON(http.StatusBadGateway, result.Error(502, "无效的telegram文件路径"))
-		return
-	}
-
-	// 4. 初始化Telegram客户端
-	tgClient := telegram.NewClient(storageConfig.TGBotToken)
-	tgClient.Timeout = 60 * time.Second // 延长超时
-	tgClient.Retry = 3                  // 重试次数
-
-	// 5. 调用telegram包获取文件流
-	fileReader, err := telegram.GetTelegramFileStreamReader(tgClient, fileId)
-	if err != nil {
-		log.Printf("获取Telegram文件流失败（FileId：%s）：%v", fileId, err)
-		if strings.Contains(err.Error(), "file not found") || strings.Contains(err.Error(), "invalid file id") {
-			c.AbortWithStatusJSON(http.StatusBadGateway, result.Error(502, "telegram文件不存在或file id无效"))
-		} else {
-			c.AbortWithStatusJSON(http.StatusBadGateway, result.Error(502, "telegram文件获取失败："+err.Error()))
-		}
-		return
-	}
-	defer func() {
-		if err := fileReader.Close(); err != nil {
-			log.Printf("Telegram文件流关闭失败：%v", err)
-		}
-	}()
-
-	// 6. 处理水印
-	var contentReader io.Reader = fileReader
-	if watermarkCfg.Enable {
-		processedReader, err := watermark.ProcessImageWithWatermark(fileReader, mimeType, watermarkCfg)
-		if err != nil {
-			log.Printf("处理Telegram文件水印失败: %v", err)
-			// 重新获取原始文件流
-			fileReader2, _ := telegram.GetTelegramFileStreamReader(tgClient, fileId)
-			if fileReader2 != nil {
-				defer fileReader2.Close()
-				contentReader = fileReader2
-			}
-		} else {
-			contentReader = processedReader
-		}
-	}
-
-	// 7. 流式返回
-	c.Status(http.StatusOK)
-	buf := make([]byte, 4096)
-	totalWritten := int64(0)
-	for {
-		n, err := contentReader.Read(buf)
-		if n > 0 {
-			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
-				log.Printf("响应写入失败：%v", writeErr)
-				break
-			}
-			c.Writer.Flush()
-			totalWritten += int64(n)
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Printf("Telegram文件流读取失败：%v", err)
 			c.Writer.WriteHeader(http.StatusInternalServerError)
 			break
 		}

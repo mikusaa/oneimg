@@ -34,12 +34,11 @@ const bucketConnectionTestTimeout = 25 * time.Second
 var bucketConnectionTestSlots = make(chan struct{}, 4)
 
 var bucketConfigKeys = map[string][]string{
-	"s3":       {"s3_endpoint", "s3_access_key", "s3_secret_key", "s3_bucket"},
-	"r2":       {"r2_endpoint", "r2_access_key", "r2_secret_key", "r2_bucket"},
-	"ftp":      {"ftp_host", "ftp_port", "ftp_user", "ftp_pass"},
-	"webdav":   {"webdav_url", "webdav_user", "webdav_pass"},
-	"telegram": {"tg_bot_token", "tg_receivers"},
-	"default":  {"storagePath"},
+	"s3":      {"s3_endpoint", "s3_access_key", "s3_secret_key", "s3_bucket"},
+	"r2":      {"r2_endpoint", "r2_access_key", "r2_secret_key", "r2_bucket"},
+	"ftp":     {"ftp_host", "ftp_port", "ftp_user", "ftp_pass"},
+	"webdav":  {"webdav_url", "webdav_user", "webdav_pass"},
+	"default": {"storagePath"},
 }
 
 // TestBucketConnection 使用未保存的表单配置或已存储的存储桶配置执行连接测试。
@@ -249,8 +248,6 @@ func testBucketConnection(ctx context.Context, bucket models.Buckets) (string, e
 		return testFTPStorage(bucket)
 	case "webdav":
 		return testWebDAVStorage(ctx, bucket)
-	case "telegram":
-		return testTelegramStorage(ctx, bucket)
 	default:
 		return "", errors.New("不支持的存储类型")
 	}
@@ -338,50 +335,6 @@ func testWebDAVStorage(ctx context.Context, bucket models.Buckets) (string, erro
 		return "", fmt.Errorf("写入成功，但测试文件清理失败: %w", err)
 	}
 	return "已验证 WebDAV 认证、写入与删除权限", nil
-}
-
-func testTelegramStorage(ctx context.Context, bucket models.Buckets) (string, error) {
-	config := utilsBuckets.ConvertToTelegramBucket(bucket.Config)
-	if err := callTelegramTestAPI(ctx, config.TGBotToken, "getMe", nil); err != nil {
-		return "", fmt.Errorf("Bot Token 校验失败: %w", err)
-	}
-	if err := callTelegramTestAPI(ctx, config.TGBotToken, "getChat", map[string]string{"chat_id": config.TGReceivers}); err != nil {
-		return "", fmt.Errorf("Chat ID 校验失败: %w", err)
-	}
-	return "已验证 Bot Token 与 Chat ID 访问权限（未发送消息）", nil
-}
-
-func callTelegramTestAPI(ctx context.Context, token, method string, payload any) error {
-	var body io.Reader
-	if payload != nil {
-		encoded, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(encoded)
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.telegram.org/bot"+token+"/"+method, body)
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := (&http.Client{Timeout: 12 * time.Second}).Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	var apiResponse struct {
-		OK          bool   `json:"ok"`
-		ErrorCode   int    `json:"error_code"`
-		Description string `json:"description"`
-	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&apiResponse); err != nil {
-		return fmt.Errorf("Telegram API 响应无效（HTTP %d）", response.StatusCode)
-	}
-	if response.StatusCode != http.StatusOK || !apiResponse.OK {
-		return fmt.Errorf("Telegram API 错误 [%d]: %s", apiResponse.ErrorCode, apiResponse.Description)
-	}
-	return nil
 }
 
 func sanitizeBucketTestError(err error, config map[string]any) string {

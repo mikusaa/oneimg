@@ -164,14 +164,10 @@ const typeSpecificFields = {
     { name: 'webdav_user', label: 'Username', type: 'password', placeholder: '请输入 Username', required: true},
     { name: 'webdav_pass', label: 'Password', type: 'password', placeholder: '请输入 Password', required: true},
     { name: 'capacity', label: '容量大小', type: 'number', placeholder: '请输入容量大小，单位 GB', required: true}
-  ],
-  telegram: [
-    { name: 'tg_bot_token', label: 'Bot Token', type: 'password', placeholder: '请输入 Token', required: true},
-    { name: 'tg_receivers', label: 'Chat ID', type: 'text', placeholder: '请输入 Chat ID', required: true}
   ]
 };
 
-const sensitiveFields = ['s3_access_key', 's3_secret_key', 'r2_access_key', 'r2_secret_key', 'ftp_user', 'ftp_pass', 'webdav_user', 'webdav_pass', 'tg_bot_token'];
+const sensitiveFields = ['s3_access_key', 's3_secret_key', 'r2_access_key', 'r2_secret_key', 'ftp_user', 'ftp_pass', 'webdav_user', 'webdav_pass'];
 
 // 添加存储弹窗
 const AddBucketModal = () => {
@@ -194,7 +190,6 @@ const AddBucketModal = () => {
         { label: 'R2', value: 'r2' },
         { label: 'FTP', value: 'ftp' },
         { label: 'WebDav', value: 'webdav' },
-        { label: 'Telegram', value: 'telegram' },
       ],
       required: true,
       onChange: (_, type) => {
@@ -284,7 +279,6 @@ const UpdateBucketModal = (bucket) => {
         { label: 'R2', value: 'r2' },
         { label: 'FTP', value: 'ftp' },
         { label: 'WebDav', value: 'webdav' },
-        { label: 'Telegram', value: 'telegram' },
       ], required: true, defaultValue: bucket.type },
       ...setValue
     ],

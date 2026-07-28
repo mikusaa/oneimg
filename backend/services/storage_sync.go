@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +18,6 @@ import (
 	"oneimg/backend/utils/ftp"
 	storageS3 "oneimg/backend/utils/s3"
 	storageSettings "oneimg/backend/utils/settings"
-	"oneimg/backend/utils/telegram"
 	"oneimg/backend/utils/webdav"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -122,7 +120,9 @@ func processNextStorageSyncTask() bool {
 	}
 
 	var replica models.ImageStorage
-	lookup := db.DB.Where("status = ? AND (next_retry_at IS NULL OR next_retry_at <= ?)", models.ImageStorageStatusPending, time.Now()).
+	removedBuckets := db.DB.Model(&models.Buckets{}).Select("id").Where("type = ?", "telegram")
+	lookup := db.DB.Where("status = ? AND storage <> ? AND (next_retry_at IS NULL OR next_retry_at <= ?)", models.ImageStorageStatusPending, "telegram", time.Now()).
+		Where("bucket_id NOT IN (?)", removedBuckets).
 		Order("id ASC").
 		Limit(1).
 		Find(&replica)
@@ -199,8 +199,6 @@ func synchronizeReplica(ctx context.Context, replica *models.ImageStorage) (map[
 		err = uploadArtifactToWebDAV(ctx, bucket, artifact)
 	case "ftp":
 		err = uploadArtifactToFTP(bucket, artifact)
-	case "telegram":
-		metadata, err = uploadArtifactToTelegram(bucket, artifact)
 	default:
 		err = fmt.Errorf("unsupported storage type %q", bucket.Type)
 	}
@@ -322,7 +320,7 @@ func checkStorageCapacity(bucket models.Buckets, size int64) error {
 	if size < 0 {
 		return errors.New("replica size cannot be negative")
 	}
-	if bucket.Type == "default" || bucket.Type == "telegram" || bucket.Capacity == 0 {
+	if bucket.Type == "default" || bucket.Capacity == 0 {
 		return nil
 	}
 	required := uint64(size)
@@ -460,52 +458,6 @@ func uploadArtifactToFTP(bucket models.Buckets, artifact localStorageArtifact) e
 	return nil
 }
 
-func uploadArtifactToTelegram(bucket models.Buckets, artifact localStorageArtifact) (map[string]any, error) {
-	config := buckets.ConvertToTelegramBucket(bucket.Config)
-	client := telegram.NewClient(config.TGBotToken)
-	client.Timeout = 20 * time.Second
-	client.Retry = 3
-
-	mainBytes, err := os.ReadFile(artifact.MainPath)
-	if err != nil {
-		return nil, err
-	}
-	fileID, messageID, err := client.UploadPhotoByBytes(
-		config.TGReceivers,
-		mainBytes,
-		artifact.FileName,
-		fmt.Sprintf("上传图片: %s", artifact.FileName),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("upload main image: %w", err)
-	}
-
-	metadata := map[string]any{
-		"tg_file_id":    fileID,
-		"tg_message_id": messageID,
-	}
-	if artifact.ThumbnailPath == "" {
-		return metadata, nil
-	}
-
-	thumbnailBytes, err := os.ReadFile(artifact.ThumbnailPath)
-	if err != nil {
-		return metadata, err
-	}
-	thumbnailFileID, thumbnailMessageID, err := client.UploadPhotoByBytes(
-		config.TGReceivers,
-		thumbnailBytes,
-		"thumbnail_"+artifact.FileName,
-		fmt.Sprintf("缩略图: %s", artifact.FileName),
-	)
-	if err != nil {
-		return metadata, fmt.Errorf("upload thumbnail: %w", err)
-	}
-	metadata["tg_thumbnail_file_id"] = thumbnailFileID
-	metadata["tg_thumbnail_message_id"] = thumbnailMessageID
-	return metadata, nil
-}
-
 func remoteObjectKey(path string) string {
 	return strings.TrimPrefix(strings.ReplaceAll(path, "\\", "/"), "/")
 }
@@ -534,7 +486,7 @@ func completeStorageSync(replicaID int, bucket models.Buckets, artifact localSto
 		if bucket.Type != "default" && totalSize > 0 {
 			totalSizeUint := uint64(totalSize)
 			usageUpdate := tx.Model(&models.Buckets{}).
-				Where("id = ? AND (capacity = 0 OR type IN ('telegram','default') OR usage + ? <= capacity)", bucket.Id, totalSizeUint).
+				Where("id = ? AND (capacity = 0 OR type = 'default' OR usage + ? <= capacity)", bucket.Id, totalSizeUint).
 				UpdateColumn("usage", gorm.Expr("usage + ?", totalSizeUint))
 			if usageUpdate.Error != nil {
 				return usageUpdate.Error
@@ -637,17 +589,6 @@ func BackfillImageStorages() error {
 		bucketByID[bucket.Id] = bucket
 	}
 
-	var telegramRows []models.ImageTeleGram
-	if err := db.DB.Find(&telegramRows).Error; err != nil {
-		return err
-	}
-	telegramByFilename := make(map[string]models.ImageTeleGram, len(telegramRows))
-	for _, row := range telegramRows {
-		if _, exists := telegramByFilename[row.FileName]; !exists {
-			telegramByFilename[row.FileName] = row
-		}
-	}
-
 	var images []models.Image
 	result := db.DB.Order("id ASC").FindInBatches(&images, 200, func(tx *gorm.DB, _ int) error {
 		for _, image := range images {
@@ -662,6 +603,9 @@ func BackfillImageStorages() error {
 			if storageType == "" {
 				storageType = "default"
 			}
+			if storageType == "telegram" {
+				continue
+			}
 
 			thumbnailSize := int64(0)
 			if storageType == "default" && image.Thumbnail != "" {
@@ -669,13 +613,6 @@ func BackfillImageStorages() error {
 					if info, err := os.Stat(thumbnailPath); err == nil && info.Mode().IsRegular() {
 						thumbnailSize = info.Size()
 					}
-				}
-			}
-
-			var metadata map[string]any
-			if storageType == "telegram" {
-				if legacy, ok := telegramByFilename[image.FileName]; ok {
-					metadata = telegramMetadata(legacy)
 				}
 			}
 
@@ -688,7 +625,6 @@ func BackfillImageStorages() error {
 				Thumbnail:     image.Thumbnail,
 				FileSize:      image.FileSize,
 				ThumbnailSize: thumbnailSize,
-				Metadata:      metadata,
 				SyncedAt:      timePointer(image.CreatedAt),
 			}
 			if err := tx.Clauses(clause.OnConflict{
@@ -701,15 +637,6 @@ func BackfillImageStorages() error {
 		return nil
 	})
 	return result.Error
-}
-
-func telegramMetadata(row models.ImageTeleGram) map[string]any {
-	return map[string]any{
-		"tg_file_id":              row.TGFileId,
-		"tg_thumbnail_file_id":    row.TGThumbnailFileId,
-		"tg_message_id":           row.TGMessageId,
-		"tg_thumbnail_message_id": row.TGThumbnailMessageId,
-	}
 }
 
 func timePointer(value time.Time) *time.Time {
@@ -768,6 +695,12 @@ func DeleteImageReplicas(ctx context.Context, image models.Image) error {
 			localReplicas = append(localReplicas, replica)
 			continue
 		}
+		if bucket.Type == "telegram" || replica.Storage == "telegram" {
+			if err := removeReplicaRecord(db.DB, bucket, replica); err != nil {
+				deleteErrors = append(deleteErrors, err)
+			}
+			continue
+		}
 		if replica.Status == models.ImageStorageStatusPending {
 			if err := removeReplicaRecord(db.DB, bucket, replica); err != nil {
 				deleteErrors = append(deleteErrors, err)
@@ -819,6 +752,9 @@ func DeleteBucketReplicas(ctx context.Context, bucket models.Buckets) error {
 	db := database.GetDB()
 	if db == nil || db.DB == nil {
 		return errors.New("database is not initialized")
+	}
+	if bucket.Type == "telegram" {
+		return db.DB.Where("bucket_id = ?", bucket.Id).Delete(&models.ImageStorage{}).Error
 	}
 
 	var replicas []models.ImageStorage
@@ -880,8 +816,6 @@ func deleteRemoteReplica(ctx context.Context, image models.Image, bucket models.
 		return deleteWebDAVReplica(ctx, bucket, mainPath, thumbnailPath)
 	case "ftp":
 		return deleteFTPReplica(bucket, mainPath, thumbnailPath)
-	case "telegram":
-		return deleteTelegramReplica(image, bucket, replica)
 	case "default":
 		return nil
 	default:
@@ -962,76 +896,6 @@ func deleteFTPReplica(bucket models.Buckets, mainPath, thumbnailPath string) err
 		}
 	}
 	return errors.Join(deleteErrors...)
-}
-
-func deleteTelegramReplica(image models.Image, bucket models.Buckets, replica models.ImageStorage) error {
-	metadata := replica.Metadata
-	legacy := models.ImageTeleGram{}
-	db := database.GetDB().DB
-	legacyErr := db.Where("file_name = ?", image.FileName).First(&legacy).Error
-	if legacyErr != nil && !errors.Is(legacyErr, gorm.ErrRecordNotFound) {
-		return legacyErr
-	}
-	if metadataInt(metadata, "tg_message_id") == 0 && metadataInt(metadata, "tg_thumbnail_message_id") == 0 {
-		if legacyErr == nil {
-			metadata = telegramMetadata(legacy)
-		}
-	}
-
-	config := buckets.ConvertToTelegramBucket(bucket.Config)
-	client := telegram.NewClient(config.TGBotToken)
-	client.Timeout = 20 * time.Second
-	client.Retry = 3
-	uploader := telegram.NewTelegramUploader(client)
-
-	var deleteErrors []error
-	for _, messageID := range []int{
-		metadataInt(metadata, "tg_message_id"),
-		metadataInt(metadata, "tg_thumbnail_message_id"),
-	} {
-		if messageID <= 0 {
-			continue
-		}
-		if err := uploader.DeletePhoto(config.TGReceivers, messageID); err != nil && !isMissingRemoteFileError(err) {
-			deleteErrors = append(deleteErrors, err)
-		}
-	}
-	if len(deleteErrors) == 0 && legacy.Id != 0 {
-		if err := db.Delete(&legacy).Error; err != nil {
-			deleteErrors = append(deleteErrors, err)
-		}
-	}
-	return errors.Join(deleteErrors...)
-}
-
-func metadataInt(metadata map[string]any, key string) int {
-	if metadata == nil {
-		return 0
-	}
-	switch value := metadata[key].(type) {
-	case int:
-		return value
-	case int32:
-		return int(value)
-	case int64:
-		return int(value)
-	case uint:
-		return int(value)
-	case uint32:
-		return int(value)
-	case uint64:
-		return int(value)
-	case float64:
-		return int(value)
-	case json.Number:
-		parsed, _ := value.Int64()
-		return int(parsed)
-	case string:
-		parsed, _ := strconv.Atoi(value)
-		return parsed
-	default:
-		return 0
-	}
 }
 
 func isMissingRemoteFileError(err error) bool {

@@ -45,7 +45,7 @@ func keepTwoDecimal(num float64) float64 {
 func GetBuckets(c *gin.Context) {
 	var buckets []models.Buckets
 	db := database.GetDB()
-	if err := db.DB.Model(&models.Buckets{}).Find(&buckets).Error; err != nil {
+	if err := db.DB.Model(&models.Buckets{}).Where("type <> ?", "telegram").Find(&buckets).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, result.Error(500, "获取存储桶失败"))
 		return
 	}
@@ -98,11 +98,6 @@ func GetBuckets(c *gin.Context) {
 			} else {
 				res.UsagePercent = usagePercent
 			}
-		case "telegram": // Telegram 不限容量
-			res.TotalReadable = "无限"
-			res.UsageReadable = formatSize(bucket.Usage)
-			res.UsageFree = "无限"
-			res.UsagePercent = 0
 		default:
 			res.UsageReadable = "未知类型"
 			res.TotalReadable = "未知类型"
@@ -213,37 +208,30 @@ func AddBuckets(c *gin.Context) {
 	}
 
 	// 校验type合法性
-	validTypes := []string{"s3", "r2", "ftp", "webdav", "telegram"}
+	validTypes := []string{"s3", "r2", "ftp", "webdav"}
 	if !sliceContains(validTypes, type_) {
-		c.JSON(http.StatusBadRequest, result.Error(400, "type参数错误，合法值：s3/r2/ftp/webdav/telegram"))
+		c.JSON(http.StatusBadRequest, result.Error(400, "type参数错误，合法值：s3/r2/ftp/webdav"))
 		return
 	}
 
 	var capacity float64
 	var capacitybytes uint64
-	if type_ != "telegram" {
-		capacityStr := params["capacity"].(string)
-		// 将参数转化为int
-		if capacityStr == "" {
-			c.JSON(http.StatusBadRequest, result.Error(400, "capacity为必填参数"))
-			return
-		}
-		capacity, err = strconv.ParseFloat(capacityStr, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, result.Error(400, "capacity参数错误"))
-			return
-		}
-		if capacity <= 0 {
-			c.JSON(http.StatusBadRequest, result.Error(400, "capacity必须大于0"))
-			return
-		}
-		// 保留两位小数
-		capacity = keepTwoDecimal(capacity)
-		// GB -> B
-		capacitybytes = uint64(capacity * 1024 * 1024 * 1024)
-	} else {
-		capacitybytes = 0
+	capacityStr, ok := params["capacity"].(string)
+	if !ok || capacityStr == "" {
+		c.JSON(http.StatusBadRequest, result.Error(400, "capacity为必填参数"))
+		return
 	}
+	capacity, err = strconv.ParseFloat(capacityStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, result.Error(400, "capacity参数错误"))
+		return
+	}
+	if capacity <= 0 {
+		c.JSON(http.StatusBadRequest, result.Error(400, "capacity必须大于0"))
+		return
+	}
+	capacity = keepTwoDecimal(capacity)
+	capacitybytes = uint64(capacity * 1024 * 1024 * 1024)
 
 	// 第二次解析：根据type解析为对应结构体
 	var bucketConfig map[string]any
@@ -281,13 +269,6 @@ func AddBuckets(c *gin.Context) {
 			return
 		}
 		bucketConfig = buckets.WebDavBucketToMap(webdavBucket)
-	case "telegram":
-		var telegramBucket models.TelegramBucket
-		if err := json.Unmarshal(bodyBytes, &telegramBucket); err != nil {
-			c.JSON(http.StatusBadRequest, result.Error(400, "Telegram参数解析失败："+err.Error()))
-			return
-		}
-		bucketConfig = buckets.TelegramBucketToMap(telegramBucket)
 	default:
 		c.JSON(http.StatusBadRequest, result.Error(400, "不支持的存储类型"))
 		return
@@ -371,34 +352,32 @@ func UpdateBuckets(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, result.Error(400, "name和type必须为非空字符串"))
 		return
 	}
+	validTypes := []string{"s3", "r2", "ftp", "webdav"}
+	if !sliceContains(validTypes, type_) || bucket.Type != type_ {
+		c.JSON(http.StatusBadRequest, result.Error(400, "存储类型不支持或不可修改"))
+		return
+	}
 
 	var capacity float64
 	var capacitybytes uint64
-	if type_ != "telegram" {
-		capacityStr := params["capacity"].(string)
-		// 将参数转化为int
-		if capacityStr == "" {
-			c.JSON(http.StatusBadRequest, result.Error(400, "capacity为必填参数"))
-			return
-		}
-		capacity, err = strconv.ParseFloat(capacityStr, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, result.Error(400, "capacity参数错误"))
-			return
-		}
-		if capacity <= 0 {
-			c.JSON(http.StatusBadRequest, result.Error(400, "capacity必须大于0"))
-			return
-		}
-		// 保留两位小数
-		capacity = keepTwoDecimal(capacity)
-		// GB -> B
-		capacitybytes = uint64(capacity * 1024 * 1024 * 1024)
-	} else {
-		capacitybytes = 0
+	capacityStr, ok := params["capacity"].(string)
+	if !ok || capacityStr == "" {
+		c.JSON(http.StatusBadRequest, result.Error(400, "capacity为必填参数"))
+		return
 	}
+	capacity, err = strconv.ParseFloat(capacityStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, result.Error(400, "capacity参数错误"))
+		return
+	}
+	if capacity <= 0 {
+		c.JSON(http.StatusBadRequest, result.Error(400, "capacity必须大于0"))
+		return
+	}
+	capacity = keepTwoDecimal(capacity)
+	capacitybytes = uint64(capacity * 1024 * 1024 * 1024)
 
-	if capacitybytes < bucket.Usage && bucket.Type != "telegram" {
+	if capacitybytes < bucket.Usage {
 		c.JSON(http.StatusBadRequest, result.Error(400, "总容量不能小于已使用容量"))
 		return
 	}
@@ -439,13 +418,6 @@ func UpdateBuckets(c *gin.Context) {
 			return
 		}
 		bucketConfig = buckets.WebDavBucketToMap(webdavBucket)
-	case "telegram":
-		var telegramBucket models.TelegramBucket
-		if err := json.Unmarshal(bodyBytes, &telegramBucket); err != nil {
-			c.JSON(http.StatusBadRequest, result.Error(400, "Telegram参数解析失败："+err.Error()))
-			return
-		}
-		bucketConfig = buckets.TelegramBucketToMap(telegramBucket)
 	default:
 		c.JSON(http.StatusBadRequest, result.Error(400, "不支持的存储类型"))
 		return

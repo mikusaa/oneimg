@@ -83,7 +83,6 @@ mikusaa/oneimg
 - S3 兼容存储（R2、OSS等）
 - WebDAV 存储
 - FTP 存储
-- Telegram 存储
 
 ### 安全认证
 - POW (工作量证明) 验证登录

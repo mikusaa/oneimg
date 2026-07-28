@@ -41,9 +41,3 @@ type WebDavBucket struct {
 	WebdavUser string `json:"webdav_user"`
 	WebdavPass string `json:"webdav_pass"`
 }
-
-// Telegram 存储
-type TelegramBucket struct {
-	TGBotToken  string `json:"tg_bot_token"`
-	TGReceivers string `json:"tg_receivers"`
-}

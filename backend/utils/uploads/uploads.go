@@ -23,7 +23,6 @@ import (
 	"oneimg/backend/utils/images"
 	"oneimg/backend/utils/publicurl"
 	"oneimg/backend/utils/s3"
-	"oneimg/backend/utils/telegram"
 	"oneimg/backend/utils/webdav"
 )
 
@@ -33,7 +32,6 @@ type S3Uploader struct{}
 type WebDAVUploader struct{}
 type DefaultUploader struct{}
 type FTPUploader struct{}
-type TelegramUploader struct{}
 
 // R2 上传实现
 func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *models.Buckets, fileHeader *multipart.FileHeader) (*interfaces.ImageUploadResult, error) {
@@ -487,124 +485,6 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 		Width:            processedImage.Width,
 		Height:           processedImage.Height,
 		CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
-		ContentHash:      processedImage.ContentHash,
-	}, nil
-}
-
-// Telegram上传实现
-func (u *TelegramUploader) Upload(c *gin.Context, setting *models.Settings, bucket *models.Buckets, fileHeader *multipart.FileHeader) (*interfaces.ImageUploadResult, error) {
-	// 验证图片
-	if err := images.ValidateImageFile(fileHeader, setting); err != nil {
-		return nil, fmt.Errorf("图片验证失败: %v", err)
-	}
-
-	// 打开文件
-	file, err := fileHeader.Open()
-	if err != nil {
-		return nil, fmt.Errorf("打开文件失败: %v", err)
-	}
-	defer file.Close()
-
-	// 获取角色
-	userRole := c.GetInt("user_role")
-
-	// 处理图片
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
-	if err != nil {
-		return nil, fmt.Errorf("图片处理失败: %v", err)
-	}
-	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
-		return duplicate, nil
-	}
-
-	// 获取存储配置
-	storageConfig := buckets.ConvertToTelegramBucket(bucket.Config)
-
-	// 基础参数校验，设置存储时已校验，这里弃用
-	// if setting.TGBotToken == "" {
-	// 	return nil, fmt.Errorf("telegram bot token 不能为空")
-	// }
-	// if setting.TGReceivers == "" {
-	// 	return nil, fmt.Errorf("telegram receivers 不能为空")
-	// }
-
-	// 创建目录路径
-	uploadPath := setting.DefaultPath
-	if uploadPath == "" {
-		uploadPath = "uploads/{year}/{month}"
-	}
-	subDir := images.ImageSvc.ReplaceMagicVariables(uploadPath, fileHeader.Filename, userRole)
-
-	// 5. 初始化TG客户端
-	tgClient := telegram.NewClient(storageConfig.TGBotToken)
-	tgClient.Timeout = 20 * time.Second
-	tgClient.Retry = 3
-
-	uniqueFileName := processedImage.UniqueFileName
-	thumbnailPath := ensureLeadingSlash(buildThumbnailPath(subDir, uniqueFileName))
-
-	// 上传主图片
-	fileID, messageID, err := tgClient.UploadPhotoByBytes(
-		storageConfig.TGReceivers,
-		processedImage.CompressedBytes,
-		processedImage.UniqueFileName,
-		fmt.Sprintf("上传图片: %s", processedImage.UniqueFileName),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("Telegram上传图片失败")
-	}
-
-	// 7. 上传缩略图（如果开启）
-	thumbnailURL := ""
-	thumbFileIDURL := ""
-	thumbFileMessageID := 0
-	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
-		thumbFileID, thumbMessageID, err := tgClient.UploadPhotoByBytes(
-			storageConfig.TGReceivers,
-			processedImage.ThumbnailBytes,
-			fmt.Sprintf("thumbnail_%s", thumbnailFileName(uniqueFileName)),
-			fmt.Sprintf("缩略图: %s", processedImage.UniqueFileName),
-		)
-		if err == nil {
-			// Telegram没有直接的URL，这里存储fileID作为标识
-			thumbFileIDURL = thumbFileID
-			thumbFileMessageID = thumbMessageID
-			thumbnailURL = thumbnailPath
-		} else {
-			log.Printf("Telegram上传缩略图失败: %v", err)
-		}
-	}
-
-	url := "/" + PathJoin(subDir, uniqueFileName)
-
-	telegramModel := models.ImageTeleGram{
-		TGFileId:             fileID,
-		TGThumbnailFileId:    thumbFileIDURL,
-		TGMessageId:          messageID,
-		TGThumbnailMessageId: thumbFileMessageID,
-		FileName:             uniqueFileName,
-	}
-	db := database.GetDB()
-	if db != nil {
-		if err := db.DB.Create(&telegramModel).Error; err != nil {
-			return nil, fmt.Errorf("保存telegram图片信息到数据库失败")
-		}
-	}
-
-	return &interfaces.ImageUploadResult{
-		Success:          true,
-		Message:          "Telegram上传成功",
-		FileName:         processedImage.UniqueFileName,
-		OriginalFileName: fileHeader.Filename,
-		FileSize:         int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
-		MimeType:         processedImage.MimeType,
-		URL:              url,
-		ThumbnailURL:     thumbnailURL,
-		Storage:          bucket.Type, // 存储类型标识
-		CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
-		Width:            processedImage.Width,
-		Height:           processedImage.Height,
 		ContentHash:      processedImage.ContentHash,
 	}, nil
 }

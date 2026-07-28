@@ -116,7 +116,7 @@ func UploadImages(c *gin.Context) {
 
 	// 获取文件大小
 	var filesize uint64
-	if buckets.Id != 1 && buckets.Type != "telegram" {
+	if buckets.Type != "default" {
 		for _, file := range files {
 			filesize += uint64(file.Size)
 		}
@@ -180,7 +180,7 @@ func UploadImages(c *gin.Context) {
 				totalSizeUint += thumbnailSizeUint
 			}
 			result := db.DB.Model(&models.Buckets{}).
-				Where("id = ? AND (usage + ? <= capacity OR type IN ('telegram','default') OR capacity = 0)", bucketID, totalSizeUint).
+				Where("id = ? AND (usage + ? <= capacity OR type = 'default' OR capacity = 0)", bucketID, totalSizeUint).
 				UpdateColumn("usage", gorm.Expr("usage + ?", totalSizeUint))
 			if result.Error != nil {
 				log.Printf("更新Usage失败：%v", result.Error)
@@ -886,7 +886,7 @@ func UploadImagesByURL(c *gin.Context) {
 	}
 	defer file.Close()
 
-	if buckets.Id != 1 && buckets.Type != "telegram" {
+	if buckets.Type != "default" {
 		if (buckets.Usage + uint64(header.Size)) > buckets.Capacity {
 			uc.Fail(400, "存储空间已满")
 			return
@@ -982,7 +982,7 @@ func UploadImagesByURL(c *gin.Context) {
 			totalSizeUint += thumbnailSizeUint
 		}
 		db.DB.Model(&models.Buckets{}).
-			Where("id = ? AND (usage + ? <= capacity OR type IN ('telegram','default') OR capacity = 0)", bucketID, totalSizeUint).
+			Where("id = ? AND (usage + ? <= capacity OR type = 'default' OR capacity = 0)", bucketID, totalSizeUint).
 			UpdateColumn("usage", gorm.Expr("usage + ?", totalSizeUint))
 	}
 

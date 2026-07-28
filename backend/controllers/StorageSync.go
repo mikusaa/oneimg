@@ -72,7 +72,7 @@ func resolveUploadBuckets(c *gin.Context, setting models.Settings) (models.Bucke
 
 	targets := make([]models.Buckets, 0, len(allBuckets))
 	for _, bucket := range allBuckets {
-		if bucket.Id == localBucket.Id || bucket.Type == "default" {
+		if bucket.Id == localBucket.Id || bucket.Type == "default" || bucket.Type == "telegram" {
 			continue
 		}
 
@@ -115,6 +115,9 @@ func resolveSingleStorageUploadBuckets(c *gin.Context, setting models.Settings) 
 
 	result := make([]models.Buckets, 0, len(allBuckets))
 	for _, bucket := range allBuckets {
+		if bucket.Type == "telegram" {
+			continue
+		}
 		if bucket.Id != setting.DefaultStorage {
 			if bucket.Capacity > 0 && bucket.Usage >= bucket.Capacity {
 				continue
@@ -152,7 +155,7 @@ func loadImageStorageStatuses(imageIDs []int, setting models.Settings) (map[int]
 
 	db := database.GetDB().DB
 	var storages []models.ImageStorage
-	if err := db.Where("image_id IN ?", imageIDs).Order("image_id ASC, bucket_id ASC").Find(&storages).Error; err != nil {
+	if err := db.Where("image_id IN ? AND storage <> ?", imageIDs, "telegram").Order("image_id ASC, bucket_id ASC").Find(&storages).Error; err != nil {
 		return nil, err
 	}
 

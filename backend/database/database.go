@@ -96,7 +96,6 @@ func InitDB(cfg *config.Config) {
 		&models.Image{},
 		&models.ImageStorage{},
 		&models.Settings{},
-		&models.ImageTeleGram{},
 		&models.ImageToTags{},
 		&models.Buckets{},
 	)

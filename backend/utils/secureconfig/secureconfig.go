@@ -31,7 +31,6 @@ var bucketSensitiveKeys = map[string]struct{}{
 	"ftp_pass":      {},
 	"webdav_user":   {},
 	"webdav_pass":   {},
-	"tg_bot_token":  {},
 }
 
 var settingsSensitiveKeys = map[string]struct{}{

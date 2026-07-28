@@ -1,6 +1,10 @@
 package uploads
 
-import "testing"
+import (
+	"testing"
+
+	"oneimg/backend/models"
+)
 
 func TestBuildThumbnailPathUsesIndependentPrefix(t *testing.T) {
 	tests := []struct {
@@ -43,5 +47,13 @@ func TestLocalThumbnailFilePathUsesDataDirectory(t *testing.T) {
 	want := "data/thumbnails/2026/07/photo.webp"
 	if got != want && got != "./"+want {
 		t.Fatalf("localThumbnailFilePath() = %q, want %q", got, want)
+	}
+}
+
+func TestGetStorageUploaderRejectsRemovedTelegramStorage(t *testing.T) {
+	uploadContext := &UploadContext{}
+	_, err := uploadContext.GetStorageUploader(&models.Settings{}, &models.Buckets{Type: "telegram"})
+	if err == nil {
+		t.Fatal("GetStorageUploader() should reject removed Telegram storage")
 	}
 }

@@ -21,7 +21,6 @@ import (
 	"oneimg/backend/utils/result"
 	"oneimg/backend/utils/s3"
 	"oneimg/backend/utils/settings"
-	"oneimg/backend/utils/telegram"
 	"oneimg/backend/utils/webdav"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -109,8 +108,6 @@ func DeleteImage(c *gin.Context) {
 			deleteStatus = DeleteWebDavStorageImage(image, bucket)
 		case "ftp":
 			deleteStatus = DeleteFtpStorageImage(image, bucket)
-		case "telegram":
-			deleteStatus = DeleteTelegramStorageImage(image, bucket)
 		default:
 			deleteStatus = false
 		}
@@ -329,39 +326,6 @@ func DeleteFtpStorageImage(image models.Image, bucket models.Buckets) (deleteSta
 			return !true
 		}
 	}
-	return true
-}
-
-// 删除TG存储的图片
-func DeleteTelegramStorageImage(image models.Image, bucket models.Buckets) (deleteStatus bool) {
-	// 获取存储配置
-	storageConfig := buckets.ConvertToTelegramBucket(bucket.Config)
-
-	// 查询图片ID
-	db := database.GetDB()
-	if db == nil {
-		// 数据库连接失败忽略错误，防止阻塞线程
-	}
-	var telegramModel models.ImageTeleGram
-	if err := db.DB.Where("file_name = ?", image.FileName).First(&telegramModel).Error; err != nil {
-		// 查询失败忽略错误，防止阻塞线程
-	}
-
-	tgClient := telegram.NewClient(storageConfig.TGBotToken)
-	tgClient.Timeout = 20 * time.Second
-	tgClient.Retry = 3
-
-	uploader := telegram.NewTelegramUploader(tgClient)
-
-	// 直接删除，不检查是否成功
-	uploader.DeletePhoto(storageConfig.TGReceivers, telegramModel.TGMessageId)
-
-	// 检查是否存在缩略图
-	if image.Thumbnail != "" {
-		// 删除缩略图，不检查是否成功
-		uploader.DeletePhoto(storageConfig.TGReceivers, telegramModel.TGThumbnailMessageId)
-	}
-	// 直接返回成功
 	return true
 }
 

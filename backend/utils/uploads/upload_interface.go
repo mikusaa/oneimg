@@ -74,8 +74,6 @@ func (uc *UploadContext) GetStorageUploader(setting *models.Settings, bucket *mo
 		return &WebDAVUploader{}, nil
 	case "ftp":
 		return &FTPUploader{}, nil
-	case "telegram":
-		return &TelegramUploader{}, nil
 	default:
 		return nil, fmt.Errorf("不支持的存储类型：%s", bucket.Type)
 	}

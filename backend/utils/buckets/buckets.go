@@ -46,14 +46,6 @@ func ConvertToWebDavBucket(config map[string]any) models.WebDavBucket {
 	}
 }
 
-// ConvertToTelegramBucket 将map转换为TelegramBucket
-func ConvertToTelegramBucket(config map[string]any) models.TelegramBucket {
-	return models.TelegramBucket{
-		TGBotToken:  secureconfig.GetString(config, "tg_bot_token"),
-		TGReceivers: secureconfig.GetString(config, "tg_receivers"),
-	}
-}
-
 // 反转
 
 // S3BucketToMap 将S3Bucket转换为map
@@ -92,13 +84,5 @@ func WebDavBucketToMap(wd models.WebDavBucket) map[string]any {
 		"webdav_url":  wd.WebdavURL,
 		"webdav_user": wd.WebdavUser,
 		"webdav_pass": wd.WebdavPass,
-	}
-}
-
-// TelegramBucketToMap 将TelegramBucket转换为map
-func TelegramBucketToMap(tg models.TelegramBucket) map[string]any {
-	return map[string]any{
-		"tg_bot_token": tg.TGBotToken,
-		"tg_receivers": tg.TGReceivers,
 	}
 }
