@@ -1,12 +1,10 @@
 package controllers
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"reflect"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,9 +32,6 @@ type UpdateSettingsRequest struct {
 type GetSettingsRequest struct {
 	Keys []string `json:"keys"`
 }
-
-// 十六进制颜色格式正则
-var hexColorRegex = regexp.MustCompile(`^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
 func GetSettings(c *gin.Context) {
 	var req GetSettingsRequest
@@ -354,7 +349,7 @@ func convertValueToTargetType(key string, value any, targetType reflect.Type) (a
 
 	// 场景2：反射不支持直接转换，手动处理常见类型解析
 	switch targetType.Kind() {
-	// 处理 string → float64（解决watermark_opac的核心问题）
+	// 处理 string → float64
 	case reflect.Float64:
 		if valueType.Kind() == reflect.String {
 			strVal := valueVal.String()
@@ -462,103 +457,6 @@ func validateSettingData(key string, value any) error {
 			return fmt.Errorf("跳过压缩格式不能为空")
 		}
 
-	case "watermark_text":
-		// 1. 水印文字长度校验（兼容字符串类型）
-		text, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("水印文字必须是字符串类型，实际类型：%T", value)
-		}
-		if len(text) > 20 {
-			return fmt.Errorf("水印文字长度不能超过20个字符（当前：%d）", len(text))
-		}
-
-	case "watermark_size":
-		// 2. 水印字体大小校验
-		var size int
-		switch v := value.(type) {
-		case int:
-			size = v
-		case string:
-			// 字符串转int
-			s := strings.TrimSpace(v)
-			if s == "" {
-				return errors.New("水印字体大小不能为空")
-			}
-			num, err := strconv.Atoi(s)
-			if err != nil {
-				return fmt.Errorf("水印字体大小必须是整数（当前值：%s）", v)
-			}
-			size = num
-		default:
-			return fmt.Errorf("水印字体大小必须是整数或数字字符串，实际类型：%T", value)
-		}
-		// 范围校验
-		if size < 1 || size > 100 {
-			return fmt.Errorf("水印字体大小必须在1-100之间（当前：%d）", size)
-		}
-
-	case "watermark_color":
-		// 3. 水印颜色校验（防空 + 十六进制格式）
-		color, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("水印颜色必须是字符串类型，实际类型：%T", value)
-		}
-		color = strings.TrimSpace(color)
-		if color == "" {
-			return errors.New("水印字体颜色不能为空")
-		}
-		if !hexColorRegex.MatchString(color) {
-			return fmt.Errorf("水印颜色格式错误，请使用十六进制颜色码，当前值：%s", color)
-		}
-
-	case "watermark_opac":
-		// 4. 水印透明度校验（兼容字符串/float64/int，转为float64后校验0-1）
-		var opac float64
-		switch v := value.(type) {
-		case float64:
-			opac = v
-		case int:
-			opac = float64(v) // int转float64（如 1 → 1.0）
-		case string:
-			// 字符串转float64
-			s := strings.TrimSpace(v)
-			if s == "" {
-				return errors.New("水印透明度不能为空")
-			}
-			num, err := strconv.ParseFloat(s, 64)
-			if err != nil {
-				return fmt.Errorf("水印透明度必须是数字（当前值：%s）", v)
-			}
-			opac = num
-		default:
-			return fmt.Errorf("水印透明度必须是数字或数字字符串，实际类型：%T", value)
-		}
-		// 范围校验（0.0-1.0）
-		if opac < 0.0 || opac > 1.0 {
-			return fmt.Errorf("水印透明度必须在0-1之间（当前：%.2f）", opac)
-		}
-
-	case "watermark_pos":
-		// 5. 水印位置校验（防空 + 合法值）
-		pos, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("水印位置必须是字符串类型，实际类型：%T", value)
-		}
-		pos = strings.TrimSpace(pos)
-		if pos == "" {
-			return errors.New("水印位置不能为空")
-		}
-		// 合法位置集合
-		validPos := map[string]bool{
-			"top-left":     true,
-			"top-right":    true,
-			"bottom-left":  true,
-			"bottom-right": true,
-			"center":       true,
-		}
-		if !validPos[pos] {
-			return fmt.Errorf("水印位置参数不合法")
-		}
 	case "default_storage":
 		// 检查存储配置是否存在
 		id, err := settingValueToInt(value)
@@ -584,13 +482,7 @@ func validateSettingData(key string, value any) error {
 
 func settingDisabledByPublicDomain(key string) bool {
 	switch key {
-	case "watermark_enable",
-		"watermark_text",
-		"watermark_size",
-		"watermark_color",
-		"watermark_opac",
-		"watermark_pos",
-		"referer_white_enable",
+	case "referer_white_enable",
 		"referer_white_list":
 		return true
 	default:
@@ -631,9 +523,7 @@ var settingKeyPermissions = map[string]string{
 	"default_path": "setting:upload", "file_name": "setting:upload", "max_file_size": "setting:upload",
 	"allowed_types": "setting:upload", "multi_storage_sync": "setting:upload", "save_original_name": "setting:upload",
 	"original_image": "setting:image", "save_webp": "setting:image", "thumbnail": "setting:image",
-	"main_image_quality": "setting:image", "skip_compress_formats": "setting:image", "watermark_enable": "setting:image",
-	"watermark_text": "setting:image", "watermark_size": "setting:image", "watermark_color": "setting:image",
-	"watermark_opac": "setting:image", "watermark_pos": "setting:image",
+	"main_image_quality": "setting:image", "skip_compress_formats": "setting:image",
 	"pow_verify": "setting:security", "tourist": "setting:security", "start_register": "setting:security",
 	"referer_white_enable": "setting:security", "referer_white_list": "setting:security",
 	"start_api": "setting:api", "api_token": "setting:api", "api_token_configured": "setting:api",

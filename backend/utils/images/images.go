@@ -16,7 +16,6 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"oneimg/backend/models"
-	"oneimg/backend/utils/watermark"
 	"path/filepath"
 	"strings"
 	"time"
@@ -230,7 +229,7 @@ func (s *ImageService) processMainImage(
 ) ([]byte, string, string, error) {
 	finalMimeType := normalizeMimeType(format, mimeType)
 
-	// 保存原图优先级最高：不转格式、不压缩、不加水印。
+	// 保存原图优先级最高：不转格式、不压缩。
 	if setting.OriginalImage {
 		return fileBytes, format, finalMimeType, nil
 	}
@@ -238,24 +237,6 @@ func (s *ImageService) processMainImage(
 	// 命中跳过格式时，主图保持原文件；缩略图仍按后续流程单独生成。
 	if s.shouldSkipCompression(format, finalMimeType, setting.SkipCompressFormat) {
 		return fileBytes, format, finalMimeType, nil
-	}
-
-	// 添加水印
-	if setting.WatermarkEnable {
-		watermarkCfg := watermark.WatermarkSetting(setting)
-		fileReader := bytes.NewReader(fileBytes)
-		processedReader, err := watermark.ProcessImageWithWatermark(fileReader, mimeType, watermarkCfg)
-		if err != nil {
-			return nil, "", "", fmt.Errorf("添加水印失败：%w", err)
-		}
-		fileBytes, err = io.ReadAll(processedReader)
-		if err != nil {
-			return nil, "", "", fmt.Errorf("读取水印后图片数据失败：%w", err)
-		}
-		img, _, err = image.Decode(bytes.NewReader(fileBytes))
-		if err != nil {
-			return nil, "", "", fmt.Errorf("解码水印后图片失败：%w", err)
-		}
 	}
 
 	quality := normalizeMainImageQuality(setting.MainImageQuality)

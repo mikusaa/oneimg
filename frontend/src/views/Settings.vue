@@ -232,7 +232,7 @@
                                 <div class="settings-toggle-row">
                                     <div>
                                         <p class="setting-row-title">保存原图</p>
-                                        <p class="setting-row-hint">主图保持上传时的字节、格式和扩展名，不压缩、不转换，也不添加水印。</p>
+                                        <p class="setting-row-hint">主图保持上传时的字节、格式和扩展名，不压缩、不转换。</p>
                                     </div>
                                     <label class="settings-switch" title="保存原图">
                                         <input
@@ -269,7 +269,7 @@
                             </div>
 
                             <p v-if="systemSettings.original_image" class="settings-notice mt-4">
-                                保存原图已启用，WebP、压缩质量、跳过压缩格式和水印设置暂不参与主图处理。
+                                保存原图已启用，WebP、压缩质量和跳过压缩格式暂不参与主图处理。
                             </p>
 
                             <div class="settings-field-grid mt-5">
@@ -324,134 +324,6 @@
                             </div>
                         </section>
 
-                        <section class="settings-section">
-                            <div class="settings-section-heading settings-section-heading-inline">
-                                <div>
-                                    <h3>图片水印</h3>
-                                    <p v-if="watermarkUnavailableReason" class="text-amber-600 dark:text-amber-300">
-                                        {{ watermarkUnavailableReason }}
-                                    </p>
-                                    <p v-else>仅处理新上传且未跳过压缩的主图。</p>
-                                </div>
-                                <label
-                                    class="settings-switch"
-                                    :class="watermarkUnavailableReason ? 'cursor-not-allowed opacity-60' : ''"
-                                    title="图片水印"
-                                >
-                                    <input
-                                        v-model="systemSettings.watermark_enable"
-                                        type="checkbox"
-                                        class="sr-only peer"
-                                        :disabled="Boolean(watermarkUnavailableReason)"
-                                        @change="handleSwitchChange('watermark_enable', systemSettings.watermark_enable)"
-                                    >
-                                    <span class="switch-track"></span>
-                                    <span class="switch-thumb"></span>
-                                </label>
-                            </div>
-
-                            <div
-                                class="settings-field-grid mt-5"
-                                :class="{ 'opacity-50': watermarkFieldsDisabled }"
-                            >
-                                <div class="setting-group md:col-span-2">
-                                    <label class="field-label" for="watermark_text">水印文本</label>
-                                    <input
-                                        id="watermark_text"
-                                        v-model="systemSettings.watermark_text"
-                                        type="text"
-                                        class="input-modern"
-                                        :disabled="watermarkFieldsDisabled"
-                                        @blur="handleFieldBlur('watermark_text', systemSettings.watermark_text)"
-                                    >
-                                </div>
-
-                                <div class="setting-group">
-                                    <label class="field-label" for="watermark_pos">水印位置</label>
-                                    <select
-                                        id="watermark_pos"
-                                        v-model="systemSettings.watermark_pos"
-                                        class="input-modern"
-                                        :disabled="watermarkFieldsDisabled"
-                                        @change="handleSelectChange('watermark_pos', systemSettings.watermark_pos)"
-                                    >
-                                        <option value="top-left">左上角</option>
-                                        <option value="top-right">右上角</option>
-                                        <option value="bottom-left">左下角</option>
-                                        <option value="bottom-right">右下角</option>
-                                        <option value="center">居中</option>
-                                    </select>
-                                </div>
-
-                                <div class="setting-group">
-                                    <label class="field-label" for="watermark_size">字体大小</label>
-                                    <input
-                                        id="watermark_size"
-                                        v-model.number="systemSettings.watermark_size"
-                                        type="number"
-                                        min="1"
-                                        max="100"
-                                        class="input-modern"
-                                        :disabled="watermarkFieldsDisabled"
-                                        @blur="handleFieldBlur('watermark_size', systemSettings.watermark_size)"
-                                    >
-                                </div>
-
-                                <div class="setting-group">
-                                    <label class="field-label" for="watermark_color">字体颜色</label>
-                                    <div class="settings-color-row">
-                                        <input
-                                            v-model="systemSettings.watermark_color"
-                                            type="color"
-                                            class="settings-color-swatch"
-                                            :disabled="watermarkFieldsDisabled"
-                                            aria-label="选择水印字体颜色"
-                                            @change="handleFieldBlur('watermark_color', systemSettings.watermark_color)"
-                                        >
-                                        <input
-                                            id="watermark_color"
-                                            v-model="systemSettings.watermark_color"
-                                            type="text"
-                                            class="input-modern"
-                                            :disabled="watermarkFieldsDisabled"
-                                            placeholder="#000000"
-                                            @blur="handleFieldBlur('watermark_color', systemSettings.watermark_color)"
-                                        >
-                                    </div>
-                                </div>
-
-                                <div class="setting-group">
-                                    <div class="mb-2 flex items-center justify-between gap-3">
-                                        <label class="field-label mb-0" for="watermark_opac">透明度</label>
-                                        <span class="settings-range-value">{{ systemSettings.watermark_opac }}</span>
-                                    </div>
-                                    <div class="settings-range-row">
-                                        <input
-                                            v-model.number="systemSettings.watermark_opac"
-                                            type="range"
-                                            min="0"
-                                            max="1"
-                                            step="0.05"
-                                            class="settings-range"
-                                            :disabled="watermarkFieldsDisabled"
-                                            aria-label="水印透明度"
-                                            @change="handleFieldBlur('watermark_opac', systemSettings.watermark_opac)"
-                                        >
-                                        <input
-                                            id="watermark_opac"
-                                            v-model.number="systemSettings.watermark_opac"
-                                            type="number"
-                                            min="0"
-                                            max="1"
-                                            step="0.05"
-                                            class="input-modern settings-number-input"
-                                            :disabled="watermarkFieldsDisabled"
-                                            @blur="handleFieldBlur('watermark_opac', systemSettings.watermark_opac)"
-                                        >
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
                     </template>
 
                     <template v-else-if="activeSettingTab === 'security'">
@@ -704,12 +576,6 @@ const systemSettings = reactive({
     tourist: false,
     start_register: false,
     pow_verify: false,
-    watermark_enable: false,
-    watermark_text: '',
-    watermark_pos: '',
-    watermark_size: 10,
-    watermark_color: '#000000',
-    watermark_opac: 0.5,
     referer_white_list: '',
     referer_white_enable: false,
     seo_title: '',
@@ -756,12 +622,6 @@ const activeSettingTabIcon = computed(() => currentSettingTab.value?.icon || 'ri
 
 const publicDomainStorageTypes = ['s3', 'r2']
 const publicDomainAffectedSettings = [
-    'watermark_enable',
-    'watermark_text',
-    'watermark_size',
-    'watermark_color',
-    'watermark_opac',
-    'watermark_pos',
     'referer_white_enable',
     'referer_white_list',
 ]
@@ -798,23 +658,9 @@ const publicImageDomainHint = computed(() => {
         return '当前默认存储不支持图片直链域名，仅 S3/R2 存储可用。'
     }
     if (hasPublicImageDomain.value) {
-        return '图片链接将直接使用该域名，水印和来源白名单等代理能力不会生效。'
+        return '图片链接将直接使用该域名，来源白名单等代理能力不会生效。'
     }
     return '填写 S3/R2 绑定的直链域名后，返回链接将直接使用该域名。'
-})
-
-const watermarkUnavailableReason = computed(() => {
-    if (hasPublicImageDomain.value) {
-        return '已配置图片直链域名，水印不会生效。'
-    }
-    if (systemSettings.original_image) {
-        return '保存原图已启用，主图不会添加水印。'
-    }
-    return ''
-})
-
-const watermarkFieldsDisabled = computed(() => {
-    return Boolean(watermarkUnavailableReason.value) || !systemSettings.watermark_enable
 })
 
 const refererListDisabled = computed(() => {

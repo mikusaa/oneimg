@@ -21,7 +21,6 @@ import (
 	"oneimg/backend/utils/buckets"
 	"oneimg/backend/utils/ftp"
 	"oneimg/backend/utils/images"
-	"oneimg/backend/utils/publicurl"
 	"oneimg/backend/utils/s3"
 	"oneimg/backend/utils/webdav"
 )
@@ -51,7 +50,7 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	userRole := c.GetInt("user_role")
 
 	// 处理图片
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
+	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
@@ -145,7 +144,7 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	userRole := c.GetInt("user_role")
 
 	// 处理图片
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
+	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
@@ -239,7 +238,7 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 	userRole := c.GetInt("user_role")
 
 	// 处理图片
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
+	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
@@ -329,7 +328,7 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 	userRole := c.GetInt("user_role")
 
 	// 处理图片（压缩、生成缩略图等）
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
+	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
@@ -421,7 +420,7 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 	userRole := c.GetInt("user_role")
 
 	// 处理图片
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, getProcessingSettings(setting, bucket), userRole)
+	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
@@ -507,14 +506,6 @@ func saveFile(filePath string, data []byte) error {
 
 	_, err = file.Write(data)
 	return err
-}
-
-func getProcessingSettings(setting *models.Settings, bucket *models.Buckets) models.Settings {
-	processingSettings := *setting
-	if publicurl.HasDomain(*setting) && publicurl.SupportsStorage(bucket.Type) {
-		processingSettings.WatermarkEnable = false
-	}
-	return processingSettings
 }
 
 func buildThumbnailPath(subDir, uniqueFileName string) string {

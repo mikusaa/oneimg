@@ -21,8 +21,6 @@ require (
 	gorm.io/gorm v1.31.2
 )
 
-require github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
-
 require (
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
@@ -87,7 +85,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	golang.org/x/arch v0.23.0 // indirect
-	golang.org/x/image v0.44.0
+	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect

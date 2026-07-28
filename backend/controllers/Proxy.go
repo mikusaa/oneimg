@@ -21,7 +21,6 @@ import (
 	"oneimg/backend/utils/result"
 	"oneimg/backend/utils/s3"
 	"oneimg/backend/utils/settings"
-	"oneimg/backend/utils/watermark"
 	"oneimg/backend/utils/webdav"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -39,9 +38,6 @@ func ImageProxy(c *gin.Context) bool {
 		// 根路径不应由图片代理处理，由 NoRoute 后续逻辑处理
 		return false
 	}
-
-	// 解析水印参数
-	watermarkCfg := watermark.ParseWatermarkParams(c)
 
 	// 获取数据库实例
 	db := database.GetDB()
@@ -100,13 +96,12 @@ func ImageProxy(c *gin.Context) bool {
 		imageUrl = imageModel.Url
 	}
 
-	// 传递水印配置到各个代理函数
 	switch imageModel.Storage {
 	case "default":
-		proxyLocalFile(c, imageUrl, mimeType, watermarkCfg)
+		proxyLocalFile(c, imageUrl, mimeType)
 
 	case "webdav":
-		proxyWebDAVFile(c, imageUrl, mimeType, imageModel.FileSize, bucket, watermarkCfg)
+		proxyWebDAVFile(c, imageUrl, mimeType, imageModel.FileSize, bucket)
 	case "r2":
 		// 初始化S3客户端
 		s3Client, err := s3.NewS3Client(setting, bucket)
@@ -114,7 +109,7 @@ func ImageProxy(c *gin.Context) bool {
 			c.JSON(http.StatusInternalServerError, result.Error(500, fmt.Sprintf("R2客户端初始化失败: %v", err)))
 			return true
 		}
-		proxyR2File(c, imageUrl, mimeType, imageModel.FileSize, bucket, s3Client, watermarkCfg)
+		proxyR2File(c, imageUrl, mimeType, imageModel.FileSize, bucket, s3Client)
 
 	case "s3":
 		// 初始化S3客户端
@@ -124,10 +119,10 @@ func ImageProxy(c *gin.Context) bool {
 			return true
 		}
 		// 代理S3/R2文件
-		proxyS3File(c, imageUrl, mimeType, imageModel.FileSize, bucket, s3Client, watermarkCfg)
+		proxyS3File(c, imageUrl, mimeType, imageModel.FileSize, bucket, s3Client)
 
 	case "ftp":
-		proxyFTPFile(c, imageUrl, mimeType, bucket, watermarkCfg)
+		proxyFTPFile(c, imageUrl, mimeType, bucket)
 
 	default:
 		c.JSON(http.StatusUnprocessableEntity, result.Error(422, fmt.Sprintf("不支持的存储类型: %s", imageModel.Storage)))
@@ -137,7 +132,7 @@ func ImageProxy(c *gin.Context) bool {
 }
 
 // proxyR2File R2文件代理
-func proxyR2File(c *gin.Context, objectKey, mimeType string, fileSize int64, bucket models.Buckets, s3Client *awss3.Client, watermarkCfg watermark.WatermarkConfig) {
+func proxyR2File(c *gin.Context, objectKey, mimeType string, fileSize int64, bucket models.Buckets, s3Client *awss3.Client) {
 	// 清理objectKey（去除开头的/，适配S3路径规则）
 	objectKey = strings.TrimPrefix(objectKey, "/")
 
@@ -187,35 +182,12 @@ func proxyR2File(c *gin.Context, objectKey, mimeType string, fileSize int64, buc
 	}
 	defer resp.Body.Close()
 
-	// 2. 处理水印
-	var contentReader io.Reader = resp.Body
-	if watermarkCfg.Enable {
-		processedReader, err := watermark.ProcessImageWithWatermark(resp.Body, mimeType, watermarkCfg)
-		if err != nil {
-			log.Printf("处理R2文件水印失败: %v", err)
-			// 失败时重新获取原始流（需要重新请求）
-			resp2, _ := s3Client.GetObject(ctx, &getInput)
-			if resp2 != nil {
-				defer resp2.Body.Close()
-				contentReader = resp2.Body
-			}
-		} else {
-			contentReader = processedReader
-		}
-	}
-
-	// 3. 设置响应头
+	// 2. 设置响应头
 	c.Header("Content-Type", mimeType)
-	// 如果添加了水印，不设置Content-Length（因为内容已改变）
-	if !watermarkCfg.Enable {
-		// 优先使用R2返回的文件大小，其次使用数据库中存储的大小
-		if resp.ContentLength != nil && *resp.ContentLength > 0 {
-			c.Header("Content-Length", strconv.FormatInt(*resp.ContentLength, 10))
-		} else if fileSize > 0 {
-			c.Header("Content-Length", strconv.FormatInt(fileSize, 10))
-		}
-	} else {
-		c.Header("Transfer-Encoding", "chunked")
+	if resp.ContentLength != nil && *resp.ContentLength > 0 {
+		c.Header("Content-Length", strconv.FormatInt(*resp.ContentLength, 10))
+	} else if fileSize > 0 {
+		c.Header("Content-Length", strconv.FormatInt(fileSize, 10))
 	}
 	// 缓存控制（永久缓存）
 	c.Header("Cache-Control", "public, max-age=31536000")
@@ -224,19 +196,19 @@ func proxyR2File(c *gin.Context, objectKey, mimeType string, fileSize int64, buc
 	// 跨域支持（可选）
 	c.Header("Access-Control-Allow-Origin", "*")
 
-	// 4. 流式传输文件（避免内存溢出）
+	// 3. 流式传输文件（避免内存溢出）
 	// 设置响应状态码
 	c.Status(http.StatusOK)
 	// 分块传输，每次4KB
 	buf := make([]byte, 4096)
-	_, err = io.CopyBuffer(c.Writer, contentReader, buf)
+	_, err = io.CopyBuffer(c.Writer, resp.Body, buf)
 	if err != nil && err != io.EOF {
 		log.Printf("S3/R2文件传输失败 [key:%s]: %v", objectKey, err)
 	}
 }
 
-// proxyS3File S3文件代理（添加水印支持）
-func proxyS3File(c *gin.Context, objectKey, mimeType string, fileSize int64, bucket models.Buckets, s3Client *awss3.Client, watermarkCfg watermark.WatermarkConfig) {
+// proxyS3File S3文件代理
+func proxyS3File(c *gin.Context, objectKey, mimeType string, fileSize int64, bucket models.Buckets, s3Client *awss3.Client) {
 	// 清理objectKey（去除开头的/，适配S3路径规则）
 	objectKey = strings.TrimPrefix(objectKey, "/")
 
@@ -286,35 +258,12 @@ func proxyS3File(c *gin.Context, objectKey, mimeType string, fileSize int64, buc
 	}
 	defer resp.Body.Close()
 
-	// 2. 处理水印
-	var contentReader io.Reader = resp.Body
-	if watermarkCfg.Enable {
-		processedReader, err := watermark.ProcessImageWithWatermark(resp.Body, mimeType, watermarkCfg)
-		if err != nil {
-			log.Printf("处理S3文件水印失败: %v", err)
-			// 失败时重新获取原始流（需要重新请求）
-			resp2, _ := s3Client.GetObject(ctx, &getInput)
-			if resp2 != nil {
-				defer resp2.Body.Close()
-				contentReader = resp2.Body
-			}
-		} else {
-			contentReader = processedReader
-		}
-	}
-
-	// 3. 设置响应头
+	// 2. 设置响应头
 	c.Header("Content-Type", mimeType)
-	// 如果添加了水印，不设置Content-Length（因为内容已改变）
-	if !watermarkCfg.Enable {
-		// 优先使用S3返回的文件大小，其次使用数据库中存储的大小
-		if resp.ContentLength != nil && *resp.ContentLength > 0 {
-			c.Header("Content-Length", strconv.FormatInt(*resp.ContentLength, 10))
-		} else if fileSize > 0 {
-			c.Header("Content-Length", strconv.FormatInt(fileSize, 10))
-		}
-	} else {
-		c.Header("Transfer-Encoding", "chunked")
+	if resp.ContentLength != nil && *resp.ContentLength > 0 {
+		c.Header("Content-Length", strconv.FormatInt(*resp.ContentLength, 10))
+	} else if fileSize > 0 {
+		c.Header("Content-Length", strconv.FormatInt(fileSize, 10))
 	}
 	// 缓存控制（永久缓存）
 	c.Header("Cache-Control", "public, max-age=31536000")
@@ -323,19 +272,19 @@ func proxyS3File(c *gin.Context, objectKey, mimeType string, fileSize int64, buc
 	// 跨域支持（可选）
 	c.Header("Access-Control-Allow-Origin", "*")
 
-	// 4. 流式传输文件（避免内存溢出）
+	// 3. 流式传输文件（避免内存溢出）
 	// 设置响应状态码
 	c.Status(http.StatusOK)
 	// 分块传输，每次4KB
 	buf := make([]byte, 4096)
-	_, err = io.CopyBuffer(c.Writer, contentReader, buf)
+	_, err = io.CopyBuffer(c.Writer, resp.Body, buf)
 	if err != nil && err != io.EOF {
 		log.Printf("S3文件传输失败 [key:%s]: %v", objectKey, err)
 	}
 }
 
-// proxyWebDAVFile WebDAV文件代理（添加水印支持）
-func proxyWebDAVFile(c *gin.Context, relPath, mimeType string, fileSize int64, bucket models.Buckets, watermarkCfg watermark.WatermarkConfig) {
+// proxyWebDAVFile WebDAV文件代理
+func proxyWebDAVFile(c *gin.Context, relPath, mimeType string, fileSize int64, bucket models.Buckets) {
 	// 获取存储配置
 	storageConfig := buckets.ConvertToWebDavBucket(bucket.Config)
 
@@ -385,47 +334,26 @@ func proxyWebDAVFile(c *gin.Context, relPath, mimeType string, fileSize int64, b
 		return
 	}
 
-	// 处理水印
-	var contentReader io.Reader = resp.Body
-	if watermarkCfg.Enable {
-		processedReader, err := watermark.ProcessImageWithWatermark(resp.Body, mimeType, watermarkCfg)
-		if err != nil {
-			log.Printf("处理WebDAV文件水印失败: %v", err)
-			// 重新获取原始文件
-			resp2, _ := client.WebDAVGetFile(ctx, relPath)
-			if resp2 != nil {
-				defer resp2.Body.Close()
-				contentReader = resp2.Body
-			}
-		} else {
-			contentReader = processedReader
-		}
-	}
-
 	// 设置响应头
 	c.Header("Content-Type", mimeType)
-	if !watermarkCfg.Enable {
-		if resp.ContentLength > 0 {
-			c.Header("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
-		} else if fileSize > 0 {
-			c.Header("Content-Length", strconv.FormatInt(fileSize, 10))
-		}
-	} else {
-		c.Header("Transfer-Encoding", "chunked")
+	if resp.ContentLength > 0 {
+		c.Header("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
+	} else if fileSize > 0 {
+		c.Header("Content-Length", strconv.FormatInt(fileSize, 10))
 	}
 	c.Header("Cache-Control", "public, max-age=31536000")
 	c.Header("X-Storage-Type", "webdav")
 	c.Header("Access-Control-Allow-Origin", "*")
 
 	// 流式传输文件
-	_, err = io.Copy(c.Writer, contentReader)
+	_, err = io.Copy(c.Writer, resp.Body)
 	if err != nil {
 		log.Printf("WebDAV文件传输失败：%v", err)
 	}
 }
 
-// proxyLocalFile 本地文件代理（添加水印支持）
-func proxyLocalFile(c *gin.Context, realPath string, mimeType string, watermarkCfg watermark.WatermarkConfig) {
+// proxyLocalFile 本地文件代理
+func proxyLocalFile(c *gin.Context, realPath string, mimeType string) {
 	fullPath := localProxyPath(realPath)
 	// 去除第一个/和\
 	fullPath = strings.TrimPrefix(fullPath, "/")
@@ -445,38 +373,6 @@ func proxyLocalFile(c *gin.Context, realPath string, mimeType string, watermarkC
 		return
 	}
 
-	// 如果启用水印
-	if watermarkCfg.Enable {
-		file, err := os.Open(fullPath)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, result.Error(500, "打开文件失败"))
-			return
-		}
-		defer file.Close()
-
-		// 处理水印
-		processedReader, err := watermark.ProcessImageWithWatermark(file, mimeType, watermarkCfg)
-		if err != nil {
-			log.Printf("处理本地文件水印失败: %v", err)
-			// 失败时返回原始文件
-			c.File(fullPath)
-			return
-		}
-
-		// 设置响应头
-		c.Header("Content-Type", mimeType)
-		c.Header("Cache-Control", "public, max-age=31536000")
-		c.Header("X-Storage-Type", "default")
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Transfer-Encoding", "chunked")
-
-		// 传输处理后的图片
-		c.Status(http.StatusOK)
-		io.Copy(c.Writer, processedReader)
-		return
-	}
-
-	// 未启用水印，使用原始逻辑
 	// 设置响应头
 	c.Header("Content-Type", mimeType)
 	c.Header("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
@@ -501,15 +397,10 @@ func isThumbnailPath(path string) bool {
 	return strings.HasPrefix(cleanPath, "thumbnails/") || strings.Contains(cleanPath, "/thumbnails/")
 }
 
-// FTP代理（添加水印支持）
-func proxyFTPFile(c *gin.Context, ftpPath string, mimeType string, bucket models.Buckets, watermarkCfg watermark.WatermarkConfig) {
-	// 未启用水印时使用分块传输，避免长度不一致
-	if watermarkCfg.Enable {
-		c.Writer.Header().Del("Content-Length")
-	} else {
-		c.Header("Transfer-Encoding", "chunked")
-		c.Writer.Header().Del("Content-Length")
-	}
+// FTP代理
+func proxyFTPFile(c *gin.Context, ftpPath string, mimeType string, bucket models.Buckets) {
+	c.Header("Transfer-Encoding", "chunked")
+	c.Writer.Header().Del("Content-Length")
 
 	// 清理FTP路径
 	ftpPath = cleanFTPPath(ftpPath)
@@ -551,45 +442,22 @@ func proxyFTPFile(c *gin.Context, ftpPath string, mimeType string, bucket models
 		}
 	}()
 
-	// 处理水印
-	var contentReader io.Reader = fileReader
-	if watermarkCfg.Enable {
-		processedReader, err := watermark.ProcessImageWithWatermark(fileReader, mimeType, watermarkCfg)
-		if err != nil {
-			log.Printf("处理FTP文件水印失败: %v", err)
-			// 重新获取原始文件流
-			fileReader2, _, _ := ftpUtil.GetFileStreamReader(ftpPath)
-			if fileReader2 != nil {
-				defer fileReader2.Close()
-				contentReader = fileReader2
-			}
-		} else {
-			contentReader = processedReader
-		}
-	}
-
 	c.Header("Content-Type", mimeType)
 	c.Header("Cache-Control", "public, max-age=31536000")
 	c.Header("X-Storage-Type", "ftp")
 	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Connection", "close")
 
-	if watermarkCfg.Enable {
-		c.Header("Transfer-Encoding", "chunked")
-	}
-
 	c.Status(http.StatusOK)
 
 	buf := make([]byte, 4096)
-	totalWritten := int64(0)
 	for {
-		n, err := contentReader.Read(buf)
+		n, err := fileReader.Read(buf)
 		if n > 0 {
 			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
 				break
 			}
 			c.Writer.Flush()
-			totalWritten += int64(n)
 		}
 		if err == io.EOF {
 			break

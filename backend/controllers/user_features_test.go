@@ -292,6 +292,9 @@ func TestSettingsResponseKeysHavePermissionGroups(t *testing.T) {
 		if strings.Contains(lowerKey, "telegram") || strings.HasPrefix(lowerKey, "tg_") {
 			t.Errorf("removed Telegram setting %q is still exposed", key)
 		}
+		if strings.HasPrefix(lowerKey, "watermark_") {
+			t.Errorf("removed watermark setting %q is still exposed", key)
+		}
 		if key == "id" {
 			continue
 		}
