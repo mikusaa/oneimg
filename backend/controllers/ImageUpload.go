@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -371,6 +372,39 @@ func (id *tagRequestID) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type optionalRequestID int
+
+func (id *optionalRequestID) UnmarshalJSON(data []byte) error {
+	value := strings.TrimSpace(string(data))
+	if value == "" || value == "null" {
+		*id = 0
+		return nil
+	}
+	if value[0] == '"' {
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			*id = 0
+			return nil
+		}
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return fmt.Errorf("ID必须是有效的非负整数")
+	}
+	*id = optionalRequestID(parsed)
+	return nil
+}
+
+type urlUploadRequest struct {
+	URL      string            `json:"url" binding:"required"`
+	TagID    optionalRequestID `json:"tag_id"`
+	BucketID optionalRequestID `json:"bucket_id"`
+}
+
 func AddImageTag(c *gin.Context) {
 	// 获取请求参数
 	type TagRequest struct {
@@ -710,25 +744,20 @@ func UploadImagesByURL(c *gin.Context) {
 	uc := uploads.NewUploadContext(c)
 	db := database.GetDB()
 
-	type URLUploadRequest struct {
-		Urls     string `json:"url" binding:"required"`
-		Tag      string `json:"tag_id"`
-		BucketID string `json:"bucket_id"`
-	}
-
-	var req URLUploadRequest
+	var req urlUploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		uc.Fail(400, "参数格式错误：%v", err)
 		return
 	}
 
-	if req.Urls == "" {
+	if req.URL == "" {
 		uc.Fail(400, "URL不能为空")
 		return
 	}
-	if req.Tag != "" && req.Tag != "0" {
+	tagID := int(req.TagID)
+	if tagID != 0 {
 		var tags models.Tags
-		if err := db.DB.Where("id = ?", req.Tag).First(&tags).Error; err != nil {
+		if err := db.DB.Where("id = ?", tagID).First(&tags).Error; err != nil {
 			uc.Fail(400, "标签不存在")
 			return
 		}
@@ -740,14 +769,8 @@ func UploadImagesByURL(c *gin.Context) {
 		return
 	}
 
-	var bucketID int
-	if req.BucketID != "" {
-		bucketID, err = strconv.Atoi(req.BucketID)
-		if err != nil {
-			uc.Fail(400, "存储ID无效")
-			return
-		}
-	} else {
+	bucketID := int(req.BucketID)
+	if bucketID == 0 {
 		bucketID = setting.DefaultStorage
 	}
 
@@ -784,7 +807,12 @@ func UploadImagesByURL(c *gin.Context) {
 
 	// 下载图片
 	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Get(req.Urls)
+	downloadRequest, err := newRemoteImageRequest(c.Request.Context(), req.URL)
+	if err != nil {
+		uc.Fail(400, "图片URL无效：%v", err)
+		return
+	}
+	resp, err := client.Do(downloadRequest)
 	if err != nil {
 		uc.Fail(500, "图片下载失败：%v", err)
 		return
@@ -801,7 +829,7 @@ func UploadImagesByURL(c *gin.Context) {
 		return
 	}
 
-	fileName := fileNameFromURL(req.Urls)
+	fileName := fileNameFromURL(req.URL)
 
 	fileBytes, err := io.ReadAll(io.LimitReader(resp.Body, int64(setting.MaxFileSize)+1))
 	if err != nil {
@@ -933,10 +961,8 @@ func UploadImagesByURL(c *gin.Context) {
 	}
 
 	// 标签
-	if req.Tag != "" && req.Tag != "0" && imageModel.Id > 0 {
-		if tagID, err := strconv.Atoi(req.Tag); err == nil {
-			db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.ImageToTags{ImageId: imageModel.Id, TagId: tagID})
-		}
+	if tagID != 0 && imageModel.Id > 0 {
+		db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.ImageToTags{ImageId: imageModel.Id, TagId: tagID})
 	}
 
 	responseResult := *fileResult
@@ -946,6 +972,19 @@ func UploadImagesByURL(c *gin.Context) {
 	uc.Success("URL 图片上传成功", map[string]any{
 		"file": responseResult,
 	})
+}
+
+func newRemoteImageRequest(ctx context.Context, rawURL string) (*http.Request, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	host := strings.ToLower(request.URL.Hostname())
+	if host == "pximg.net" || strings.HasSuffix(host, ".pximg.net") {
+		request.Header.Set("Referer", "https://www.pixiv.net/")
+	}
+	return request, nil
 }
 
 func fileNameFromURL(rawURL string) string {
