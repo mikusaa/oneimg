@@ -1,5 +1,17 @@
 <template>
   <div class="page-shell">
+    <PageHeader title="控制中心" description="上传图片并查看近期处理结果" />
+
+    <section class="dashboard-summary page-surface" aria-label="图片统计概览">
+      <div v-for="item in dashboardSummaryItems" :key="item.label" class="dashboard-summary-item">
+        <span class="dashboard-summary-icon" aria-hidden="true"><i :class="item.icon"></i></span>
+        <span class="min-w-0">
+          <span class="dashboard-summary-label">{{ item.label }}</span>
+          <span class="dashboard-summary-value" :class="{ 'animate-pulse text-slate-300 dark:text-slate-700': statsLoading }">{{ item.value }}</span>
+        </span>
+      </div>
+    </section>
+
     <div class="space-y-3 lg:space-y-3.5">
       <section class="space-y-3">
         <div class="content-panel home-panel-compact">
@@ -291,6 +303,7 @@
 import errorImg from '@/assets/images/error.webp';
 import { computed, ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import AppDialog from '@/components/AppDialog.vue'
+import PageHeader from '@/components/PageHeader.vue'
 import TagSelector from '@/components/TagSelector.vue'
 import Loading from '@/utils/loading.js'
 import Message from '@/utils/message.js'
@@ -309,6 +322,8 @@ const uploadingCount = ref(0);
 const uploadProgress = ref(0);
 const recentImages = ref([]);
 const fileInput = ref(null);
+const statsLoading = ref(true);
+const dashboardStats = ref({ total_images: 0, total_size: 0, today_uploads: 0, month_uploads: 0 });
 
 // 标签相关
 const presetTags = ref([]);
@@ -336,6 +351,12 @@ const uploadTagOptions = computed(() => presetTags.value.map(tag => ({ value: ta
 const urlTagOptions = computed(() => [
   { value: 0, label: '不添加标签' },
   ...presetTags.value.map(tag => ({ value: tag.id, label: tag.name }))
+]);
+const dashboardSummaryItems = computed(() => [
+  { label: '图片总数', value: formatNumber(dashboardStats.value.total_images), icon: 'ri-image-line' },
+  { label: '已用存储', value: formatFileSize(dashboardStats.value.total_size), icon: 'ri-hard-drive-2-line' },
+  { label: '今日上传', value: formatNumber(dashboardStats.value.today_uploads), icon: 'ri-calendar-check-line' },
+  { label: '本月上传', value: formatNumber(dashboardStats.value.month_uploads), icon: 'ri-calendar-line' },
 ]);
 
 // ====================== 工具函数 ======================
@@ -366,6 +387,8 @@ const formatFileSize = (bytes) => {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
+
+const formatNumber = value => Number(value || 0).toLocaleString('zh-CN');
 
 /**
  * 格式化日期
@@ -477,6 +500,22 @@ const loadRecentImages = async () => {
       position: 'top-right',
       showClose: true
     });
+  }
+};
+
+const loadDashboardStats = async () => {
+  statsLoading.value = true;
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/stats/dashboard`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+    });
+    const result = await response.json();
+    if (!response.ok || result.code !== 200) throw new Error(result.message || '获取统计数据失败');
+    dashboardStats.value = { ...dashboardStats.value, ...(result.data || {}) };
+  } catch (error) {
+    console.error('获取统计数据失败:', error);
+  } finally {
+    statsLoading.value = false;
   }
 };
 
@@ -1176,6 +1215,7 @@ const handleGlobalClick = (e) => {
 onMounted(() => {
   // 初始化数据
   getUploadConfig();
+  loadDashboardStats();
   setTimeout(loadRecentImages, 100);
   
   // 注册全局事件

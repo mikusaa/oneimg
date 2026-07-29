@@ -52,20 +52,11 @@ const routes = [
   },
   {
     path: '/tags',
-    name: 'Tags',
-    component: () => import('@/views/Tags.vue'),
-    meta: {
-      title: '标签',
-      permissions: ['tag:create', 'tag:update', 'tag:delete']
-    }
+    redirect: to => ({ path: '/gallery', query: { ...to.query, view: 'tags' } })
   },
   {
     path: '/stats',
-    name: 'Stats',
-    component: () => import('@/views/Stats.vue'),
-    meta: {
-      title: '系统统计'
-    }
+    redirect: '/'
   },
   {
     path: '/buckets',

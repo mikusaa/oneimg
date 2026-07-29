@@ -1,10 +1,6 @@
 <template>
     <div class="page-shell text-gray-800 dark:text-gray-200">
-        <section class="page-header">
-            <div>
-                <h1 class="page-title">账户设置</h1>
-            </div>
-        </section>
+        <PageHeader title="账户设置" description="更新当前账户的用户名和登录密码" />
 
         <!-- 主要内容 -->
         <div class="pb-16">
@@ -12,13 +8,6 @@
 
                 <div class="section-card mx-auto w-full overflow-hidden">
                     <div class="panel-content p-6 md:p-8">
-                        <h2 class="panel-title flex items-center text-xl font-semibold mb-8">
-                            <span class="panel-icon mr-2 text-2xl">
-                                <i class="ri-shield-user-line"></i>
-                            </span>
-                            账户设置
-                        </h2>
-                        
                         <!-- 账户修改表单 -->
                         <form @submit.prevent="updateAccount" class="account-form space-y-6">
                             <!-- 新用户名 -->
@@ -115,6 +104,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import PageHeader from '@/components/PageHeader.vue'
 import message from '@/utils/message.js'
 import { getStoredUser, ROLE_ADMIN } from '@/utils/permissions.js'
 

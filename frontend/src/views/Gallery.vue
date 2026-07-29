@@ -1,12 +1,19 @@
 <template>
   <div class="page-shell text-gray-800 dark:text-gray-200">
-    <section class="page-header border-b border-slate-200/70 pb-3 dark:border-white/10">
-      <div>
-        <h1 class="page-title">图库管理</h1>
-      </div>
-    </section>
+    <PageHeader title="图库管理" description="检索、整理和批量管理图片" />
 
-    <div class="space-y-2.5 lg:space-y-3">
+    <nav v-if="canManageTags" class="view-tabs" aria-label="图库视图">
+      <button type="button" class="view-tab" :class="{ 'view-tab-active': activeView === 'images' }" @click="selectView('images')">
+        <i class="ri-gallery-view-2"></i>
+        图片
+      </button>
+      <button type="button" class="view-tab" :class="{ 'view-tab-active': activeView === 'tags' }" @click="selectView('tags')">
+        <i class="ri-price-tag-3-line"></i>
+        标签
+      </button>
+    </nav>
+
+    <div v-if="activeView === 'images'" class="space-y-2.5 lg:space-y-3">
       <div class="content-panel gallery-panel-compact gallery-topbar-compact space-y-2">
         <div class="gallery-topbar-minimal">
           <div class="gallery-topbar-filters">
@@ -277,7 +284,10 @@
       </section>
     </div>
 
+    <TagManager v-else @changed="getTagsList" />
+
     <AppDialog
+      v-if="activeView === 'images'"
       v-model="tagDialogOpen"
       :title="tagDialogMode === 'batch' ? '批量编辑标签' : '添加标签'"
       width-class="max-w-md"
@@ -328,8 +338,10 @@
 
 <script setup>
 import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppDialog from '@/components/AppDialog.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import TagManager from '@/components/TagManager.vue'
 import TagSelector from '@/components/TagSelector.vue'
 import errorImg from '@/assets/images/error.webp';
 import Loading from '@/utils/loading.js'
@@ -442,6 +454,16 @@ const currentUser = getStoredUser();
 
 // 路由实例
 const router = useRouter();
+const route = useRoute();
+const canManageTags = Number(currentUser?.role) === ROLE_ADMIN
+  && ['tag:create', 'tag:update', 'tag:delete'].some(permission => hasPermission(permission, currentUser));
+const activeView = computed(() => route.query.view === 'tags' && canManageTags ? 'tags' : 'images');
+
+const selectView = view => {
+  const nextView = view === 'tags' && canManageTags ? 'tags' : 'images';
+  if (activeView.value === nextView && route.query.view === nextView) return;
+  router.replace({ query: { ...route.query, view: nextView } });
+};
 
 // ====================== 计算属性 ======================
 /**
@@ -1477,6 +1499,10 @@ onMounted(() => {
   getTagsList();
   getBucketsList();
   loadImages();
+
+  if (route.query.view === 'tags' && !canManageTags) {
+    selectView('images');
+  }
 });
 
 onUnmounted(() => {

@@ -1,34 +1,13 @@
 <template>
   <div class="page-shell">
-    <section class="page-header border-b border-slate-200/70 pb-6 dark:border-white/10">
-      <div>
-        <h1 class="page-title">存储管理</h1>
-      </div>
-      <button
-        v-if="canCreateStorage"
-        @click="AddBucketModal"
-        class="primary-button"
-      >
-        <i class="ri-add-line"></i>
-        添加存储
-      </button>
-    </section>
-
-    <!-- 顶部标题 + 添加存储按钮 -->
-    <div class="hidden items-center justify-between mb-6">
-      <h2 class="section-title text-xl font-semibold flex items-center gap-2">
-        <i class="ri-database-2-line text-primary"></i>
-        存储管理
-      </h2>
-      <button
-        v-if="canCreateStorage"
-        @click="AddBucketModal"
-        class="px-4 py-2 bg-primary text-white rounded-lg flex items-center gap-1 hover:bg-primary/80 transition-colors"
-      >
-        <i class="ri-add-line"></i>
-        添加存储
-      </button>
-    </div>
+    <PageHeader title="存储管理" description="管理本地与远程存储及其访问地址">
+      <template #actions>
+        <button v-if="canCreateStorage" class="primary-button" @click="AddBucketModal">
+          <i class="ri-add-line"></i>
+          添加存储
+        </button>
+      </template>
+    </PageHeader>
 
     <!-- 多存储卡片列表 -->
     <div class="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-6">
@@ -44,18 +23,18 @@
           </span>
         </h3>
 
-        <div class="grid grid-cols-3 gap-3 mb-5">
-          <div class="rounded-lg border border-slate-200/70 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900">
-            <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">总容量</p>
-            <h4 class="text-lg font-bold text-gray-800 dark:text-white">{{ storage.total_readable || '--' }}</h4>
+        <div class="mb-5 grid grid-cols-3 divide-x divide-slate-200/80 border-y border-slate-200/80 py-3 dark:divide-white/10 dark:border-white/10">
+          <div class="px-3 first:pl-0">
+            <p class="text-xs text-gray-500 dark:text-gray-400">总容量</p>
+            <p class="mt-1 truncate text-base font-semibold text-gray-800 dark:text-white">{{ storage.total_readable || '--' }}</p>
           </div>
-          <div class="rounded-lg border border-slate-200/70 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900">
-            <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">已使用</p>
-            <h4 class="text-lg font-bold text-gray-800 dark:text-white">{{ storage.usage_readable }}</h4>
+          <div class="px-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400">已使用</p>
+            <p class="mt-1 truncate text-base font-semibold text-gray-800 dark:text-white">{{ storage.usage_readable }}</p>
           </div>
-          <div class="rounded-lg border border-slate-200/70 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900">
-            <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">剩余容量</p>
-            <h4 class="text-lg font-bold text-gray-800 dark:text-white">{{ storage.usage_free || '--' }}</h4>
+          <div class="px-3 last:pr-0">
+            <p class="text-xs text-gray-500 dark:text-gray-400">剩余容量</p>
+            <p class="mt-1 truncate text-base font-semibold text-gray-800 dark:text-white">{{ storage.usage_free || '--' }}</p>
           </div>
         </div>
 
@@ -125,6 +104,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
+import PageHeader from '@/components/PageHeader.vue';
 import message from '@/utils/message.js';
 import PopupModal from '@/utils/popupModal.js';
 import { getStoredUser, hasPermission } from '@/utils/permissions.js';

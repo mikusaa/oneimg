@@ -189,14 +189,10 @@ const refreshNavItems = () => {
 
   navItems.value.push(
     { path: '/', icon: 'home-5-line', name: '控制中心' },
-    { path: '/gallery', icon: 'gallery-view-2', name: '图库管理' },
-    { path: '/stats', icon: 'bar-chart-grouped-line', name: '数据统计' }
+    { path: '/gallery', icon: 'gallery-view-2', name: '图库管理' }
   )
 
   if (Number(userInfo?.role) === ROLE_ADMIN) {
-    if (hasAnyPermission(['tag:create', 'tag:update', 'tag:delete'], userInfo)) {
-      navItems.value.push({ path: '/tags', icon: 'price-tag-3-line', name: '标签管理' })
-    }
     if (hasAnyPermission(['storage:create', 'storage:update', 'storage:delete'], userInfo)) {
       navItems.value.push({ path: '/buckets', icon: 'database-2-line', name: '存储管理' })
     }

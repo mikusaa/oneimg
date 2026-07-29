@@ -1,15 +1,13 @@
 <template>
   <div class="page-shell">
-    <section class="page-header mb-6">
-      <div>
-        <h1 class="page-title">用户管理</h1>
-        <p class="page-subtitle">{{ multiStorageSync ? '管理系统用户账号与后台同步存储源' : '管理系统用户账号与权限' }}</p>
-      </div>
-	  <button v-if="canCreateUser" class="primary-button" @click="openCreateModal">
-        <i class="ri-add-line"></i>
-        新增用户
-      </button>
-    </section>
+    <PageHeader title="用户管理" description="管理用户角色、权限和存储范围">
+      <template #actions>
+        <button v-if="canCreateUser" class="primary-button" @click="openCreateModal">
+          <i class="ri-add-line"></i>
+          新增用户
+        </button>
+      </template>
+    </PageHeader>
 
     <!-- 工具栏 -->
     <div
@@ -321,6 +319,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import PageHeader from '@/components/PageHeader.vue'
 import PopupModal from '@/utils/popupModal.js'
 import message from '@/utils/message.js'
 import { getStoredUser, hasPermission } from '@/utils/permissions.js'

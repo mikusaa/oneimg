@@ -1,32 +1,6 @@
 <template>
     <div class="page-shell text-gray-800 dark:text-gray-200">
-        <section class="page-header border-b border-slate-200/70 pb-4 dark:border-white/10">
-            <h1 class="page-title">系统设置</h1>
-
-            <div class="settings-status-list" aria-label="当前设置状态">
-                <div class="settings-status-item">
-                    <span class="settings-status-icon"><i class="ri-database-2-line"></i></span>
-                    <span>
-                        <span class="settings-status-label">默认存储</span>
-                        <span class="settings-status-value">{{ currentDefaultBucket?.name || '未选择' }}</span>
-                    </span>
-                </div>
-                <div class="settings-status-item">
-                    <span class="settings-status-icon"><i class="ri-code-box-line"></i></span>
-                    <span>
-                        <span class="settings-status-label">API 状态</span>
-                        <span class="settings-status-value">{{ systemSettings.start_api ? '已启用' : '未启用' }}</span>
-                    </span>
-                </div>
-                <div class="settings-status-item">
-                    <span class="settings-status-icon"><i class="ri-file-upload-line"></i></span>
-                    <span>
-                        <span class="settings-status-label">最大文件</span>
-                        <span class="settings-status-value">{{ maxFileSizeReadable }}</span>
-                    </span>
-                </div>
-            </div>
-        </section>
+        <PageHeader title="系统设置" description="管理上传规则、图片处理、访问安全和站点信息" />
 
         <nav
             v-if="availableSettingTabs.length"
@@ -49,13 +23,7 @@
 
         <div class="pb-8 md:pb-10">
             <div v-if="activeSettingTab" class="page-surface settings-panel">
-                <header class="settings-panel-header">
-                    <span class="panel-icon text-2xl"><i :class="activeSettingTabIcon"></i></span>
-                    <h2 class="text-lg font-semibold text-slate-900 dark:text-white sm:text-xl">
-                        {{ activeSettingTabLabel }}
-                    </h2>
-                    <span class="sr-only" aria-live="polite">{{ latestSaveMessage }}</span>
-                </header>
+                <span class="sr-only" aria-live="polite">{{ latestSaveMessage }}</span>
 
                 <div class="divide-y divide-slate-200/80 dark:divide-white/10">
                     <template v-if="activeSettingTab === 'storage'">
@@ -554,6 +522,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import PageHeader from '@/components/PageHeader.vue'
 import message from '@/utils/message.js'
 
 const route = useRoute()
@@ -627,9 +596,6 @@ const revealActiveTab = async (key) => {
 
 const hasSettingPermission = (permission) => settingPermissions.value.includes(permission)
 const availableSettingTabs = computed(() => SETTING_TABS.filter(tab => tab.permissions.some(hasSettingPermission)))
-const currentSettingTab = computed(() => availableSettingTabs.value.find(tab => tab.key === activeSettingTab.value))
-const activeSettingTabLabel = computed(() => currentSettingTab.value?.label || '系统设置')
-const activeSettingTabIcon = computed(() => currentSettingTab.value?.icon || 'ri-settings-4-line')
 
 const publicDomainStorageTypes = ['s3', 'r2']
 const publicDomainAffectedSettings = [
@@ -639,21 +605,6 @@ const publicDomainAffectedSettings = [
 
 const currentDefaultBucket = computed(() => {
     return presetBuckets.value.find(bucket => String(bucket.id) === String(systemSettings.default_storage))
-})
-
-const maxFileSizeReadable = computed(() => {
-    const bytes = Number(systemSettings.max_file_size)
-    if (!Number.isFinite(bytes) || bytes <= 0) return '--'
-
-    const units = ['B', 'KB', 'MB', 'GB', 'TB']
-    let value = bytes
-    let unitIndex = 0
-    while (value >= 1024 && unitIndex < units.length - 1) {
-        value /= 1024
-        unitIndex += 1
-    }
-    const digits = value >= 10 || Number.isInteger(value) ? 0 : 1
-    return `${value.toFixed(digits)} ${units[unitIndex]}`
 })
 
 const supportsPublicImageDomain = computed(() => {
