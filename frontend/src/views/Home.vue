@@ -51,8 +51,8 @@
             <div class="upload-icon mb-2.5 text-4xl text-slate-900 transition-transform duration-200 dark:text-white sm:text-[42px]" :class="{ 'scale-110 text-primary': isDragOver }">
               <i class="ri-upload-cloud-line"></i>
             </div>
-            <h3 class="mb-1.5 text-base font-semibold text-slate-900 dark:text-white">拖拽图片到此处，或点击立即上传</h3>
-            <p class="mx-auto mb-3 max-w-md text-sm leading-5 text-slate-500 dark:text-slate-400">支持常见图片格式、剪贴板和 URL 上传。</p>
+            <h3 class="mb-1.5 text-base font-semibold text-slate-900 dark:text-white">拖拽图片到此处，或点击选择图片</h3>
+            <p class="mx-auto mb-3 max-w-md text-sm leading-5 text-slate-500 dark:text-slate-400">图片会先加入待上传列表，确认后统一上传。</p>
             <div class="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <button type="button" class="primary-button w-full px-4 py-2 sm:w-auto">
               <i class="ri-file-image-line"></i>
@@ -61,20 +61,23 @@
             <button 
             @click.stop="uploadbyurlmodal"
             type="button"
+            :disabled="isUploading"
             class="soft-button w-full border-slate-200 px-4 py-2 sm:w-auto">
               <i class="ri-links-line"></i>
               从URL上传
             </button>
             </div>
             <p class="paste-tip mt-2.5 text-center text-xs text-slate-500 dark:text-slate-400">
-              支持 Ctrl+V 粘贴和直接拖入
+              支持 Ctrl+V 粘贴和直接拖入，最多 {{ MAX_UPLOAD_FILES }} 张
             </p>
           </div>
 
           <!-- 上传进度状态 -->
           <div v-else class="upload-progress px-3 py-8 text-center sm:px-4 sm:py-10">
             <div class="spinner w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-3"></div>
-            <p class="text-secondary text-sm mb-3">正在上传 {{ uploadingCount }} 个文件（{{ Math.round(uploadProgress) }}%）</p>
+            <p class="text-secondary text-sm mb-3">
+              {{ uploadPhase === 'processing' ? `正在处理 ${uploadingCount} 个文件` : `正在上传 ${uploadingCount} 个文件（${Math.round(uploadProgress)}%）` }}
+            </p>
             <div class="progress-bar w-full max-w-md mx-auto h-2 bg-light-200 dark:bg-dark-100 rounded-full overflow-hidden">
               <div 
                 class="progress-fill h-full bg-primary transition-[width] duration-300 ease-out"
@@ -83,6 +86,55 @@
             </div>
           </div>
         </div>
+
+        <section v-if="uploadQueue.length > 0" class="mt-3 border-t border-slate-200/80 pt-3 dark:border-white/10" aria-labelledby="upload-queue-title">
+          <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h3 id="upload-queue-title" class="text-sm font-semibold text-slate-900 dark:text-white">待上传 {{ uploadQueue.length }}/{{ MAX_UPLOAD_FILES }}</h3>
+              <span class="text-xs text-slate-500 dark:text-slate-400">共 {{ formatFileSize(uploadQueueTotalSize) }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" class="soft-button min-h-9 px-3 py-2" :disabled="isUploading" @click="clearUploadQueue">
+                <i class="ri-delete-bin-line"></i>
+                清空
+              </button>
+              <button type="button" class="primary-button min-h-9 px-3 py-2" :disabled="isUploading || uploadQueue.length === 0" @click="uploadQueuedFiles">
+                <i :class="isUploading ? 'ri-loader-4-line animate-spin' : 'ri-upload-cloud-2-line'"></i>
+                {{ isUploading ? '上传中' : '上传全部' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="upload-queue-grid">
+            <article
+              v-for="item in uploadQueue"
+              :key="item.id"
+              class="upload-queue-item"
+              :class="{ 'upload-queue-item-error': item.status === 'failed' }"
+            >
+              <div class="upload-queue-preview">
+                <img :src="item.previewUrl" :alt="item.file.name" class="h-full w-full object-cover">
+                <button
+                  type="button"
+                  class="upload-queue-remove"
+                  :disabled="isUploading"
+                  :aria-label="`移除 ${item.file.name}`"
+                  title="移除"
+                  @click="removeQueuedFile(item.id)"
+                >
+                  <i class="ri-close-line"></i>
+                </button>
+              </div>
+              <div class="min-w-0 px-2.5 py-2">
+                <p class="truncate text-xs font-medium text-slate-800 dark:text-slate-100" :title="item.file.name">{{ item.file.name }}</p>
+                <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{{ formatFileSize(item.file.size) }}</p>
+                <p v-if="item.status === 'failed'" class="mt-1 line-clamp-2 text-[11px] leading-4 text-red-600 dark:text-red-300" :title="item.error">
+                  {{ item.error }}
+                </p>
+              </div>
+            </article>
+          </div>
+        </section>
 
         <input 
           ref="fileInput"
@@ -106,6 +158,7 @@
             <select 
               class="input-modern mt-3"
               v-model="selectedBucket"
+              :disabled="isUploading"
               @change="handleBucketChange"
             >
               <option 
@@ -302,6 +355,7 @@
 <script setup>
 import errorImg from '@/assets/images/error.webp';
 import { computed, ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import AppDialog from '@/components/AppDialog.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TagSelector from '@/components/TagSelector.vue'
@@ -313,6 +367,8 @@ import { getStorageSyncSummary } from '@/utils/storageStatus.js'
 // ====================== 常量定义 ======================
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_UPLOAD_FILES = 10;
 
 // ====================== 响应式数据 ======================
 // 上传相关
@@ -320,8 +376,12 @@ const isDragOver = ref(false);
 const isUploading = ref(false);
 const uploadingCount = ref(0);
 const uploadProgress = ref(0);
+const uploadPhase = ref('idle');
 const recentImages = ref([]);
 const fileInput = ref(null);
+const uploadQueue = ref([]);
+const allowedFileTypes = ref([...ALLOWED_FILE_TYPES]);
+const maxFileSize = ref(DEFAULT_MAX_FILE_SIZE);
 const statsLoading = ref(true);
 const dashboardStats = ref({ total_images: 0, total_size: 0, today_uploads: 0, month_uploads: 0 });
 
@@ -345,7 +405,7 @@ const activeCopyMenu = ref(null);
 let previewCopyMenu = false;
 let currentPreviewImage = null;
 let previewModalInstance = null;
-let progressInterval = null; // 上传进度定时器
+let queueSequence = 0;
 
 const uploadTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.name, label: tag.name })));
 const urlTagOptions = computed(() => [
@@ -358,6 +418,7 @@ const dashboardSummaryItems = computed(() => [
   { label: '今日上传', value: formatNumber(dashboardStats.value.today_uploads), icon: 'ri-calendar-check-line' },
   { label: '本月上传', value: formatNumber(dashboardStats.value.month_uploads), icon: 'ri-calendar-line' },
 ]);
+const uploadQueueTotalSize = computed(() => uploadQueue.value.reduce((total, item) => total + item.file.size, 0));
 
 // ====================== 工具函数 ======================
 function isAdmin() {
@@ -464,6 +525,15 @@ const getUploadConfig = async () => {
       } else {
         selectedBucket.value = result.data?.default_bucket || '1';
       }
+      const configuredTypes = String(result.data?.allowed_types || '')
+        .split(',')
+        .map(type => type.trim())
+        .filter(Boolean);
+      allowedFileTypes.value = configuredTypes.length > 0 ? configuredTypes : [...ALLOWED_FILE_TYPES];
+      const configuredMaxSize = Number(result.data?.max_file_size);
+      maxFileSize.value = Number.isFinite(configuredMaxSize) && configuredMaxSize > 0
+        ? configuredMaxSize
+        : DEFAULT_MAX_FILE_SIZE;
     } else {
       throw new Error(result.message || '获取上传配置失败');
     }
@@ -618,18 +688,7 @@ const handleDragLeave = (e) => {
 const handleDrop = (e) => {
   e.preventDefault();
   isDragOver.value = false;
-  
-  const files = Array.from(e.dataTransfer.files);
-  const validFiles = validateFiles(files);
-  
-  if (validFiles.length > 0) {
-    uploadFiles(validFiles);
-  } else {
-    Message.error('请拖拽有效的图片文件（仅支持JPG、PNG、GIF、WebP、SVG）', {
-      duration: 3000,
-      position: 'top-right'
-    });
-  }
+  addFilesToQueue(Array.from(e.dataTransfer.files));
 };
 
 /**
@@ -644,10 +703,7 @@ const triggerFileInput = () => {
 const handleFileSelect = (e) => {
   const files = Array.from(e.target.files);
   if (files.length > 0) {
-    const validFiles = validateFiles(files);
-    if (validFiles.length > 0) {
-      uploadFiles(validFiles);
-    }
+    addFilesToQueue(files);
   }
   e.target.value = ''; // 清空文件选择
 };
@@ -665,23 +721,14 @@ const handlePaste = async (e) => {
     if (item.type.startsWith('image/')) {
       const file = item.getAsFile();
       if (file) {
-        const timestamp = new Date().getTime();
-        const extension = item.type.split('/')[1] || 'png';
-        const newFile = new File([file], `paste-${timestamp}.${extension}`, {
-          type: item.type
-        });
-        imageFiles.push(newFile);
+        imageFiles.push(file);
       }
     }
   }
   
   if (imageFiles.length > 0) {
     e.preventDefault();
-    uploadFiles(imageFiles);
-    Message.success(`从剪贴板粘贴了 ${imageFiles.length} 个图片`, {
-      duration: 2000,
-      position: 'top-right'
-    });
+    addFilesToQueue(imageFiles);
   }
 };
 
@@ -692,10 +739,16 @@ const validateFiles = (files) => {
   const validFiles = [];
   
   files.forEach(file => {
-    // 验证文件类型
-    if (!file.type.startsWith('image/') || !ALLOWED_FILE_TYPES.includes(file.type)) {
-      Message.warning(`文件 ${file.name} 不是支持的图片格式`, {
+    if (!file.type.startsWith('image/') || !allowedFileTypes.value.includes(file.type)) {
+      Message.warning(`${file.name} 不是允许上传的图片格式`, {
         duration: 2000,
+        position: 'top-right'
+      });
+      return;
+    }
+    if (file.size > maxFileSize.value) {
+      Message.warning(`${file.name} 超过 ${formatFileSize(maxFileSize.value)} 大小限制`, {
+        duration: 2500,
         position: 'top-right'
       });
       return;
@@ -705,6 +758,63 @@ const validateFiles = (files) => {
   });
   
   return validFiles;
+};
+
+const getQueueFingerprint = file => [file.name, file.size, file.lastModified, file.type].join(':');
+
+const addFilesToQueue = files => {
+  if (isUploading.value || files.length === 0) return;
+
+  const validFiles = validateFiles(files);
+  const existingFingerprints = new Set(uploadQueue.value.map(item => item.fingerprint));
+  let duplicateCount = 0;
+  let overflowCount = 0;
+  let addedCount = 0;
+
+  validFiles.forEach(file => {
+    const fingerprint = getQueueFingerprint(file);
+    if (existingFingerprints.has(fingerprint)) {
+      duplicateCount += 1;
+      return;
+    }
+    if (uploadQueue.value.length >= MAX_UPLOAD_FILES) {
+      overflowCount += 1;
+      return;
+    }
+
+    existingFingerprints.add(fingerprint);
+    queueSequence += 1;
+    uploadQueue.value.push({
+      id: `queued-${queueSequence}`,
+      fingerprint,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      status: 'pending',
+      error: '',
+    });
+    addedCount += 1;
+  });
+
+  if (addedCount > 0) Message.success(`已加入 ${addedCount} 张图片`);
+  if (duplicateCount > 0) Message.warning(`已跳过 ${duplicateCount} 个队列内重复文件`);
+  if (overflowCount > 0) Message.warning(`队列最多 ${MAX_UPLOAD_FILES} 张，已跳过 ${overflowCount} 张`);
+};
+
+const releaseQueueItem = item => {
+  if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+};
+
+const removeQueuedFile = id => {
+  if (isUploading.value) return;
+  const item = uploadQueue.value.find(candidate => candidate.id === id);
+  if (item) releaseQueueItem(item);
+  uploadQueue.value = uploadQueue.value.filter(candidate => candidate.id !== id);
+};
+
+const clearUploadQueue = () => {
+  if (isUploading.value) return;
+  uploadQueue.value.forEach(releaseQueueItem);
+  uploadQueue.value = [];
 };
 
 const showUploadResultMessage = (files = []) => {
@@ -736,25 +846,54 @@ const showUploadResultMessage = (files = []) => {
 /**
  * 文件上传
  */
-const uploadFiles = async (files) => {
-  if (isUploading.value) return;
-  
-  isUploading.value = true;
-  uploadingCount.value = files.length;
-  uploadProgress.value = 0;
-  
-  // 重置进度定时器
-  if (progressInterval) clearInterval(progressInterval);
-  progressInterval = setInterval(() => {
-    if (uploadProgress.value < 95) {
-      uploadProgress.value += Math.random() * 5;
+const sendQueuedUpload = formData => new Promise((resolve, reject) => {
+  const request = new XMLHttpRequest();
+  request.open('POST', `${API_BASE_URL}/api/upload/images`);
+  request.setRequestHeader('Authorization', `Bearer ${localStorage.getItem('authToken')}`);
+  request.upload.onprogress = event => {
+    if (!event.lengthComputable) return;
+    uploadProgress.value = Math.min(90, (event.loaded / event.total) * 90);
+  };
+  request.upload.onload = () => {
+    uploadPhase.value = 'processing';
+    uploadProgress.value = Math.max(uploadProgress.value, 95);
+  };
+  request.onerror = () => reject(new Error('网络连接失败'));
+  request.onabort = () => reject(new Error('上传已取消'));
+  request.onload = () => {
+    let result;
+    try {
+      result = JSON.parse(request.responseText || '{}');
+    } catch {
+      reject(new Error('服务器返回了无法解析的结果'));
+      return;
     }
-  }, 150);
+    if (request.status < 200 || request.status >= 300) {
+      reject(new Error(result.message || `请求失败（HTTP ${request.status}）`));
+      return;
+    }
+    resolve(result);
+  };
+  request.send(formData);
+});
+
+const uploadQueuedFiles = async () => {
+  if (isUploading.value || uploadQueue.value.length === 0) return;
+
+  const queuedItems = [...uploadQueue.value];
+  isUploading.value = true;
+  uploadingCount.value = queuedItems.length;
+  uploadProgress.value = 0;
+  uploadPhase.value = 'uploading';
+  queuedItems.forEach(item => {
+    item.status = 'uploading';
+    item.error = '';
+  });
   
   try {
     const formData = new FormData();
-    files.forEach(file => {
-      formData.append('images[]', file);
+    queuedItems.forEach(item => {
+      formData.append('images[]', item.file);
     });
     
     // 携带标签数据
@@ -764,27 +903,51 @@ const uploadFiles = async (files) => {
     // 携带存储桶信息
     formData.append('bucket_id', selectedBucket.value || '1')
     
-    const response = await fetch(`${API_BASE_URL}/api/upload/images`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-      },
-      body: formData
-    });
-    
-    clearInterval(progressInterval);
+    const result = await sendQueuedUpload(formData);
     uploadProgress.value = 100;
-    
-    const result = await response.json();
-    
-    if (response.ok && result.code === 200) {
-      await loadRecentImages();
-      showUploadResultMessage(result.data?.files || []);
+
+    const uploadResults = Array.isArray(result.data?.files) ? result.data.files : [];
+    const completedIDs = new Set();
+    let uploadedCount = 0;
+    let duplicateCount = 0;
+    let failedCount = 0;
+
+    queuedItems.forEach((item, index) => {
+      const fileResult = uploadResults[index];
+      if (fileResult?.success) {
+        completedIDs.add(item.id);
+        if (fileResult.duplicate) duplicateCount += 1;
+        else uploadedCount += 1;
+        return;
+      }
+
+      item.status = 'failed';
+      item.error = fileResult?.message || result.message || '上传失败';
+      failedCount += 1;
+    });
+
+    uploadQueue.value = uploadQueue.value.filter(item => {
+      if (!completedIDs.has(item.id)) return true;
+      releaseQueueItem(item);
+      return false;
+    });
+
+    if (uploadedCount + duplicateCount > 0) {
+      await Promise.all([loadRecentImages(), loadDashboardStats()]);
+    }
+    if (failedCount > 0) {
+      Message.warning(`上传完成，成功 ${uploadedCount} 张，重复 ${duplicateCount} 张，失败 ${failedCount} 张`);
+    } else if (duplicateCount > 0) {
+      Message.warning(`上传完成，已跳过 ${duplicateCount} 张重复图片`);
     } else {
-      throw new Error(result.message || '上传失败');
+      Message.success(`成功上传 ${uploadedCount} 张图片`);
     }
   } catch (error) {
     console.error('上传错误:', error);
+    queuedItems.forEach(item => {
+      item.status = 'failed';
+      item.error = error.message || '上传失败';
+    });
     Message.error(`上传失败: ${error.message}`, {
       duration: 3000,
       position: 'top-right',
@@ -794,7 +957,7 @@ const uploadFiles = async (files) => {
     isUploading.value = false;
     uploadingCount.value = 0;
     uploadProgress.value = 0;
-    if (progressInterval) clearInterval(progressInterval);
+    uploadPhase.value = 'idle';
   }
 };
 
@@ -1211,6 +1374,19 @@ const handleGlobalClick = (e) => {
   }
 };
 
+const shouldConfirmQueueExit = () => uploadQueue.value.length > 0 || isUploading.value;
+
+const handleBeforeUnload = event => {
+  if (!shouldConfirmQueueExit()) return;
+  event.preventDefault();
+  event.returnValue = '';
+};
+
+onBeforeRouteLeave(() => {
+  if (!shouldConfirmQueueExit()) return true;
+  return window.confirm('待上传列表中还有图片，离开后将清空。确认离开吗？');
+});
+
 // ====================== 生命周期 ======================
 onMounted(() => {
   // 初始化数据
@@ -1221,15 +1397,15 @@ onMounted(() => {
   // 注册全局事件
   document.addEventListener('paste', handlePaste);
   document.addEventListener('click', handleGlobalClick);
+  window.addEventListener('beforeunload', handleBeforeUnload);
 });
 
 onBeforeUnmount(() => {
-  // 清理定时器
-  if (progressInterval) clearInterval(progressInterval);
-  
   // 移除事件监听
   document.removeEventListener('paste', handlePaste);
   document.removeEventListener('click', handleGlobalClick);
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+  uploadQueue.value.forEach(releaseQueueItem);
   
   // 清理预览资源
   cleanupPreview();

@@ -132,9 +132,8 @@ func UploadImages(c *gin.Context) {
 	for _, file := range files {
 		fileResult, err := uploader.Upload(c, &setting, &buckets, file)
 		if err != nil {
-			// 单个文件上传失败不影响其他文件
-			uc.Fail(500, "文件[%s]上传失败：%v", file.Filename, err)
-			return
+			uploadResults = append(uploadResults, failedUploadResult(file.Filename, err))
+			continue
 		}
 
 		// 保存图片信息到数据库
@@ -156,7 +155,13 @@ func UploadImages(c *gin.Context) {
 			}
 
 			if db != nil {
-				db.DB.Create(&imageModel)
+				if err := db.DB.Create(&imageModel).Error; err != nil {
+					if buckets.Type == uploads.DefaultStorageType {
+						cleanupLocalUpload(imageModel)
+					}
+					uploadResults = append(uploadResults, failedUploadResult(file.Filename, fmt.Errorf("保存文件记录失败：%w", err)))
+					continue
+				}
 				fileResult.ID = imageModel.Id
 			}
 		}
@@ -201,16 +206,7 @@ func UploadImages(c *gin.Context) {
 		successCount++
 	}
 
-	if successCount == 0 {
-		uc.Fail(500, "所有文件上传失败")
-		return
-	}
-
-	// 返回上传结果
-	uc.Success("上传成功", map[string]any{
-		"files": uploadResults,
-		"count": successCount,
-	})
+	writeUploadBatchResult(c, uc, uploadResults, successCount)
 }
 
 func uploadImagesMultiStorage(c *gin.Context, setting models.Settings, existingTags []models.Tags) {
@@ -241,8 +237,8 @@ func uploadImagesMultiStorage(c *gin.Context, setting models.Settings, existingT
 	for _, file := range files {
 		fileResult, err := uploader.Upload(c, &setting, &localBucket, file)
 		if err != nil {
-			uc.Fail(500, "文件[%s]保存到本机失败：%v", file.Filename, err)
-			return
+			uploadResults = append(uploadResults, failedUploadResult(file.Filename, err))
+			continue
 		}
 
 		imageModel := models.Image{Id: fileResult.ID}
@@ -316,8 +312,8 @@ func uploadImagesMultiStorage(c *gin.Context, setting models.Settings, existingT
 			})
 			if err != nil {
 				cleanupLocalUpload(imageModel)
-				uc.Fail(500, "保存文件记录失败：%v", err)
-				return
+				uploadResults = append(uploadResults, failedUploadResult(file.Filename, fmt.Errorf("保存文件记录失败：%w", err)))
+				continue
 			}
 			services.WakeStorageSyncWorker()
 		}
@@ -342,15 +338,33 @@ func uploadImagesMultiStorage(c *gin.Context, setting models.Settings, existingT
 		successCount++
 	}
 
+	writeUploadBatchResult(c, uc, uploadResults, successCount)
+}
+
+func failedUploadResult(fileName string, err error) interfaces.ImageUploadResult {
+	return interfaces.ImageUploadResult{
+		Success:          false,
+		Message:          err.Error(),
+		OriginalFileName: fileName,
+	}
+}
+
+func writeUploadBatchResult(c *gin.Context, uc *uploads.UploadContext, uploadResults []interfaces.ImageUploadResult, successCount int) {
+	data := map[string]any{
+		"files":        uploadResults,
+		"count":        successCount,
+		"failed_count": len(uploadResults) - successCount,
+	}
 	if successCount == 0 {
-		uc.Fail(500, "所有文件上传失败")
+		c.JSON(http.StatusOK, &result.Result{Code: 500, Msg: "所有文件上传失败", Data: data})
 		return
 	}
 
-	uc.Success("上传成功", map[string]any{
-		"files": uploadResults,
-		"count": successCount,
-	})
+	message := "上传成功"
+	if successCount < len(uploadResults) {
+		message = "部分文件上传失败"
+	}
+	uc.Success(message, data)
 }
 
 type tagRequestID int
@@ -734,6 +748,8 @@ func GetUploadConfig(c *gin.Context) {
 		"buckets":        bucketRes,
 		"tags":           tags,
 		"default_bucket": setting.DefaultStorage,
+		"max_file_size":  setting.MaxFileSize,
+		"allowed_types":  setting.AllowedTypes,
 	}
 
 	c.JSON(http.StatusOK, result.Success("ok", config))
