@@ -24,7 +24,6 @@ func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 	// 基础中间件
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
-	r.Use(middlewares.ConfigMiddleware(cfg))
 	r.Use(middlewares.SessionMiddleware(cfg))
 
 	// 跨域配置
@@ -94,7 +93,6 @@ func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 			auth.GET("/stats/images", controllers.GetImageStats)
 
 			// 图片相关接口
-			auth.POST("/upload", controllers.UploadImage)
 			auth.POST("/upload/images", controllers.UploadImages)
 			auth.DELETE("/images/:id", controllers.DeleteImage)
 			auth.GET("/images", controllers.GetImageList)
@@ -115,8 +113,6 @@ func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 			auth.POST("/buckets/update/:id", middlewares.RequirePermission("storage:update"), controllers.UpdateBuckets)
 			auth.PUT("/buckets/default/cdn", middlewares.RequirePermission("storage:update"), controllers.UpdateDefaultStorageCDN)
 			auth.DELETE("/buckets/:id", middlewares.RequirePermission("storage:delete"), controllers.DeleteBuckets)
-
-			auth.POST("/sessions/clear", middlewares.RequirePermission("setting:security"), controllers.ClearAllSessions)
 
 			// 用户管理接口
 			auth.GET("/users", middlewares.RequirePermission("user:list"), controllers.GetUsers)

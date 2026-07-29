@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"math/rand"
 	"net/http"
 	"oneimg/backend/database"
 	"oneimg/backend/models"
@@ -9,13 +8,9 @@ import (
 	"oneimg/backend/utils/settings"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
-
-// 初始化随机数种子
-var randomGenerator = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // 定义返回的图片结构体
 type RandomImageResponse struct {
@@ -53,14 +48,6 @@ func GetRandomImages(c *gin.Context) {
 			return
 		}
 
-		// 计算随机偏移量
-		// var offset int
-		// if total > int64(limit) {
-		// 	offset = randomGenerator.Intn(int(total) - limit + 1)
-		// } else {
-		// 	offset = 0
-		// }
-
 		// 查询随机图片
 		if err := db.Model(&models.Image{}).
 			Order("RANDOM()").
@@ -85,14 +72,6 @@ func GetRandomImages(c *gin.Context) {
 			c.JSON(http.StatusOK, result.Success("ok", []RandomImageResponse{}))
 			return
 		}
-
-		// 计算随机偏移量
-		// var offset int
-		// if total > int64(limit) {
-		// 	offset = randomGenerator.Intn(int(total) - limit + 1)
-		// } else {
-		// 	offset = 0
-		// }
 
 		// 查询该标签下的随机图片
 		if err := db.Model(&models.Image{}).

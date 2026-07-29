@@ -153,11 +153,6 @@ const getLoginSettings = async () => {
 };
 
 onMounted(async () => {
-    // 修复URL方法兼容问题
-    if (!URL.revokeObjectUrl && URL.revokeObjectURL) {
-        URL.revokeObjectUrl = URL.revokeObjectURL;
-    }
-
     await getLoginSettings();
 });
 </script>

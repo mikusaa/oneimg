@@ -126,6 +126,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import message from '@/utils/message.js';
+import PopupModal from '@/utils/popupModal.js';
 import { getStoredUser, hasPermission } from '@/utils/permissions.js';
 
 const currentUser = getStoredUser();

@@ -352,11 +352,6 @@ func uploadImagesMultiStorage(c *gin.Context, setting models.Settings, existingT
 	})
 }
 
-// UploadImage 单文件上传
-func UploadImage(c *gin.Context) {
-	UploadImages(c)
-}
-
 type tagRequestID int
 
 func (id *tagRequestID) UnmarshalJSON(data []byte) error {

@@ -179,12 +179,4 @@ Message.error = function(message, options = {}) {
   return this.show({ type: 'error', message, showClose: true, ...options })
 }
 
-window.Message = Message
-
-if (!window.showToast) {
-  window.showToast = function(message, type = 'success', duration = 2000) {
-    return Message.show({ type, message, duration, position: 'top-center' })
-  }
-}
-
 export default Message

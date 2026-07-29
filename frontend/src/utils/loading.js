@@ -69,10 +69,7 @@ class Loading {
       previousPosition: '',
       positionAdjusted: false,
       ownsScrollLock: false,
-      hide: () => this.hide(dom),
-      destroy: () => this.hide(dom, 0),
-      updateText: text => this.updateText(dom, text),
-      updateColor: color => this.updateColor(dom, color)
+      hide: () => this.hide(dom)
     }
 
     instance.showTimer = setTimeout(() => {
@@ -127,45 +124,6 @@ class Loading {
     })
   }
 
-  static updateText(dom, text) {
-    const instance = this.instances.find(item => item.dom === dom)
-    if (!instance || !text) return
-    instance.config.text = text
-    const textElement = dom.querySelector('.app-loading-text')
-    if (textElement) textElement.textContent = text
-  }
-
-  static updateColor(dom, color) {
-    const instance = this.instances.find(item => item.dom === dom)
-    if (!instance || !color) return
-    instance.config.color = color
-    dom.querySelector('.app-loading-spinner')?.style.setProperty('--loading-color', color)
-  }
-
-  static async hideAll() {
-    await Promise.all([...this.instances].map(instance => instance.hide()))
-  }
-
-  static getInstance(container = document.body) {
-    return this.instances.find(instance => instance.config.container === container) || null
-  }
 }
-
-Loading.fullscreen = function(options) {
-  return this.show({
-    ...(typeof options === 'string' ? { text: options } : options),
-    fullscreen: true
-  })
-}
-
-Loading.local = function(container, options) {
-  return this.show({
-    ...(typeof options === 'string' ? { text: options } : options),
-    fullscreen: false,
-    container
-  })
-}
-
-window.Loading = Loading
 
 export default Loading

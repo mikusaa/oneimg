@@ -43,6 +43,9 @@ func TestCreateDefaultEnvUsesDataDirectory(t *testing.T) {
 		"DB_NAME",
 		"DB_CA_CERT_PATH",
 		"DB_SKIP_CERT_VERIFY",
+		"MAX_FILE_SIZE",
+		"ALLOWED_TYPES",
+		"JWT_SECRET",
 	} {
 		if _, exists := values[key]; exists {
 			t.Fatalf("generated environment file still contains removed setting %s", key)

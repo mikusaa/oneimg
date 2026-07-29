@@ -190,50 +190,6 @@ func validateToken(setting models.Settings, token string) bool {
 	return setting.APIToken != "" && secureconfig.ConstantTimeEqual(setting.APIToken, token)
 }
 
-func AdminOnlyMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 获取用户ID
-		userRole := c.GetInt("user_role")
-
-		if userRole != models.RoleAdmin {
-			c.JSON(http.StatusForbidden, AuthResponse{
-				Code:    403,
-				Message: "无权访问",
-			})
-			c.Abort()
-			return
-		}
-
-		// 继续处理请求
-		c.Next()
-	}
-}
-
-// OptionalAuthMiddleware 可选认证中间件（不强制要求认证）
-func OptionalAuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 获取session
-		session := sessions.Default(c)
-
-		// 检查是否已登录
-		loggedIn := session.Get("logged_in")
-		if loggedIn != nil && loggedIn == true {
-			// 获取用户信息
-			userID := session.Get("user_id")
-			username := session.Get("username")
-
-			if userID != nil && username != nil {
-				// 将用户信息存储到上下文中
-				c.Set("user_id", userID)
-				c.Set("username", username)
-			}
-		}
-
-		// 继续处理请求（无论是否登录）
-		c.Next()
-	}
-}
-
 func GetCurrentUser(c *gin.Context) (*models.User, bool) {
 	value, exists := c.Get("current_user")
 	if !exists {

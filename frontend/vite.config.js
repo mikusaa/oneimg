@@ -13,13 +13,6 @@ export default defineConfig({
       }
     }
   },
-  css: {
-    preprocessorOptions: {
-      scss: {
-        additionalData: `@use "@/styles/style.scss" as styles;`
-      }
-    }
-  },
   server: {
     port: 3000,
     proxy: {
@@ -44,8 +37,5 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src')
     }
-  },
-  optimizeDeps: {
-    include: ['axios'] // 预构建常用依赖
   }
 })

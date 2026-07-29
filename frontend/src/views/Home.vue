@@ -292,6 +292,9 @@ import errorImg from '@/assets/images/error.webp';
 import { computed, ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import AppDialog from '@/components/AppDialog.vue'
 import TagSelector from '@/components/TagSelector.vue'
+import Loading from '@/utils/loading.js'
+import Message from '@/utils/message.js'
+import PopupModal from '@/utils/popupModal.js'
 import { getStorageSyncSummary } from '@/utils/storageStatus.js'
 
 // ====================== 常量定义 ======================
@@ -1192,9 +1195,7 @@ onBeforeUnmount(() => {
   cleanupPreview();
   
   // 关闭所有消息提示
-  if (window.Message) {
-    Message.closeAll();
-  }
+  Message.closeAll();
 });
 </script>
 

@@ -113,24 +113,3 @@ func ChangeAccountInfo(c *gin.Context) {
 		Success: true,
 	})
 }
-
-// ClearAllSessions 清除所有会话
-func ClearAllSessions(c *gin.Context) {
-	// 获取当前session
-	session := sessions.Default(c)
-	session.Clear()
-	if err := session.Save(); err != nil {
-		c.JSON(http.StatusInternalServerError, AccountResponse{
-			Code:    500,
-			Message: "清除会话失败",
-			Success: false,
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, AccountResponse{
-		Code:    200,
-		Message: "所有会话已清除",
-		Success: true,
-	})
-}

@@ -18,10 +18,3 @@ export const unlockBodyScroll = () => {
     previousOverflow = ''
   }
 }
-
-export const resetBodyScroll = () => {
-  if (typeof document === 'undefined') return
-  lockCount = 0
-  document.body.style.overflow = previousOverflow
-  previousOverflow = ''
-}

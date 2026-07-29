@@ -47,8 +47,8 @@ func ImageProxy(c *gin.Context) bool {
 
 	// 查询图片信息
 	var imageModel models.Image
-	sqlResult := db.DB.Where("Url = ? OR Thumbnail = ?", cleanPath, cleanPath).First(&imageModel)
-	if sqlResult.Error != nil {
+	sqlResult := db.DB.Where("Url = ? OR Thumbnail = ?", cleanPath, cleanPath).Limit(1).Find(&imageModel)
+	if sqlResult.Error != nil || sqlResult.RowsAffected == 0 {
 		// 图片不存在，直接返回，交给 NoRoute 后续逻辑处理（如渲染 SPA）
 		return false
 	}
