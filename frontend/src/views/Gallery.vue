@@ -12,10 +12,11 @@
           <div class="gallery-topbar-filters">
             <div v-if="isAdmin" class="gallery-inline-control gallery-inline-control-role">
               <span class="gallery-inline-label">角色</span>
-              <div class="role-buttons grid w-full grid-cols-3 overflow-hidden rounded-[16px] border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto">
+              <div class="role-buttons grid w-full grid-cols-3 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto" role="group" aria-label="图片角色筛选">
             <button
               @click="changeRole('all')"
-              class="px-3 py-1.5 text-sm transition-all"
+              class="pressable min-h-10 px-3 py-1.5 text-sm"
+              :aria-pressed="roleImage === 'all'"
               :class="[
                 roleImage === 'all'
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
@@ -26,7 +27,8 @@
             </button>
             <button
               @click="changeRole('admin')"
-              class="px-3 py-1.5 text-sm transition-all"
+              class="pressable min-h-10 px-3 py-1.5 text-sm"
+              :aria-pressed="roleImage === 'admin'"
               :class="[
                 roleImage === 'admin' 
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' 
@@ -37,7 +39,8 @@
             </button>
             <button
               @click="changeRole('user')"
-              class="px-3 py-1.5 text-sm transition-all"
+              class="pressable min-h-10 px-3 py-1.5 text-sm"
+              :aria-pressed="roleImage === 'user'"
               :class="[
                 roleImage === 'user'
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
@@ -75,10 +78,10 @@
                   placeholder="原始名 / 文件名 / URL / 哈希"
                   @keyup.enter="handleSearch"
                 />
-                <button class="soft-button px-2.5" @click="handleSearch" title="搜索">
+                <button class="soft-button px-2.5" @click="handleSearch" title="搜索" aria-label="搜索图片">
                   <i class="ri-search-line"></i>
                 </button>
-                <button v-if="searchKeyword" class="soft-button px-2.5" @click="clearSearch" title="清空">
+                <button v-if="searchKeyword" class="soft-button px-2.5" @click="clearSearch" title="清空" aria-label="清空搜索">
                   <i class="ri-close-line"></i>
                 </button>
               </div>
@@ -115,6 +118,7 @@
               <span class="gallery-topbar-stat">{{ images.length }} 张</span>
               <span class="gallery-topbar-stat">已选 {{ selectedImages.length }}</span>
             </div>
+          <Transition name="batch-actions">
           <div v-if="selectedImages.length > 0" class="batch-actions flex w-full flex-col gap-2 sm:flex-row sm:items-center xl:w-auto">
             <button @click="handleBatchCopy" class="soft-button">
               <i class="ri-file-copy-line"></i>
@@ -136,6 +140,7 @@
               删除 ({{ selectedImages.length }})
             </button>
           </div>
+          </Transition>
           </div>
           </div>
       </div>
@@ -152,7 +157,11 @@
             v-for="image in images" 
             :key="image.id"
             class="gallery-image-card gallery-image-card-compact"
-            :class="isImageSelected(image.id) ? 'border-slate-900 dark:border-white' : 'hover:border-slate-300 dark:hover:border-white/20'"
+            :class="isImageSelected(image.id) ? 'border-primary ring-2 ring-primary/20 dark:border-primary' : 'hover:border-slate-300 dark:hover:border-white/20'"
+            tabindex="0"
+            :aria-label="`查看图片 ${getImageAltText(image)}`"
+            :aria-selected="isImageSelected(image.id)"
+            @keydown.enter.prevent="openPreview(image)"
           >
             <div class="gallery-image-card-head">
               <div class="gallery-card-badges">
@@ -231,7 +240,9 @@
               v-for="page in visiblePages"
               :key="page"
               @click="changePage(page)"
-              class="flex h-9 w-9 items-center justify-center rounded-[16px] border text-sm transition-all"
+              class="pressable flex h-10 w-10 items-center justify-center rounded-lg border text-sm"
+              :aria-label="`第 ${page} 页`"
+              :aria-current="page === currentPage ? 'page' : undefined"
               :class="[
                 page === currentPage 
                   ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white' 
@@ -253,7 +264,7 @@
         </div>
       </div>
       
-      <div v-else class="content-panel empty-state flex flex-col items-center justify-center rounded-[22px] border border-dashed border-slate-300/80 bg-white/70 py-14 text-center dark:border-white/10 dark:bg-white/5">
+      <div v-else class="content-panel empty-state flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300/80 bg-white/70 py-14 text-center dark:border-white/10 dark:bg-white/5">
         <div class="empty-icon mb-3 text-5xl text-gray-400 dark:text-gray-600">
           <i class="ri-image-ai-line"></i>
         </div>
@@ -1470,3 +1481,23 @@ onUnmounted(() => {
   cleanPreviewGlobalFunctions();
 });
 </script>
+
+<style scoped>
+.batch-actions-enter-active,
+.batch-actions-leave-active {
+  transition: opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.batch-actions-enter-from,
+.batch-actions-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .batch-actions-enter-from,
+  .batch-actions-leave-to {
+    transform: none;
+  }
+}
+</style>

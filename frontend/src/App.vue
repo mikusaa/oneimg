@@ -6,8 +6,12 @@
     <Navbar />
 
     <main class="min-h-[calc(100vh-53px)] px-2.5 pb-3 pt-[calc(var(--app-header-height-mobile)+8px)] sm:px-4 sm:pb-4 md:px-5 md:pb-5 md:pt-[calc(var(--app-header-height)+10px)] xl:px-6 2xl:px-8">
-      <div class="mx-auto">
-        <router-view />
+      <div class="mx-auto min-w-0">
+        <router-view v-slot="{ Component, route: currentRoute }">
+          <transition name="route-view" mode="out-in">
+            <component :is="Component" :key="currentRoute.name" class="route-view" />
+          </transition>
+        </router-view>
       </div>
     </main>
 

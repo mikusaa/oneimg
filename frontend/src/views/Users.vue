@@ -81,7 +81,7 @@
         :key="i"
         class="section-card h-[190px] animate-pulse overflow-hidden"
       >
-        <div class="h-full bg-slate-200 dark:bg-slate-800 rounded-[16px]"></div>
+        <div class="h-full rounded-lg bg-slate-200 dark:bg-slate-800"></div>
       </div>
     </div>
 
@@ -115,10 +115,10 @@
       <div
         v-for="user in users"
         :key="user.id"
-        class="rounded-[16px] border border-slate-200/80 bg-white shadow-sm dark:bg-slate-900 group relative transition-all duration-300 hover:shadow-lg"
+        class="group relative rounded-lg border border-slate-200/80 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md dark:bg-slate-900"
         @click="closeDropdown"
       >
-        <div class="w-full h-full overflow-hidden rounded-[16px]">
+        <div class="h-full w-full overflow-hidden rounded-lg">
           <!-- 顶部角色标识条 -->
           <div
             class="h-1.5 w-full"
@@ -165,7 +165,11 @@
                 :ref="(el) => setDropdownRef(user.id, el)"
               >
                 <button
-                  class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-opacity duration-200 md:group-hover:opacity-100 opacity-100"
+                  type="button"
+                  class="pressable flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 opacity-100 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 md:group-hover:opacity-100"
+                  :aria-label="`${user.username} 的用户操作`"
+                  :aria-expanded="activeDropdown === user.id"
+                  aria-haspopup="menu"
                   @click.stop="toggleDropdown(user.id)"
                 >
                   <i class="ri-more-2-fill text-base"></i>
@@ -216,25 +220,30 @@
         </div>
         <div
           v-if="activeDropdown === user.id"
-          class="absolute right-0 top-[55px] right-[20px] mt-1 w-44 z-[60] rounded-xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl py-1.5"
+          :data-user-menu="user.id"
+          class="absolute right-[20px] top-[55px] z-[60] mt-1 w-44 rounded-lg border border-slate-200/80 bg-white py-1.5 shadow-xl dark:border-white/10 dark:bg-slate-900"
+          role="menu"
           @click.stop
         >
-		  <button v-if="canUpdateRole"
+			  <button v-if="canUpdateRole"
             class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition text-left"
+            role="menuitem"
             @click="openRoleModal(user)"
           >
             <i class="ri-shield-star-line text-base"></i>
             修改角色
           </button>
-		  <button v-if="canUpdatePermission"
+			  <button v-if="canUpdatePermission"
             class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition text-left"
+            role="menuitem"
             @click="openProfileModal(user)"
           >
             <i class="ri-shield-keyhole-line text-base"></i>
             {{ multiStorageSync ? '设置同步源' : '设置权限' }}
           </button>
-		  <button v-if="canResetPassword"
+			  <button v-if="canResetPassword"
             class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition text-left"
+            role="menuitem"
             @click="handleResetPassword(user)"
           >
             <i class="ri-key-2-line text-base"></i>
@@ -243,8 +252,9 @@
 		  <div v-if="canDeleteUser"
             class="my-1.5 border-t border-slate-100 dark:border-white/5"
           ></div>
-		  <button v-if="canDeleteUser"
+			  <button v-if="canDeleteUser"
             class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm transition text-left"
+            role="menuitem"
             :class="
               user.id === SuperAdminID
                 ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed bg-slate-50 dark:bg-slate-800/30'
@@ -266,7 +276,9 @@
       class="flex items-center justify-center gap-1.5 mt-10"
     >
       <button
-        class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        type="button"
+        class="pressable flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+        aria-label="上一页"
         :disabled="page <= 1"
         @click="goToPage(page - 1)"
       >
@@ -280,7 +292,10 @@
         >
         <button
           v-else
-          class="w-8 h-8 flex items-center justify-center rounded-lg border text-sm font-medium transition"
+          type="button"
+          class="pressable flex h-10 min-w-10 items-center justify-center rounded-lg border px-2 text-sm font-medium"
+          :aria-label="`第 ${p} 页`"
+          :aria-current="page === p ? 'page' : undefined"
           :class="
             page === p
               ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm'
@@ -292,7 +307,9 @@
         </button>
       </template>
       <button
-        class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        type="button"
+        class="pressable flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+        aria-label="下一页"
         :disabled="page >= totalPages"
         @click="goToPage(page + 1)"
       >
@@ -417,12 +434,24 @@ function setDropdownRef(userId, el) {
   else dropdownRefs.value.delete(userId)
 }
 
-function toggleDropdown(userId) {
-  activeDropdown.value = activeDropdown.value === userId ? null : userId
+async function toggleDropdown(userId) {
+  const opening = activeDropdown.value !== userId
+  activeDropdown.value = opening ? userId : null
+  if (opening) {
+    await nextTick()
+    document.querySelector(`[data-user-menu="${userId}"] [role="menuitem"]`)?.focus()
+  }
 }
 
 function closeDropdown() {
   activeDropdown.value = null
+}
+
+function handleDropdownKeydown(event) {
+  if (event.key !== 'Escape' || !activeDropdown.value) return
+  const userId = activeDropdown.value
+  closeDropdown()
+  nextTick(() => dropdownRefs.value.get(userId)?.querySelector('button')?.focus())
 }
 
 // 优化外部点击关闭：仅点击空白区域关闭，不干扰下拉内部
@@ -833,7 +862,7 @@ const resetPassword = async (user) => {
             <div>
               <label class="field-label block mb-1.5">新密码</label>
               <div class="flex items-center gap-2">
-                <code class="flex-1 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-sm font-mono tracking-wider break-all text-slate-900 dark:text-white">
+                <code class="flex-1 break-all rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 font-mono text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-white">
                   ${newPassword}
                 </code>
                 <button
@@ -922,6 +951,7 @@ const getStorageMode = async () => {
 
 onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
+  document.addEventListener('keydown', handleDropdownKeydown)
   await Promise.all([getStorageMode(), GetBuckets()])
   fetchUsers()
 })
@@ -929,6 +959,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (searchTimer.value) clearTimeout(searchTimer.value)
   document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('keydown', handleDropdownKeydown)
   dropdownRefs.value.clear()
 })
 </script>

@@ -18,7 +18,7 @@
           <label class="field-label" for="register-password">密码</label>
           <div class="relative">
             <input id="register-password" v-model="form.password" :type="showPassword ? 'text' : 'password'" class="input-modern pr-11" maxlength="100" autocomplete="new-password" placeholder="至少 6 个字符" :disabled="loading" />
-            <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" :title="showPassword ? '隐藏密码' : '显示密码'" @click="showPassword = !showPassword">
+            <button type="button" class="pressable absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/5 dark:hover:text-white" :aria-label="showPassword ? '隐藏密码' : '显示密码'" :title="showPassword ? '隐藏密码' : '显示密码'" @click="showPassword = !showPassword">
               <i :class="showPassword ? 'ri-eye-off-line' : 'ri-eye-line'"></i>
             </button>
           </div>

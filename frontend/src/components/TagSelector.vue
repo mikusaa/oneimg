@@ -32,21 +32,24 @@
     </button>
 
     <Teleport to="body">
-      <div
-        v-if="open && isMobile"
-        class="fixed inset-0 z-[11990] bg-slate-950/50 backdrop-blur-sm"
-        @mousedown.self="close"
-      ></div>
-      <section
-        v-if="open"
-        ref="panelRef"
-        class="tag-selector-panel"
-        :class="isMobile ? 'tag-selector-panel-mobile' : 'tag-selector-panel-desktop'"
-        :style="panelStyle"
-        role="dialog"
-        aria-label="选择标签"
-        @mousedown.stop
-      >
+      <Transition name="tag-scrim">
+        <div
+          v-if="open && isMobile"
+          class="app-scrim fixed inset-0 z-[11990] bg-slate-950/50 backdrop-blur-sm"
+          @mousedown.self="close"
+        ></div>
+      </Transition>
+      <Transition name="tag-panel">
+        <section
+          v-if="open"
+          ref="panelRef"
+          class="tag-selector-panel app-material"
+          :class="isMobile ? 'tag-selector-panel-mobile' : 'tag-selector-panel-desktop'"
+          :style="panelStyle"
+          role="dialog"
+          aria-label="选择标签"
+          @mousedown.stop
+        >
         <div class="border-b border-slate-200 p-2.5 dark:border-white/10">
           <div class="relative">
             <i class="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
@@ -54,16 +57,19 @@
               ref="searchRef"
               v-model="search"
               type="search"
-              class="input-modern min-h-10 py-2 pl-9 pr-9"
+              class="input-modern min-h-10 py-2 pl-9 pr-11"
               placeholder="搜索标签"
               :maxlength="maxLength"
               @keydown.enter.prevent="handleEnter"
+              @keydown.down.prevent="focusOption(0)"
+              @keydown.up.prevent="focusOption(-1)"
             />
             <button
               v-if="search"
               type="button"
-              class="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              class="pressable absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
               title="清空搜索"
+              aria-label="清空标签搜索"
               @click="search = ''"
             >
               <i class="ri-close-line"></i>
@@ -76,12 +82,15 @@
             v-for="option in filteredOptions"
             :key="String(option.value)"
             type="button"
-            class="flex min-h-10 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition"
+            class="pressable flex min-h-10 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm"
             :class="isSelected(option.value)
               ? 'bg-slate-100 text-slate-900 dark:bg-white/10 dark:text-white'
               : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white'"
             :disabled="option.disabled"
+            data-tag-option
             @click="selectOption(option)"
+            @keydown.down.prevent="moveOptionFocus(1)"
+            @keydown.up.prevent="moveOptionFocus(-1)"
           >
             <span
               class="flex h-5 w-5 shrink-0 items-center justify-center border text-xs"
@@ -130,13 +139,15 @@
             </button>
           </div>
         </footer>
-      </section>
+        </section>
+      </Transition>
     </Teleport>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { lockBodyScroll, unlockBodyScroll } from '@/utils/scrollLock.js'
 
 const props = defineProps({
   modelValue: { type: [Array, String, Number], default: null },
@@ -161,6 +172,7 @@ const isMobile = ref(false)
 const panelStyle = ref({})
 const creating = ref(false)
 const createError = ref('')
+let ownsScrollLock = false
 
 const valuesEqual = (left, right) => String(left) === String(right)
 const normalizeValues = value => props.multiple
@@ -252,9 +264,32 @@ const handleEnter = () => {
   }
 }
 
+const optionElements = () => [...(panelRef.value?.querySelectorAll('[data-tag-option]:not(:disabled)') || [])]
+
+const focusOption = index => {
+  const options = optionElements()
+  if (options.length === 0) return
+  const target = index < 0 ? options.length - 1 : Math.min(index, options.length - 1)
+  options[target]?.focus()
+}
+
+const moveOptionFocus = direction => {
+  const options = optionElements()
+  const currentIndex = options.indexOf(document.activeElement)
+  if (currentIndex < 0) return focusOption(direction > 0 ? 0 : -1)
+  options[(currentIndex + direction + options.length) % options.length]?.focus()
+}
+
 const positionPanel = async () => {
   if (!open.value || !triggerRef.value) return
   isMobile.value = window.innerWidth < 640
+  if (isMobile.value && !ownsScrollLock) {
+    lockBodyScroll()
+    ownsScrollLock = true
+  } else if (!isMobile.value && ownsScrollLock) {
+    unlockBodyScroll()
+    ownsScrollLock = false
+  }
   if (isMobile.value) {
     panelStyle.value = {}
     return
@@ -284,9 +319,15 @@ const show = async () => {
 }
 
 const close = () => {
+  if (!open.value) return
   open.value = false
   search.value = ''
   createError.value = ''
+  if (ownsScrollLock) {
+    unlockBodyScroll()
+    ownsScrollLock = false
+  }
+  nextTick(() => triggerRef.value?.focus())
 }
 
 const toggle = () => open.value ? close() : show()
@@ -317,16 +358,18 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', positionPanel)
   window.removeEventListener('scroll', positionPanel, true)
+  if (ownsScrollLock) unlockBodyScroll()
 })
 </script>
 
 <style scoped>
 .tag-selector-trigger {
-  @apply flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm outline-none transition hover:border-slate-300 focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70 dark:border-white/10 dark:bg-slate-900 dark:hover:border-white/20 dark:focus:border-slate-500 dark:focus:ring-slate-800;
+  @apply flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm outline-none hover:border-slate-300 focus:border-primary/70 focus:ring-4 focus:ring-primary/10 dark:border-white/10 dark:bg-slate-900 dark:hover:border-white/20 dark:focus:border-primary/70 dark:focus:ring-primary/15;
+  transition: transform var(--ui-duration-fast) var(--ui-ease), border-color var(--ui-duration-fast) var(--ui-ease), box-shadow var(--ui-duration-fast) var(--ui-ease);
 }
 
 .tag-selector-panel {
-  @apply z-[12000] flex max-h-[calc(100vh-24px)] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900;
+  @apply z-[12000] flex max-h-[calc(100vh-24px)] origin-top flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900;
 }
 
 .tag-selector-panel-desktop {
@@ -335,5 +378,41 @@ onBeforeUnmount(() => {
 
 .tag-selector-panel-mobile {
   @apply fixed left-3 right-3 top-1/2 -translate-y-1/2;
+}
+
+.tag-scrim-enter-active,
+.tag-scrim-leave-active,
+.tag-panel-enter-active,
+.tag-panel-leave-active {
+  transition: opacity 160ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tag-scrim-enter-from,
+.tag-scrim-leave-to,
+.tag-panel-enter-from,
+.tag-panel-leave-to {
+  opacity: 0;
+}
+
+.tag-panel-desktop.tag-panel-enter-from,
+.tag-panel-desktop.tag-panel-leave-to {
+  transform: translateY(-4px) scale(0.985);
+}
+
+.tag-panel-mobile.tag-panel-enter-from,
+.tag-panel-mobile.tag-panel-leave-to {
+  transform: translateY(calc(-50% + 8px)) scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tag-panel-desktop.tag-panel-enter-from,
+  .tag-panel-desktop.tag-panel-leave-to {
+    transform: none;
+  }
+
+  .tag-panel-mobile.tag-panel-enter-from,
+  .tag-panel-mobile.tag-panel-leave-to {
+    transform: translateY(-50%);
+  }
 }
 </style>

@@ -17,31 +17,38 @@
           </div>
 
           <div 
-          class="imageflow-dropzone upload-area relative cursor-pointer overflow-hidden transition-all duration-300"
+          class="imageflow-dropzone upload-area relative cursor-pointer overflow-hidden"
           :class="{ 
-            'border-primary/30 bg-primary/5 dark:bg-primary/5': isDragOver,
+            'scale-[1.005] border-primary bg-primary/5 shadow-[0_0_0_4px_rgba(37,99,235,0.1)] dark:bg-primary/10': isDragOver,
             'border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900/40': !isDragOver && !isUploading,
             'border-primary/50 bg-primary/10 dark:bg-primary/10': isUploading
           }"
+          role="button"
+          tabindex="0"
+          :aria-busy="isUploading"
+          aria-label="选择或拖入图片上传"
           @drop="handleDrop"
           @dragover.prevent="handleDragOver"
           @dragenter.prevent="handleDragEnter"
           @dragleave="handleDragLeave"
           @click="triggerFileInput"
+          @keydown.enter.prevent="triggerFileInput"
+          @keydown.space.prevent="triggerFileInput"
         >
           <div v-if="!isUploading" class="upload-content py-6 text-center sm:py-7">
-            <div class="upload-icon mb-2.5 text-4xl text-slate-900 dark:text-white sm:text-[42px]">
+            <div class="upload-icon mb-2.5 text-4xl text-slate-900 transition-transform duration-200 dark:text-white sm:text-[42px]" :class="{ 'scale-110 text-primary': isDragOver }">
               <i class="ri-upload-cloud-line"></i>
             </div>
             <h3 class="mb-1.5 text-base font-semibold text-slate-900 dark:text-white">拖拽图片到此处，或点击立即上传</h3>
             <p class="mx-auto mb-3 max-w-md text-sm leading-5 text-slate-500 dark:text-slate-400">支持常见图片格式、剪贴板和 URL 上传。</p>
             <div class="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <button class="primary-button w-full px-4 py-2 sm:w-auto">
+            <button type="button" class="primary-button w-full px-4 py-2 sm:w-auto">
               <i class="ri-file-image-line"></i>
               选择图片
             </button>
             <button 
             @click.stop="uploadbyurlmodal"
+            type="button"
             class="soft-button w-full border-slate-200 px-4 py-2 sm:w-auto">
               <i class="ri-links-line"></i>
               从URL上传
@@ -58,7 +65,7 @@
             <p class="text-secondary text-sm mb-3">正在上传 {{ uploadingCount }} 个文件（{{ Math.round(uploadProgress) }}%）</p>
             <div class="progress-bar w-full max-w-md mx-auto h-2 bg-light-200 dark:bg-dark-100 rounded-full overflow-hidden">
               <div 
-                class="progress-fill h-full bg-primary transition-all duration-300 ease-out"
+                class="progress-fill h-full bg-primary transition-[width] duration-300 ease-out"
                 :style="{ width: uploadProgress + '%' }"
               ></div>
             </div>
@@ -127,7 +134,7 @@
             <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300">{{ recentImages.length }} 张</span>
           </div>
 
-      <div v-if="recentImages.length > 0" class="result-stream">
+      <TransitionGroup v-if="recentImages.length > 0" name="result-list" tag="div" class="result-stream">
         <div
           v-for="image in recentImages" 
           :key="image.id"
@@ -173,6 +180,7 @@
                     @click.stop="downloadImage(image)"
                     class="result-card-action"
                     title="下载图片"
+                    aria-label="下载图片"
                   >
                     <i class="ri-download-line text-sm"></i>
                   </button>
@@ -180,6 +188,7 @@
                     @click.stop="deleteImage(image.id)"
                     class="result-card-action border-red-200 bg-red-50 text-red-500 hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
                     title="删除图片"
+                    aria-label="删除图片"
                   >
                     <i class="ri-delete-bin-line text-sm"></i>
                   </button>
@@ -189,6 +198,9 @@
               <div class="result-links-grid result-links-grid-mobile">
             <div class="link-field cursor-pointer"
               @click.stop="copyImageLink(image, 'url')"
+              @keydown.enter.stop="copyImageLink(image, 'url')"
+              role="button"
+              tabindex="0"
               title="点击复制URL"
             >
               <i class="ri-link text-sm text-slate-400"></i>
@@ -198,6 +210,9 @@
 
             <div class="link-field cursor-pointer"
               @click.stop="copyImageLink(image, 'html')"
+              @keydown.enter.stop="copyImageLink(image, 'html')"
+              role="button"
+              tabindex="0"
               title="点击复制HTML"
             >
               <i class="ri-code-line text-sm text-slate-400"></i>
@@ -207,6 +222,9 @@
 
             <div class="link-field cursor-pointer"
               @click.stop="copyImageLink(image, 'markdown')"
+              @keydown.enter.stop="copyImageLink(image, 'markdown')"
+              role="button"
+              tabindex="0"
               title="点击复制Markdown"
             >
               <i class="ri-markdown-line text-sm text-slate-400"></i>
@@ -217,7 +235,7 @@
             </div>
           </div>
         </div>
-      </div>
+      </TransitionGroup>
 
       <!-- 无图片状态 -->
       <div v-else class="py-8 text-center">
@@ -1179,3 +1197,24 @@ onBeforeUnmount(() => {
   }
 });
 </script>
+
+<style scoped>
+.result-list-enter-active,
+.result-list-leave-active,
+.result-list-move {
+  transition: opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.result-list-enter-from,
+.result-list-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-list-enter-from,
+  .result-list-leave-to {
+    transform: none;
+  }
+}
+</style>

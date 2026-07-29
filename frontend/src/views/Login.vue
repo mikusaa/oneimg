@@ -1,66 +1,62 @@
 <template>
-    <div class="flex min-h-[calc(100vh-140px)] items-center justify-center p-4">
-        <!-- 全局加载遮罩 -->
-        <div v-if="isLoading" class="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
-            <div class="loading-card m-[15px] w-full max-w-md rounded-xl bg-white p-6 shadow-2xl dark:bg-gray-800">
-                <!-- 加载动画 -->
-                <div class="loading-spinner w-12 h-12 border-4 border-gray-200 dark:border-gray-700 border-t-primary dark:border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-                <h3 class="loading-title text-lg font-bold text-center text-gray-800 dark:text-white mb-2">{{ loadingTitle }}</h3>
-                <p class="loading-text text-center text-gray-600 dark:text-gray-300 mb-4">{{ loadingText }}</p>
-                <!-- 进度条 -->
-                <div class="loading-progress h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div class="progress-bar h-full bg-primary dark:bg-primary transition-all duration-300 ease-out" :style="{ width: loadingProgress + '%' }"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 登录卡片 -->
-        <div class="card glass-panel w-full max-w-md overflow-hidden transition-all duration-300" :class="{ 'opacity-50 pointer-events-none': isLoading }">
-            <div class="card-body p-6">
+    <div class="flex min-h-[calc(100vh-160px)] items-center justify-center px-4 py-10">
+        <div class="glass-panel w-full max-w-sm overflow-hidden">
+            <div class="p-6 sm:p-7">
 				<div v-if="loginConfig.start_register" class="mb-2 flex justify-end">
-					<router-link to="/register" class="text-sm text-primary hover:underline">注册账户</router-link>
+					<router-link to="/register" class="rounded-md px-1 py-0.5 text-sm font-medium text-primary hover:text-primary-dark">注册账户</router-link>
 				</div>
-                <div class="mb-8 text-center">
-                    <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-blue-700 text-2xl text-white shadow-lg shadow-primary/20">
+                <div class="mb-7 text-center">
+                    <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-xl text-white shadow-md shadow-primary/20">
                         <i class="ri-lock-2-line"></i>
                     </div>
-                    <h5 class="card-title text-2xl font-bold text-gray-800 dark:text-white">欢迎登录</h5>
+                    <h1 class="text-xl font-semibold text-slate-900 dark:text-white">欢迎登录</h1>
                 </div>
-                <!-- 用户名输入 -->
-                <div class="form-group mb-6">
-                    <label for="username" class="form-label block text-gray-700 dark:text-gray-300 mb-2">用户名</label>
+                <form class="space-y-5" @submit.prevent="handleLogin">
+                  <div>
+                    <label for="username" class="field-label">用户名</label>
                     <input 
+                        id="username"
                         type="text" 
                         v-model="username" 
                         class="input-modern"
                         placeholder="用户名"
+                        autocomplete="username"
+                        autofocus
                         :disabled="isLoading"
-                        @keyup.enter="handleLogin"
                     />
-                </div>
-                <!-- 密码输入 -->
-                <div class="form-group mb-8">
-                    <label for="password" class="form-label block text-gray-700 dark:text-gray-300 mb-2">密码</label>
+                  </div>
+                  <div>
+                    <label for="password" class="field-label">密码</label>
+                    <div class="relative">
                     <input 
-                        type="password" 
+                        id="password"
+                        :type="showPassword ? 'text' : 'password'"
                         v-model="password" 
-                        class="input-modern"
+                        class="input-modern pr-12"
                         placeholder="密码"
+                        autocomplete="current-password"
                         :disabled="isLoading"
-                        @keyup.enter="handleLogin"
                     />
-                </div>
-                <!-- 登录按钮 -->
-                <div class="form-group">
+                    <button
+                      type="button"
+                      class="pressable absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/5 dark:hover:text-white"
+                      :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+                      :title="showPassword ? '隐藏密码' : '显示密码'"
+                      @click="showPassword = !showPassword"
+                    >
+                      <i :class="showPassword ? 'ri-eye-off-line' : 'ri-eye-line'"></i>
+                    </button>
+                    </div>
+                  </div>
                     <button 
-                        @click="handleLogin" 
-                        class="login-btn primary-button w-full py-3 text-base"
-                        :class="{ 'opacity-70 cursor-not-allowed': isLoading }"
+                        type="submit"
+                        class="primary-button w-full py-3 text-base"
                         :disabled="isLoading"
                     >
-                        登录
+                        <i v-if="isLoading" class="ri-loader-4-line animate-spin" aria-hidden="true"></i>
+                        {{ isLoading ? '正在登录' : '登录' }}
                     </button>
-                </div>
+                </form>
             </div>
         </div>
 
@@ -75,9 +71,7 @@ import message from '@/utils/message.js';
 const username = ref('');
 const password = ref('');
 const isLoading = ref(false);
-const loadingTitle = ref('');
-const loadingText = ref('');
-const loadingProgress = ref(0);
+const showPassword = ref(false);
 
 // 登录配置
 const loginConfig = reactive({
@@ -85,20 +79,6 @@ const loginConfig = reactive({
 })
 
 // 加载状态管理
-const setLoadingState = (title, text, progress = 0) => {
-    isLoading.value = true;
-    loadingTitle.value = title;
-    loadingText.value = text;
-    loadingProgress.value = progress;
-};
-
-const clearLoadingState = () => {
-    isLoading.value = false;
-    loadingTitle.value = '';
-    loadingText.value = '';
-    loadingProgress.value = 0;
-};
-
 // 登录处理
 const handleLogin = () => {
     if (isLoading.value) return;
@@ -113,7 +93,7 @@ const handleLogin = () => {
 
 // 提交登录请求
 const putLogin = async () => {
-    setLoadingState('登录中', '正在验证用户信息...', 90);
+    isLoading.value = true;
     
     try {
         // 组装登录参数
@@ -142,14 +122,13 @@ const putLogin = async () => {
             };
             localStorage.setItem('userInfo', JSON.stringify(userInfo));
 
-            clearLoadingState();
             window.location.replace('/');
         } else {
-            clearLoadingState();
+            isLoading.value = false;
             message.error('登录失败: ' + (result.message || '未知错误'));
         }
     } catch (error) {
-        clearLoadingState();
+        isLoading.value = false;
         message.error('登录请求失败，请检查网络连接: ' + error.message);
     }
 };

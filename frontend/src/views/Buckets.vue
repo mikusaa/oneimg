@@ -45,15 +45,15 @@
         </h3>
 
         <div class="grid grid-cols-3 gap-3 mb-5">
-          <div class="rounded-2xl border border-slate-200/70 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900">
+          <div class="rounded-lg border border-slate-200/70 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900">
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">总容量</p>
             <h4 class="text-lg font-bold text-gray-800 dark:text-white">{{ storage.total_readable || '--' }}</h4>
           </div>
-          <div class="rounded-2xl border border-slate-200/70 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900">
+          <div class="rounded-lg border border-slate-200/70 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900">
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">已使用</p>
             <h4 class="text-lg font-bold text-gray-800 dark:text-white">{{ storage.usage_readable }}</h4>
           </div>
-          <div class="rounded-2xl border border-slate-200/70 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900">
+          <div class="rounded-lg border border-slate-200/70 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-900">
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">剩余容量</p>
             <h4 class="text-lg font-bold text-gray-800 dark:text-white">{{ storage.usage_free || '--' }}</h4>
           </div>
@@ -68,7 +68,7 @@
           </div>
           <div class="w-full h-2 bg-gray-200 dark:bg-dark-300 rounded-full overflow-hidden">
             <div
-              class="h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-500"
+              class="h-full rounded-full bg-blue-500 transition-[width] duration-500 dark:bg-blue-400"
               :style="{ width: `${storage.usage_percent}%` }"
             ></div>
           </div>

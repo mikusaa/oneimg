@@ -6,11 +6,11 @@
             </div>
             <div class="flex flex-wrap items-center gap-3">
                 <div class="stat-tile min-w-[160px] p-4">
-                    <p class="text-xs uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">总图片</p>
+                    <p class="text-xs font-medium text-slate-500 dark:text-slate-400">总图片</p>
                     <p class="mt-2 text-base font-semibold text-slate-900 dark:text-white">{{ formatNumber(stats.total_images) }}</p>
                 </div>
                 <div class="stat-tile min-w-[160px] p-4">
-                    <p class="text-xs uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">本月上传</p>
+                    <p class="text-xs font-medium text-slate-500 dark:text-slate-400">本月上传</p>
                     <p class="mt-2 text-base font-semibold text-slate-900 dark:text-white">{{ formatNumber(stats.month_uploads) }}</p>
                 </div>
             </div>
@@ -25,57 +25,48 @@
             </div>
             
             <!-- 统计卡片 -->
-            <div v-else class="stats-grid grid grid-cols-1 lg:grid-cols-3 gap-4 mb-10">
+            <div v-else class="stats-grid grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <!-- 总图片数 -->
-                <div class="stat-card rounded-[28px] border border-white/40 bg-white/85 p-6 shadow-md backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-white/5 flex flex-col items-center text-center">
-                    <div class="stat-icon text-4xl mb-4">
+                <div class="stat-card rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-white/10 dark:bg-slate-950 flex items-center gap-4">
+                    <div class="stat-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-2xl text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
                         <i class="ri-image-circle-line"></i>
                     </div>
                     <div class="stat-content">
-                        <h3 class="stat-number text-2xl font-bold mb-1">{{ formatNumber(stats.total_images) }}</h3>
-                        <p class="stat-label text-gray-600 dark:text-gray-400">总图片数</p>
+                        <h3 class="stat-number text-xl font-semibold">{{ formatNumber(stats.total_images) }}</h3>
+                        <p class="stat-label mt-1 text-sm text-gray-600 dark:text-gray-400">总图片数</p>
                     </div>
                 </div>
                 
                 <!-- 总存储空间 -->
-                <div class="stat-card rounded-[28px] border border-white/40 bg-white/85 p-6 shadow-md backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-white/5 flex flex-col items-center text-center">
-                    <div class="stat-icon text-4xl mb-4">
+                <div class="stat-card rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-white/10 dark:bg-slate-950 flex items-center gap-4">
+                    <div class="stat-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-2xl text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">
                         <i class="ri-folder-3-line"></i>
                     </div>
                     <div class="stat-content">
-                        <h3 class="stat-number text-2xl font-bold mb-1">{{ formatFileSize(stats.total_size) }}</h3>
-                        <p class="stat-label text-gray-600 dark:text-gray-400">总存储空间</p>
+                        <h3 class="stat-number text-xl font-semibold">{{ formatFileSize(stats.total_size) }}</h3>
+                        <p class="stat-label mt-1 text-sm text-gray-600 dark:text-gray-400">总存储空间</p>
                     </div>
                 </div>
                 
                 <!-- 本月上传 -->
-                <div class="stat-card rounded-[28px] border border-white/40 bg-white/85 p-6 shadow-md backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-white/5 flex flex-col items-center text-center">
-                    <div class="stat-icon text-4xl mb-4">
+                <div class="stat-card rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-white/10 dark:bg-slate-950 flex items-center gap-4">
+                    <div class="stat-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-2xl text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">
                         <i class="ri-calendar-line"></i>
                     </div>
                     <div class="stat-content">
-                        <h3 class="stat-number text-2xl font-bold mb-1">{{ formatNumber(stats.month_uploads) }}</h3>
-                        <p class="stat-label text-gray-600 dark:text-gray-400">本月上传</p>
+                        <h3 class="stat-number text-xl font-semibold">{{ formatNumber(stats.month_uploads) }}</h3>
+                        <p class="stat-label mt-1 text-sm text-gray-600 dark:text-gray-400">本月上传</p>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- 通知消息 - 固定在右下角 -->
-        <div 
-            v-if="notification.show" 
-            class="notification fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300 transform translate-y-0 opacity-100"
-            :class="[
-                notification.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white',
-            ]"
-        >
-            {{ notification.message }}
-        </div>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
+import message from '@/utils/message.js'
 
 // 响应式数据
 const loading = ref(false)
@@ -87,19 +78,6 @@ const stats = ref({
     average_size: 0,
     max_size: 0,
     upload_trend: []
-})
-
-// 通知消息
-const notification = ref({
-    show: false,
-    message: '',
-    type: 'success'
-})
-
-// 计算上传趋势的最大计数（优化性能）
-const maxTrendCount = computed(() => {
-    if (!stats.value.upload_trend.length) return 0
-    return Math.max(...stats.value.upload_trend.map(day => day.count))
 })
 
 // 加载统计数据
@@ -118,7 +96,7 @@ const loadStats = async () => {
             if (response.status === 401) {
                 localStorage.removeItem('authToken')
                 window.location.href = '/login'
-                showNotification('登录已过期，请重新登录', 'error')
+                message.error('登录已过期，请重新登录')
                 return
             }
             throw new Error('加载统计数据失败')
@@ -128,7 +106,7 @@ const loadStats = async () => {
         stats.value = { ...stats.value, ...(result.data || {}) }
     } catch (error) {
         console.error('加载统计数据错误:', error)
-        showNotification('加载统计数据失败: ' + error.message, 'error')
+        message.error('加载统计数据失败: ' + error.message)
     } finally {
         loading.value = false
     }
@@ -147,12 +125,6 @@ const formatFileSize = (bytes) => {
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-/** 显示通知 */
-const showNotification = (message, type = 'success') => {
-    notification.value = { show: true, message, type }
-    setTimeout(() => notification.value.show = false, 3000)
 }
 
 // 生命周期

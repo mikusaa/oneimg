@@ -36,6 +36,7 @@
             <button
                 v-for="tab in availableSettingTabs"
                 :key="tab.key"
+                :ref="element => setTabRef(tab.key, element)"
                 type="button"
                 class="settings-tab"
                 :class="{ 'settings-tab-active': activeSettingTab === tab.key }"
@@ -53,6 +54,7 @@
                     <h2 class="text-lg font-semibold text-slate-900 dark:text-white sm:text-xl">
                         {{ activeSettingTabLabel }}
                     </h2>
+                    <span class="sr-only" aria-live="polite">{{ latestSaveMessage }}</span>
                 </header>
 
                 <div class="divide-y divide-slate-200/80 dark:divide-white/10">
@@ -67,6 +69,7 @@
                                     <select
                                         id="default_storage"
                                         v-model="systemSettings.default_storage"
+                                        :data-save-state="saveStates.default_storage"
                                         class="input-modern"
                                         @change="handleSelectChange('default_storage', systemSettings.default_storage)"
                                     >
@@ -89,6 +92,7 @@
                                     <label class="settings-switch" title="多存储后台同步">
                                         <input
                                             v-model="systemSettings.multi_storage_sync"
+                                            :data-save-state="saveStates.multi_storage_sync"
                                             type="checkbox"
                                             class="sr-only peer"
                                             @change="handleSwitchChange('multi_storage_sync', systemSettings.multi_storage_sync)"
@@ -110,6 +114,7 @@
                                     <input
                                         id="public_image_domain"
                                         v-model="systemSettings.public_image_domain"
+                                        :data-save-state="saveStates.public_image_domain"
                                         type="text"
                                         class="input-modern"
                                         :class="{ 'cursor-not-allowed opacity-60': publicImageDomainInputDisabled }"
@@ -139,6 +144,7 @@
                                     <input
                                         id="default_path"
                                         v-model="systemSettings.default_path"
+                                        :data-save-state="saveStates.default_path"
                                         type="text"
                                         class="input-modern"
                                         placeholder="例如 /uploads/{year}/{month}/{day}"
@@ -154,6 +160,7 @@
                                     <input
                                         id="file_name"
                                         v-model="systemSettings.file_name"
+                                        :data-save-state="saveStates.file_name"
                                         type="text"
                                         class="input-modern"
                                         :class="{ 'cursor-not-allowed opacity-60': systemSettings.save_original_name }"
@@ -175,6 +182,7 @@
                                 <label class="settings-switch" title="保留原文件名">
                                     <input
                                         v-model="systemSettings.save_original_name"
+                                        :data-save-state="saveStates.save_original_name"
                                         type="checkbox"
                                         class="sr-only peer"
                                         @change="handleSwitchChange('save_original_name', systemSettings.save_original_name)"
@@ -196,6 +204,7 @@
                                         <input
                                             id="max_file_size"
                                             v-model.number="systemSettings.max_file_size"
+                                            :data-save-state="saveStates.max_file_size"
                                             type="number"
                                             min="1"
                                             class="input-modern pr-16"
@@ -211,6 +220,7 @@
                                     <textarea
                                         id="allowed_types"
                                         v-model="systemSettings.allowed_types"
+                                        :data-save-state="saveStates.allowed_types"
                                         class="input-modern min-h-[88px] leading-6"
                                         rows="2"
                                         placeholder="image/jpeg,image/png,image/webp"
@@ -237,6 +247,7 @@
                                     <label class="settings-switch" title="保存原图">
                                         <input
                                             v-model="systemSettings.original_image"
+                                            :data-save-state="saveStates.original_image"
                                             type="checkbox"
                                             class="sr-only peer"
                                             @change="handleSwitchChange('original_image', systemSettings.original_image)"
@@ -257,6 +268,7 @@
                                     >
                                         <input
                                             v-model="systemSettings.save_webp"
+                                            :data-save-state="saveStates.save_webp"
                                             type="checkbox"
                                             class="sr-only peer"
                                             :disabled="systemSettings.original_image"
@@ -278,6 +290,7 @@
                                     <input
                                         id="main_image_quality"
                                         v-model.number="systemSettings.main_image_quality"
+                                        :data-save-state="saveStates.main_image_quality"
                                         type="number"
                                         min="0"
                                         max="100"
@@ -294,6 +307,7 @@
                                     <input
                                         id="skip_compress_formats"
                                         v-model="systemSettings.skip_compress_formats"
+                                        :data-save-state="saveStates.skip_compress_formats"
                                         type="text"
                                         class="input-modern"
                                         :disabled="systemSettings.original_image"
@@ -314,6 +328,7 @@
                                 <label class="settings-switch" title="生成缩略图">
                                     <input
                                         v-model="systemSettings.thumbnail"
+                                        :data-save-state="saveStates.thumbnail"
                                         type="checkbox"
                                         class="sr-only peer"
                                         @change="handleSwitchChange('thumbnail', systemSettings.thumbnail)"
@@ -340,6 +355,7 @@
                                     <label class="settings-switch" title="开放用户注册">
                                         <input
                                             v-model="systemSettings.start_register"
+                                            :data-save-state="saveStates.start_register"
                                             type="checkbox"
                                             class="sr-only peer"
                                             @change="handleSwitchChange('start_register', systemSettings.start_register)"
@@ -367,6 +383,7 @@
                                 >
                                     <input
                                         v-model="systemSettings.referer_white_enable"
+                                        :data-save-state="saveStates.referer_white_enable"
                                         type="checkbox"
                                         class="sr-only peer"
                                         :disabled="hasPublicImageDomain"
@@ -382,6 +399,7 @@
                                 <textarea
                                     id="referer_white_list"
                                     v-model="systemSettings.referer_white_list"
+                                    :data-save-state="saveStates.referer_white_list"
                                     class="input-modern min-h-[112px] leading-6"
                                     :disabled="refererListDisabled"
                                     placeholder="example.com,images.example.com"
@@ -403,6 +421,7 @@
                                 <label class="settings-switch" title="上传 API">
                                     <input
                                         v-model="systemSettings.start_api"
+                                        :data-save-state="saveStates.start_api"
                                         type="checkbox"
                                         class="sr-only peer"
                                         @change="handleSwitchChange('start_api', systemSettings.start_api)"
@@ -418,6 +437,7 @@
                                     <input
                                         id="api_token"
                                         v-model="systemSettings.api_token"
+                                        :data-save-state="saveStates.api_token"
                                         type="text"
                                         class="input-modern min-w-0"
                                         :placeholder="systemSettings.api_token_configured ? '已配置，输入新 Token 可替换' : '请输入或生成 API Token'"
@@ -446,6 +466,7 @@
                                     <input
                                         id="seo_title"
                                         v-model="systemSettings.seo_title"
+                                        :data-save-state="saveStates.seo_title"
                                         type="text"
                                         class="input-modern"
                                         @blur="handleFieldBlur('seo_title', systemSettings.seo_title)"
@@ -457,6 +478,7 @@
                                     <input
                                         id="seo_icon"
                                         v-model="systemSettings.seo_icon"
+                                        :data-save-state="saveStates.seo_icon"
                                         type="text"
                                         class="input-modern"
                                         placeholder="https://example.com/favicon.ico"
@@ -469,6 +491,7 @@
                                     <textarea
                                         id="seo_description"
                                         v-model="systemSettings.seo_description"
+                                        :data-save-state="saveStates.seo_description"
                                         class="input-modern min-h-[96px] leading-6"
                                         rows="3"
                                         @blur="handleFieldBlur('seo_description', systemSettings.seo_description)"
@@ -480,6 +503,7 @@
                                     <textarea
                                         id="seo_keywords"
                                         v-model="systemSettings.seo_keywords"
+                                        :data-save-state="saveStates.seo_keywords"
                                         class="input-modern min-h-[88px] leading-6"
                                         rows="2"
                                         @blur="handleFieldBlur('seo_keywords', systemSettings.seo_keywords)"
@@ -498,6 +522,7 @@
                                     <input
                                         id="seo_icp"
                                         v-model="systemSettings.seo_icp"
+                                        :data-save-state="saveStates.seo_icp"
                                         type="text"
                                         class="input-modern"
                                         @blur="handleFieldBlur('seo_icp', systemSettings.seo_icp)"
@@ -510,6 +535,7 @@
                                     <input
                                         id="public_security"
                                         v-model="systemSettings.public_security"
+                                        :data-save-state="saveStates.public_security"
                                         type="text"
                                         class="input-modern"
                                         @blur="handleFieldBlur('public_security', systemSettings.public_security)"
@@ -526,7 +552,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import message from '@/utils/message.js'
 
@@ -578,8 +604,26 @@ const SETTING_TABS = [
 const settingPermissions = ref([])
 const activeSettingTab = ref('')
 const updateSetting = reactive({})
+const saveStates = reactive({})
 const saveTimers = new Map()
 const saveQueues = new Map()
+const saveStateTimers = new Map()
+const latestSaveMessage = ref('')
+const tabElements = new Map()
+
+const setTabRef = (key, element) => {
+    if (element) tabElements.set(key, element)
+    else tabElements.delete(key)
+}
+
+const revealActiveTab = async (key) => {
+    await nextTick()
+    tabElements.get(key)?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'nearest',
+        inline: 'center',
+    })
+}
 
 const hasSettingPermission = (permission) => settingPermissions.value.includes(permission)
 const availableSettingTabs = computed(() => SETTING_TABS.filter(tab => tab.permissions.some(hasSettingPermission)))
@@ -659,6 +703,10 @@ const valuesMatch = (left, right) => String(left) === String(right)
 
 const persistSetting = async (key, value) => {
     const previousValue = updateSetting[key]
+    saveStates[key] = 'saving'
+    latestSaveMessage.value = '正在保存设置'
+    const existingStateTimer = saveStateTimers.get(key)
+    if (existingStateTimer) clearTimeout(existingStateTimer)
     try {
         const response = await fetch('/api/settings/update', {
             method: 'POST',
@@ -677,11 +725,18 @@ const persistSetting = async (key, value) => {
         } else {
             updateSetting[key] = value
         }
-        message.success('更新成功')
+        saveStates[key] = 'success'
+        latestSaveMessage.value = '设置已保存'
+        saveStateTimers.set(key, setTimeout(() => {
+            if (saveStates[key] === 'success') saveStates[key] = ''
+            saveStateTimers.delete(key)
+        }, 1600))
     } catch (error) {
         if (valuesMatch(systemSettings[key], value) && Object.prototype.hasOwnProperty.call(updateSetting, key)) {
             systemSettings[key] = previousValue
         }
+        saveStates[key] = 'error'
+        latestSaveMessage.value = '设置保存失败'
         console.error('保存失败:', error)
         message.error(`更新失败：${error.message || '网络异常'}`)
     }
@@ -832,6 +887,7 @@ const syncActiveTab = () => {
         : availableSettingTabs.value[0]?.key || ''
 
     activeSettingTab.value = nextTab
+    if (nextTab) void revealActiveTab(nextTab)
     if (nextTab && requestedTab !== nextTab) {
         void router.replace({ query: { ...route.query, tab: nextTab } })
     }
@@ -840,6 +896,7 @@ const syncActiveTab = () => {
 const selectSettingTab = (tab) => {
     if (!availableSettingTabs.value.some(item => item.key === tab)) return
     activeSettingTab.value = tab
+    void revealActiveTab(tab)
     if (route.query.tab !== tab) {
         void router.replace({ query: { ...route.query, tab } })
     }
@@ -875,5 +932,10 @@ watch(() => route.query.tab, syncActiveTab)
 onMounted(() => {
     getSettings()
     getBucketsList()
+})
+
+onBeforeUnmount(() => {
+    saveTimers.forEach(timer => clearTimeout(timer))
+    saveStateTimers.forEach(timer => clearTimeout(timer))
 })
 </script>

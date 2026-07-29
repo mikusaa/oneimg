@@ -21,25 +21,33 @@
       <div v-for="tag in tags" :key="tag.id" class="section-card flex items-center justify-between gap-3 p-4">
         <div class="min-w-0 flex items-center gap-2"><i class="ri-bookmark-line text-primary"></i><span class="truncate font-medium">{{ tag.name }}</span></div>
         <div class="flex shrink-0 gap-1">
-          <button v-if="canUpdate" class="icon-button" title="编辑标签" @click="startEdit(tag)"><i class="ri-edit-line"></i></button>
-          <button v-if="canDelete" class="icon-button text-red-500" title="删除标签" @click="deleteTag(tag)"><i class="ri-delete-bin-line"></i></button>
+          <button v-if="canUpdate" class="icon-button" title="编辑标签" aria-label="编辑标签" @click="startEdit(tag)"><i class="ri-edit-line"></i></button>
+          <button v-if="canDelete" class="icon-button text-red-500" title="删除标签" aria-label="删除标签" @click="deleteTag(tag)"><i class="ri-delete-bin-line"></i></button>
         </div>
       </div>
     </div>
 
-    <div v-if="editingTag" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 px-4" @click.self="editingTag = null">
-      <form class="section-card w-full max-w-md p-6" @submit.prevent="updateTag">
-        <div class="mb-5 flex items-center justify-between"><h2 class="text-lg font-semibold">编辑标签</h2><button type="button" class="icon-button" title="关闭" @click="editingTag = null"><i class="ri-close-line"></i></button></div>
-        <input v-model="editName" class="input-modern w-full" maxlength="10" autofocus />
-        <div class="mt-5 flex justify-end gap-2"><button type="button" class="soft-button" @click="editingTag = null">取消</button><button class="primary-button" :disabled="saving">保存</button></div>
+    <AppDialog :model-value="!!editingTag" title="编辑标签" width-class="max-w-md" @update:model-value="value => { if (!value) editingTag = null }">
+      <form id="tag-edit-form" class="space-y-4" @submit.prevent="updateTag">
+        <label class="field-label" for="tag-edit-name">标签名称</label>
+        <input id="tag-edit-name" v-model="editName" class="input-modern w-full" maxlength="10" autofocus />
       </form>
-    </div>
+      <template #footer>
+        <button type="button" class="soft-button" @click="editingTag = null">取消</button>
+        <button type="submit" form="tag-edit-form" class="primary-button" :disabled="saving">
+          <i v-if="saving" class="ri-loader-4-line animate-spin"></i>
+          保存
+        </button>
+      </template>
+    </AppDialog>
   </div>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import AppDialog from '@/components/AppDialog.vue'
 import message from '@/utils/message.js'
+import PopupModal from '@/utils/popupModal.js'
 import { hasPermission } from '@/utils/permissions.js'
 
 const tags = ref([])
@@ -94,14 +102,28 @@ const updateTag = async () => {
 }
 
 const deleteTag = async tag => {
-  if (!window.confirm(`确认删除标签“${tag.name}”吗？`)) return
-  try {
-    const response = await fetch(`/api/tags/${tag.id}`, { method: 'DELETE' })
-    const result = await response.json()
-    if (!response.ok || result.code !== 200) throw new Error(result.message || '删除标签失败')
-    message.success('标签已删除')
-    await loadTags()
-  } catch (error) { message.error(error.message || '删除标签失败') }
+  const modal = new PopupModal({
+    title: '删除标签',
+    content: '<p class="text-sm text-slate-700 dark:text-slate-200">确认删除这个标签吗？此操作无法撤销。</p>',
+    buttons: [
+      { text: '取消', type: 'default', callback: current => current.close() },
+      {
+        text: '删除',
+        type: 'danger',
+        callback: async current => {
+          current.close()
+          try {
+            const response = await fetch(`/api/tags/${tag.id}`, { method: 'DELETE' })
+            const result = await response.json()
+            if (!response.ok || result.code !== 200) throw new Error(result.message || '删除标签失败')
+            message.success('标签已删除')
+            await loadTags()
+          } catch (error) { message.error(error.message || '删除标签失败') }
+        }
+      }
+    ]
+  })
+  modal.open()
 }
 
 onMounted(loadTags)

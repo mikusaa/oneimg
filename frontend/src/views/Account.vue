@@ -10,7 +10,7 @@
         <div class="pb-16">
             <div class="mx-auto grid max-w-2xl grid-cols-1 gap-6">
 
-                <div class="section-card mx-auto overflow-hidden w-full m-4">
+                <div class="section-card mx-auto w-full overflow-hidden">
                     <div class="panel-content p-6 md:p-8">
                         <h2 class="panel-title flex items-center text-xl font-semibold mb-8">
                             <span class="panel-icon mr-2 text-2xl">
@@ -33,7 +33,7 @@
                                     id="newUsername"
                                     v-model="accountForm.newUsername"
                                     type="text" 
-                                    class="setting-input w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary focus:border-primary dark:focus:ring-primary/70 dark:focus:border-primary/70 transition-colors outline-none"
+                                    class="input-modern"
                                     placeholder="留空则不修改用户名"
                                     minlength="3"
                                     maxlength="64"
@@ -52,7 +52,7 @@
                                     id="currentPassword"
                                     v-model="accountForm.currentPassword"
                                     type="password" 
-                                    class="setting-input w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary focus:border-primary dark:focus:ring-primary/70 dark:focus:border-primary/70 transition-colors outline-none"
+                                    class="input-modern"
                                     placeholder="请输入当前密码以确认修改"
                                     required
                                 />
@@ -70,7 +70,7 @@
                                     id="newPassword"
                                     v-model="accountForm.newPassword"
                                     type="password" 
-                                    class="setting-input w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary focus:border-primary dark:focus:ring-primary/70 dark:focus:border-primary/70 transition-colors outline-none"
+                                    class="input-modern"
                                     placeholder="留空则不修改密码（至少6位）"
                                     minlength="6"
                                 />
@@ -88,7 +88,7 @@
                                     id="confirmPassword"
                                     v-model="accountForm.confirmPassword"
                                     type="password" 
-                                    class="setting-input w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary focus:border-primary dark:focus:ring-primary/70 dark:focus:border-primary/70 transition-colors outline-none"
+                                    class="input-modern"
                                     placeholder="请再次输入新密码"
                                 />
                             </div>
@@ -98,7 +98,7 @@
                                 <button 
                                     type="submit" 
                                     :disabled="isUpdatingAccount"
-                                    class="setting-btn accent w-full py-3 px-6 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 focus:ring-2 focus:ring-primary/50 focus:outline-none"
+                                    class="primary-button w-full px-6 py-3"
                                 >
                                     <span v-if="isUpdatingAccount" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                     <span>保存修改</span>
