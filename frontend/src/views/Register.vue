@@ -34,30 +34,19 @@
       </form>
     </div>
 
-    <div v-if="showPow" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 px-4" @click.self="closePow">
-      <div class="section-card w-full max-w-md p-6">
-        <div class="mb-5 flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-slate-900 dark:text-white">安全验证</h2>
-          <button type="button" class="icon-button" title="关闭" @click="closePow"><i class="ri-close-line"></i></button>
-        </div>
-        <div id="register-pow-container" class="flex min-h-24 items-center justify-center"></div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import message from '@/utils/message.js'
 
 const router = useRouter()
 const form = reactive({ username: '', password: '', confirmPassword: '' })
-const config = reactive({ start_register: false, pow_verify: false })
+const config = reactive({ start_register: false })
 const loading = ref(false)
 const showPassword = ref(false)
-const showPow = ref(false)
-let powWidget = null
 
 const validate = () => {
   if (form.username.length < 3 || form.username.length > 50) return '用户名长度必须在 3-50 个字符之间'
@@ -66,13 +55,13 @@ const validate = () => {
   return ''
 }
 
-const submitRegistration = async (powToken = '') => {
+const submitRegistration = async () => {
   loading.value = true
   try {
     const response = await fetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: form.username, password: form.password, powToken })
+      body: JSON.stringify({ username: form.username, password: form.password })
     })
     const result = await response.json()
     if (!response.ok || result.code !== 200) throw new Error(result.message || '注册失败')
@@ -85,47 +74,10 @@ const submitRegistration = async (powToken = '') => {
   }
 }
 
-const createPowWidget = () => {
-  const container = document.getElementById('register-pow-container')
-  if (!container) return
-  container.innerHTML = ''
-  powWidget = document.createElement('pow-widget')
-  powWidget.setAttribute('data-pow-api-endpoint', 'https://cha.eta.im/')
-  powWidget.addEventListener('solve', event => {
-    closePow()
-    submitRegistration(event.detail.token)
-  })
-  powWidget.addEventListener('error', () => {
-    message.error('安全验证失败，请重试')
-    closePow()
-  })
-  container.appendChild(powWidget)
-}
-
-const openPow = () => {
-  showPow.value = true
-  requestAnimationFrame(createPowWidget)
-}
-
-const closePow = () => {
-  powWidget?.remove()
-  powWidget = null
-  showPow.value = false
-}
-
 const handleSubmit = () => {
   const error = validate()
   if (error) return message.error(error)
-  if (config.pow_verify) openPow()
-  else submitRegistration()
-}
-
-const loadPowScript = () => {
-  if (document.querySelector('script[src="https://cha.eta.im/static/js/pow.min.js"]')) return
-  const script = document.createElement('script')
-  script.src = 'https://cha.eta.im/static/js/pow.min.js'
-  script.onerror = () => message.error('安全验证组件加载失败')
-  document.head.appendChild(script)
+  submitRegistration()
 }
 
 onMounted(async () => {
@@ -138,12 +90,9 @@ onMounted(async () => {
       message.warning('暂未开放注册')
       return router.replace('/login')
     }
-    if (config.pow_verify) loadPowScript()
   } catch (error) {
     message.error(error.message || '读取注册设置失败')
     router.replace('/login')
   }
 })
-
-onBeforeUnmount(closePow)
 </script>

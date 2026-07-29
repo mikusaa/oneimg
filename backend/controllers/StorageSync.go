@@ -30,10 +30,9 @@ type ImageStorageStatusResponse struct {
 }
 
 // resolveUploadBuckets returns the durable local source and the remote targets
-// assigned to the current user. In multi-storage mode every persisted user,
-// including administrators, has an explicit list; guests retain the system
-// default because they have no user record.
-func resolveUploadBuckets(c *gin.Context, setting models.Settings) (models.Buckets, []models.Buckets, error) {
+// assigned to the current user. In multi-storage mode every user, including
+// administrators, has an explicit bucket list.
+func resolveUploadBuckets(c *gin.Context) (models.Buckets, []models.Buckets, error) {
 	db := database.GetDB()
 	if db == nil || db.DB == nil {
 		return models.Buckets{}, nil, errors.New("数据库未初始化")
@@ -57,17 +56,14 @@ func resolveUploadBuckets(c *gin.Context, setting models.Settings) (models.Bucke
 		return models.Buckets{}, nil, fmt.Errorf("本机存储源不存在")
 	}
 
-	role := c.GetInt("user_role")
 	permission := models.Permission{Buckets: []int{}}
-	if role != models.RoleGuest {
-		var user models.User
-		err := db.DB.Select("id", "permission").First(&user, c.GetInt("user_id")).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return models.Buckets{}, nil, err
-		}
-		if err == nil {
-			permission = user.Permission
-		}
+	var user models.User
+	err := db.DB.Select("id", "permission").First(&user, c.GetInt("user_id")).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return models.Buckets{}, nil, err
+	}
+	if err == nil {
+		permission = user.Permission
 	}
 
 	targets := make([]models.Buckets, 0, len(allBuckets))
@@ -77,9 +73,6 @@ func resolveUploadBuckets(c *gin.Context, setting models.Settings) (models.Bucke
 		}
 
 		allowed := models.IntSliceContains(permission.Buckets, bucket.Id)
-		if role == models.RoleGuest {
-			allowed = bucket.Id == setting.DefaultStorage
-		}
 		if allowed {
 			targets = append(targets, bucket)
 		}
@@ -102,7 +95,7 @@ func resolveSingleStorageUploadBuckets(c *gin.Context, setting models.Settings) 
 
 	role := c.GetInt("user_role")
 	permission := models.Permission{Buckets: []int{}}
-	if role != models.RoleAdmin && role != models.RoleGuest {
+	if role != models.RoleAdmin {
 		var user models.User
 		err := db.DB.Select("id", "permission").First(&user, c.GetInt("user_id")).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -125,9 +118,6 @@ func resolveSingleStorageUploadBuckets(c *gin.Context, setting models.Settings) 
 			if role != models.RoleAdmin && !models.IntSliceContains(permission.Buckets, bucket.Id) {
 				continue
 			}
-		}
-		if role == models.RoleGuest && bucket.Id != setting.DefaultStorage {
-			continue
 		}
 		result = append(result, bucket)
 	}

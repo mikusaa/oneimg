@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { hasAnyPermission, ROLE_ADMIN, ROLE_GUEST } from '@/utils/permissions.js'
+import { hasAnyPermission, ROLE_ADMIN } from '@/utils/permissions.js'
 
 let seoStting = {
   seo_title: '初春图床',
@@ -90,8 +90,7 @@ const routes = [
     name: 'Account',
     component: () => import('@/views/Account.vue'),
     meta: { 
-      title: '账户设置',
-      denyGuest: true
+      title: '账户设置'
     }
   },
   {
@@ -221,7 +220,6 @@ router.beforeEach(async (to, from, next) => {
     userInfo.permission = result.data.permission || { codes: [], buckets: [] };
     localStorage.setItem('userInfo', JSON.stringify(userInfo));
     window.refreshNavItems && window.refreshNavItems();
-    if (to.meta.denyGuest && Number(currentRole) === ROLE_GUEST) return next('/');
     if (Array.isArray(to.meta.permissions)) {
       if (Number(currentRole) !== ROLE_ADMIN || !hasAnyPermission(to.meta.permissions, userInfo)) return next('/');
     }

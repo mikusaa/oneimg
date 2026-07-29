@@ -22,7 +22,6 @@ type User struct {
 const (
 	SuperAdminID = 1
 	RoleAdmin    = 1
-	RoleGuest    = 2
 	RoleUser     = 3
 )
 

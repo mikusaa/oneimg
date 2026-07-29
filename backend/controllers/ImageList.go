@@ -28,8 +28,6 @@ type ImageWithTags struct {
 	Storage          string                       `json:"storage" gorm:"column:storage"`
 	BucketId         int                          `json:"bucket_id" gorm:"column:bucket_id"`
 	UserId           int                          `json:"user_id" gorm:"column:user_id"`
-	Md5              string                       `json:"md5" gorm:"column:md5"`
-	Uuid             string                       `json:"uuid" gorm:"column:uuid"`
 	CreatedAt        time.Time                    `json:"created_at" gorm:"column:created_at"`
 	UploaderRole     int                          `json:"uploader_role" gorm:"-"`
 	Tags             []models.Tags                `json:"tags" gorm:"-"`
@@ -76,7 +74,6 @@ func GetImageList(c *gin.Context) {
 	roleFilter := c.Query("role")
 	roleID := c.GetInt("user_role")
 	userID := c.GetInt("user_id")
-	userUUID := GetUUID(c)
 
 	// 标签参数解析
 	var hasZeroTag bool
@@ -124,9 +121,9 @@ func GetImageList(c *gin.Context) {
 		case "user":
 			idQuery = idQuery.Joins("LEFT JOIN users ON images.user_id = users.id").
 				Where("users.id IS NOT NULL AND users.role = ?", models.RoleUser)
-		case "guest":
-			idQuery = idQuery.Joins("LEFT JOIN users ON images.user_id = users.id").
-				Where("users.id IS NULL")
+		default:
+			c.JSON(http.StatusBadRequest, result.Error(400, "角色筛选参数无效"))
+			return
 		}
 	} else {
 		switch roleID {
@@ -134,8 +131,6 @@ func GetImageList(c *gin.Context) {
 			// 管理员默认查看全部。
 		case models.RoleUser:
 			idQuery = idQuery.Where("images.user_id = ?", userID)
-		case models.RoleGuest:
-			idQuery = idQuery.Where("images.uuid = ?", userUUID)
 		default:
 			idQuery = idQuery.Where("1 = 0")
 		}
@@ -185,7 +180,7 @@ func GetImageList(c *gin.Context) {
 	// 查询图片详情
 	var images []ImageWithTags
 	if len(imageIds) > 0 {
-		imageFields := "id, url, thumbnail, file_name, original_filename, file_size, mime_type, width, height, storage, bucket_id, user_id, md5, uuid, created_at"
+		imageFields := "id, url, thumbnail, file_name, original_filename, file_size, mime_type, width, height, storage, bucket_id, user_id, created_at"
 		if err := db.Model(&ImageWithTags{}).
 			Select(imageFields).
 			Where("id IN (?)", imageIds).
@@ -327,8 +322,6 @@ func attachStorageStatuses(db *gorm.DB, setting models.Settings, images []ImageW
 	for i := range images {
 		if role, ok := roleByUserID[images[i].UserId]; ok {
 			images[i].UploaderRole = role
-		} else {
-			images[i].UploaderRole = models.RoleGuest
 		}
 	}
 }

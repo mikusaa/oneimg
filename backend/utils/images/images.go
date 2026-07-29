@@ -611,7 +611,7 @@ func (s *ImageService) ReplaceMagicVariables(pattern string, originalName string
 	pattern = strings.ReplaceAll(pattern, "{second}", now.Format("05"))
 
 	// 角色变量
-	roleStr := "guest"
+	roleStr := "user"
 	if role == 1 {
 		roleStr = "admin"
 	}

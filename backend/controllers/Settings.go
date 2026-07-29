@@ -75,8 +75,6 @@ func GetLoginSettings(c *gin.Context) {
 
 	c.JSON(200, result.Success("ok",
 		map[string]any{
-			"pow_verify":     settingModel.PowVerify,
-			"tourist":        settingModel.Tourist,
 			"start_register": settingModel.StartRegister,
 		},
 	))
@@ -295,7 +293,7 @@ func updateSettingsField(settings *models.Settings, key string, value any) error
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
-		// 优先匹配JSON Tag（如 json:"tourist"）
+		// 优先匹配 JSON Tag（如 json:"save_webp"）
 		jsonTag := field.Tag.Get("json")
 		if jsonTag == key || field.Name == key {
 			targetField = val.Field(i)
@@ -524,7 +522,7 @@ var settingKeyPermissions = map[string]string{
 	"allowed_types": "setting:upload", "multi_storage_sync": "setting:upload", "save_original_name": "setting:upload",
 	"original_image": "setting:image", "save_webp": "setting:image", "thumbnail": "setting:image",
 	"main_image_quality": "setting:image", "skip_compress_formats": "setting:image",
-	"pow_verify": "setting:security", "tourist": "setting:security", "start_register": "setting:security",
+	"start_register":       "setting:security",
 	"referer_white_enable": "setting:security", "referer_white_list": "setting:security",
 	"start_api": "setting:api", "api_token": "setting:api", "api_token_configured": "setting:api",
 	"seo_title": "setting:seo", "seo_description": "setting:seo", "seo_keywords": "setting:seo",

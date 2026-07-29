@@ -14,7 +14,6 @@ import (
 	"oneimg/backend/interfaces"
 	"oneimg/backend/models"
 	"oneimg/backend/services"
-	"oneimg/backend/utils/md5"
 	"oneimg/backend/utils/result"
 	"oneimg/backend/utils/settings"
 	"oneimg/backend/utils/uploads"
@@ -78,13 +77,6 @@ func UploadImages(c *gin.Context) {
 		bucketID = setting.DefaultStorage
 	}
 
-	// 检查游客上传
-	if isTouristUsername(c.GetString("username")) {
-		if setting.DefaultStorage != bucketID {
-			uc.Fail(403, "游客不能上传到非默认存储")
-			return
-		}
-	}
 	allowed, err := canUseSingleStorageUploadBucket(c, setting, bucketID)
 	if err != nil {
 		uc.Fail(500, "校验存储权限失败：%v", err)
@@ -159,9 +151,7 @@ func UploadImages(c *gin.Context) {
 				Storage:          fileResult.Storage,
 				BucketId:         bucketID,
 				UserId:           c.GetInt("user_id"),
-				MD5:              md5.Md5(c.GetString("username") + fileResult.FileName),
 				ContentHash:      fileResult.ContentHash,
-				UUID:             GetUUID(c),
 			}
 
 			if db != nil {
@@ -226,7 +216,7 @@ func uploadImagesMultiStorage(c *gin.Context, setting models.Settings, existingT
 	uc := uploads.NewUploadContext(c)
 	db := database.GetDB()
 
-	localBucket, syncBuckets, err := resolveUploadBuckets(c, setting)
+	localBucket, syncBuckets, err := resolveUploadBuckets(c)
 	if err != nil {
 		uc.Fail(500, "获取用户同步存储源失败：%v", err)
 		return
@@ -268,9 +258,7 @@ func uploadImagesMultiStorage(c *gin.Context, setting models.Settings, existingT
 				Storage:          fileResult.Storage,
 				BucketId:         localBucket.Id,
 				UserId:           c.GetInt("user_id"),
-				MD5:              md5.Md5(c.GetString("username") + fileResult.FileName),
 				ContentHash:      fileResult.ContentHash,
-				UUID:             GetUUID(c),
 			}
 
 			now := time.Now()
@@ -771,7 +759,7 @@ func UploadImagesByURL(c *gin.Context) {
 	var buckets models.Buckets
 	var syncBuckets []models.Buckets
 	if setting.MultiStorageSync {
-		localBucket, targets, err := resolveUploadBuckets(c, setting)
+		localBucket, targets, err := resolveUploadBuckets(c)
 		if err != nil {
 			uc.Fail(500, "获取用户同步存储源失败：%v", err)
 			return
@@ -780,12 +768,6 @@ func UploadImagesByURL(c *gin.Context) {
 		syncBuckets = targets
 		bucketID = localBucket.Id
 	} else {
-		if isTouristUsername(c.GetString("username")) {
-			if setting.DefaultStorage != bucketID {
-				uc.Fail(403, "游客不能上传到非默认存储")
-				return
-			}
-		}
 		allowed, err := canUseSingleStorageUploadBucket(c, setting, bucketID)
 		if err != nil {
 			uc.Fail(500, "校验存储权限失败：%v", err)
@@ -893,9 +875,7 @@ func UploadImagesByURL(c *gin.Context) {
 			Storage:          fileResult.Storage,
 			BucketId:         bucketID,
 			UserId:           c.GetInt("user_id"),
-			MD5:              md5.Md5(c.GetString("username") + fileResult.FileName),
 			ContentHash:      fileResult.ContentHash,
-			UUID:             GetUUID(c),
 		}
 		err := db.DB.Transaction(func(tx *gorm.DB) error {
 			if err := tx.Create(&imageModel).Error; err != nil {

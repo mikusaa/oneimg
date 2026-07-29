@@ -139,7 +139,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Message from '@/utils/message.js'
-import { getStoredUser, hasAnyPermission, hasPermission, ROLE_ADMIN, ROLE_GUEST } from '@/utils/permissions.js'
+import { getStoredUser, hasAnyPermission, hasPermission, ROLE_ADMIN } from '@/utils/permissions.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -197,11 +197,7 @@ const refreshNavItems = () => {
     }
   }
 
-  if (Number(userInfo?.role) !== ROLE_GUEST) {
-    navItems.value.push(
-      { path: '/account', icon: 'shield-user-line', name: '账户设置' },
-    )
-  }
+  navItems.value.push({ path: '/account', icon: 'shield-user-line', name: '账户设置' })
 }
 
 const isRouteActive = (targetPath) => {

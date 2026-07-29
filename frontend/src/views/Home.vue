@@ -87,7 +87,6 @@
             <select 
               class="input-modern mt-3"
               v-model="selectedBucket"
-              :disabled="isGuest()"
               @change="handleBucketChange"
             >
               <option 
@@ -319,15 +318,6 @@ const urlTagOptions = computed(() => [
 ]);
 
 // ====================== 工具函数 ======================
-/**
- * 检查是否为游客
- */
-function isGuest() {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-  if(userInfo?.isTourist == true) return true;
-  else return false;
-}
-
 function isAdmin() {
   const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
   return Number(userInfo?.role) === 1;
@@ -446,7 +436,7 @@ const loadRecentImages = async () => {
   try {
     const params = new URLSearchParams({ limit: '12' });
     if (isAdmin()) {
-      params.set('role', isGuest() ? 'guest' : 'admin');
+      params.set('role', 'admin');
     }
     const response = await fetch(`${API_BASE_URL}/api/images?${params}`, {
       headers: {
@@ -954,7 +944,7 @@ const previewImage = (image) => {
           <a 
               class="spotlight min-w-full max-w-full min-h-[260px] block" 
               href="${getFullUrl(image.url)}" 
-              data-description="尺寸: ${image.width || '未知'}×${image.height || '未知'} | 大小: ${formatFileSize(image.file_size || 0)} | 上传日期：${formatDate(image.created_at)} | 角色：${image.user_id == '1' ? '管理员' : '游客'}"
+              data-description="尺寸: ${image.width || '未知'}×${image.height || '未知'} | 大小: ${formatFileSize(image.file_size || 0)} | 上传日期：${formatDate(image.created_at)} | 角色：${Number(image.uploader_role) === 1 ? '管理员' : Number(image.uploader_role) === 3 ? '普通用户' : '已删除用户'}"
           >
               <div class="relative max-w-full w-fill max-h-[360px] min-h-[260px] rounded-lg overflow-hidden animate-pulse flex items-center justify-center">
                   <div class="absolute inset-0 flex items-center justify-center">

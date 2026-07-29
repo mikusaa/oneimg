@@ -7,8 +7,6 @@ type Settings struct {
 	OriginalImage    bool   `gorm:"column:original_image;default:false" json:"original_image"`         // 是否保存原图（默认保存）
 	SaveWebp         bool   `gorm:"column:save_webp;default:true" json:"save_webp"`                    // 是否保存webp格式（默认保存）
 	Thumbnail        bool   `gorm:"column:thumbnail;default:true" json:"thumbnail"`                    // 是否生成缩略图（默认生成）
-	Tourist          bool   `gorm:"column:tourist;default:false" json:"tourist"`                       // 是否允许游客上传（默认允许）
-	PowVerify        bool   `gorm:"column:pow_verify;default:false" json:"pow_verify"`                 // 是否启用POW验证（默认关闭）
 	StartRegister    bool   `gorm:"column:start_register;default:false" json:"start_register"`         // 是否开放普通用户注册
 	StartAPI         bool   `gorm:"column:start_api;default:false" json:"start_api"`                   // 是否启用API（默认关闭）
 	APIToken         string `gorm:"column:api_token;default:''" json:"api_token"`                      // 兼容旧字段
@@ -24,7 +22,7 @@ type Settings struct {
 	AllowedTypes       string `gorm:"column:allowed_types;default:'image/jpeg,image/png,image/gif,image/webp,image/svg+xml'" json:"allowed_types"`
 	MainImageQuality   int    `gorm:"column:main_image_quality;default:85" json:"main_image_quality"`                                         // 主图WebP质量
 	SkipCompressFormat string `gorm:"column:skip_compress_formats;default:'image/gif,image/svg+xml,image/webp'" json:"skip_compress_formats"` // 跳过主图压缩/转换的格式
-	DefaultPath        string `gorm:"column:default_path;default:'/uploads/{year}/{moon}'" json:"default_path"`                               // 默认上传路径，魔法变量 {year} 年 {month} 月 {day} 日 {hour} 小时 {minute} 分钟 {random} 随机 {uuid} UUID {role} 角色（1 为管理员, 2 为游客）
+	DefaultPath        string `gorm:"column:default_path;default:'/uploads/{year}/{moon}'" json:"default_path"`                               // 默认上传路径，支持时间、随机值、UUID、角色等魔法变量
 	FileName           string `gorm:"column:file_name;default:'{random}'" json:"file_name"`                                                   // 上传文件名称，魔法变量 {random} 随机数 {year} 年 {month} 月 {day} 日 {hour} 小时 {minute} 分钟 {second} 秒
 
 	// 图片直链设置

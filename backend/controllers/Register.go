@@ -27,7 +27,6 @@ func Register(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
-		PowToken string `json:"powToken"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, result.Fail(400, "请求参数错误"))
@@ -42,15 +41,6 @@ func Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, result.Fail(400, "密码长度必须在6-100个字符之间"))
 		return
 	}
-	if isTouristUsername(req.Username) {
-		c.JSON(http.StatusBadRequest, result.Fail(400, "该用户名不可注册"))
-		return
-	}
-	if setting.PowVerify && !ValidatePowToken(req.PowToken) {
-		c.JSON(http.StatusBadRequest, result.Fail(400, "人机验证失败，请重试"))
-		return
-	}
-
 	db := database.GetDB().DB
 	var existingCount int64
 	if err := db.Model(&models.User{}).Where("username = ?", req.Username).Count(&existingCount).Error; err != nil {

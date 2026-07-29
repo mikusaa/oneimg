@@ -17,7 +17,6 @@ import (
 	"oneimg/backend/services"
 	"oneimg/backend/utils/buckets"
 	"oneimg/backend/utils/ftp"
-	"oneimg/backend/utils/md5"
 	"oneimg/backend/utils/result"
 	"oneimg/backend/utils/s3"
 	"oneimg/backend/utils/settings"
@@ -333,13 +332,11 @@ func DeleteFtpStorageImage(image models.Image, bucket models.Buckets) (deleteSta
 func CheckImageAccessPermission(c *gin.Context, image models.Image, requiredPermission string) bool {
 	userID := c.GetInt("user_id")
 	role := c.GetInt("user_role")
-	currentUserUUID := GetUUID(c)
-	currentUsername := c.GetString("username")
 
 	if image.UserId == models.SuperAdminID && userID != models.SuperAdminID {
 		return false
 	}
-	if userID == models.SuperAdminID || (role != models.RoleGuest && userID > 0 && image.UserId == userID) {
+	if userID == models.SuperAdminID || (userID > 0 && image.UserId == userID) {
 		return true
 	}
 	if role == models.RoleAdmin {
@@ -347,9 +344,6 @@ func CheckImageAccessPermission(c *gin.Context, image models.Image, requiredPerm
 	}
 	if role == models.RoleUser {
 		return false
-	}
-	if role == models.RoleGuest && image.UUID == currentUserUUID && md5.Md5(currentUsername+image.FileName) == image.MD5 {
-		return true
 	}
 	return false
 }

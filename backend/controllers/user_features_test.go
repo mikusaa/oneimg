@@ -13,7 +13,6 @@ import (
 	"oneimg/backend/database"
 	"oneimg/backend/middlewares"
 	"oneimg/backend/models"
-	"oneimg/backend/utils/md5"
 	"oneimg/backend/utils/secureconfig"
 
 	"github.com/gin-contrib/sessions"
@@ -84,13 +83,6 @@ func TestRegisterHonorsSettingAndCreatesNormalUser(t *testing.T) {
 	}
 	if got := performJSONRequest(Register, http.MethodPost, "/api/register", body, nil).Code; got != http.StatusConflict {
 		t.Fatalf("duplicate registration status = %d", got)
-	}
-	if err := db.Model(&models.Settings{}).Where("id = 1").Update("pow_verify", true).Error; err != nil {
-		t.Fatal(err)
-	}
-	powBody := map[string]any{"username": "pow-user", "password": "secret12", "powToken": "invalid"}
-	if got := performJSONRequest(Register, http.MethodPost, "/api/register", powBody, nil).Code; got != http.StatusBadRequest {
-		t.Fatalf("invalid PoW status = %d", got)
 	}
 }
 
@@ -256,17 +248,12 @@ func TestUpdateUserPermissionPreservesOmittedCodes(t *testing.T) {
 func TestCheckImageAccessPermissionRoleBoundaries(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	image := models.Image{UserId: 99, UUID: "owner-uuid", FileName: "a.webp", MD5: md5.Md5("owner-uuida.webp")}
+	image := models.Image{UserId: 99, FileName: "a.webp"}
 
 	context.Set("user_id", 99)
-	context.Set("user_role", models.RoleGuest)
-	context.Set("username", "different-uuid")
-	if CheckImageAccessPermission(context, image, "") {
-		t.Fatal("guest ID collision bypassed UUID validation")
-	}
-	context.Set("username", "owner-uuid")
+	context.Set("user_role", models.RoleUser)
 	if !CheckImageAccessPermission(context, image, "") {
-		t.Fatal("matching guest ownership was denied")
+		t.Fatal("normal user could not manage their own image")
 	}
 
 	admin := &models.User{ID: 5, Role: models.RoleAdmin, Permission: models.Permission{Codes: []string{"image:delete"}}}
@@ -294,6 +281,12 @@ func TestSettingsResponseKeysHavePermissionGroups(t *testing.T) {
 		if strings.HasPrefix(lowerKey, "watermark_") {
 			t.Errorf("removed watermark setting %q is still exposed", key)
 		}
+		if lowerKey == "pow_verify" {
+			t.Errorf("removed PoW setting %q is still exposed", key)
+		}
+		if lowerKey == "tourist" {
+			t.Errorf("removed guest setting %q is still exposed", key)
+		}
 		if key == "id" {
 			continue
 		}
@@ -306,11 +299,7 @@ func TestSettingsResponseKeysHavePermissionGroups(t *testing.T) {
 func TestLoginSettingsOnlyExposeLocalAuthenticationOptions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupFeatureTestDB(t)
-	if err := database.GetDB().DB.Create(&models.Settings{
-		PowVerify:     true,
-		Tourist:       true,
-		StartRegister: true,
-	}).Error; err != nil {
+	if err := database.GetDB().DB.Create(&models.Settings{StartRegister: true}).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -324,7 +313,7 @@ func TestLoginSettingsOnlyExposeLocalAuthenticationOptions(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Data) != 3 || response.Data["pow_verify"] != true || response.Data["tourist"] != true || response.Data["start_register"] != true {
+	if len(response.Data) != 1 || response.Data["start_register"] != true {
 		t.Fatalf("unexpected login settings: %#v", response.Data)
 	}
 	for key := range response.Data {
@@ -349,9 +338,15 @@ func TestDeleteUserDoesNotRequireExternalIdentityTable(t *testing.T) {
 		"oidc_enable", "oidc_issuer", "oidc_client_id", "oidc_client_secret", "oidc_redirect_url",
 		"oidc_scopes", "oidc_username_claim", "oidc_display_name", "oidc_auto_provision", "oidc_super_admin_username",
 		"cas_enable", "cas_server_url", "cas_service_url", "cas_display_name", "cas_auto_provision", "cas_super_admin_username",
+		"pow_verify", "tourist",
 	} {
 		if db.Migrator().HasColumn("settings", column) {
 			t.Fatalf("new database unexpectedly contains settings.%s", column)
+		}
+	}
+	for _, column := range []string{"md5", "uuid"} {
+		if db.Migrator().HasColumn("images", column) {
+			t.Fatalf("new database unexpectedly contains images.%s", column)
 		}
 	}
 	users := []models.User{
@@ -380,15 +375,16 @@ func TestDeleteUserDoesNotRequireExternalIdentityTable(t *testing.T) {
 	}
 }
 
-func TestLegacyExternalAuthSchemaRemainsCompatible(t *testing.T) {
+func TestLegacyRemovedFeatureSchemaRemainsCompatible(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	legacyDB, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	statements := []string{
-		`CREATE TABLE settings (id integer PRIMARY KEY AUTOINCREMENT, oidc_enable numeric, oidc_client_secret text, cas_enable numeric)`,
-		`INSERT INTO settings (id, oidc_enable, oidc_client_secret, cas_enable) VALUES (1, 0, '', 0)`,
+		`CREATE TABLE settings (id integer PRIMARY KEY AUTOINCREMENT, oidc_enable numeric, oidc_client_secret text, cas_enable numeric, pow_verify numeric, tourist numeric)`,
+		`INSERT INTO settings (id, oidc_enable, oidc_client_secret, cas_enable, pow_verify, tourist) VALUES (1, 0, '', 0, 0, 0)`,
+		`CREATE TABLE images (id integer PRIMARY KEY AUTOINCREMENT, url text, file_name text, file_size integer, bucket_id integer, user_id integer, md5 text, uuid text)`,
 		`CREATE TABLE external_auth_flows (id integer PRIMARY KEY AUTOINCREMENT, state_hash text)`,
 		`CREATE TABLE external_identities (id integer PRIMARY KEY AUTOINCREMENT, user_id integer)`,
 	}
@@ -414,6 +410,12 @@ func TestLegacyExternalAuthSchemaRemainsCompatible(t *testing.T) {
 	}
 	if !migratedDB.Migrator().HasColumn("settings", "oidc_enable") || !migratedDB.Migrator().HasColumn("settings", "cas_enable") {
 		t.Fatal("legacy external authentication columns were removed")
+	}
+	if !migratedDB.Migrator().HasColumn("settings", "pow_verify") || !migratedDB.Migrator().HasColumn("settings", "tourist") {
+		t.Fatal("legacy authentication columns were removed")
+	}
+	if !migratedDB.Migrator().HasColumn("images", "md5") || !migratedDB.Migrator().HasColumn("images", "uuid") {
+		t.Fatal("legacy guest image columns were removed")
 	}
 	var setting models.Settings
 	if err := migratedDB.First(&setting, 1).Error; err != nil {

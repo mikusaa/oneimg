@@ -28,7 +28,6 @@ func TestApplyImageSearchMatchesSupportedFields(t *testing.T) {
 			UserId:           1,
 			Storage:          "default",
 			ContentHash:      "hash-original",
-			UUID:             "admin",
 		},
 		{
 			Url:              "/uploads/2026/07/another.webp",
@@ -39,7 +38,6 @@ func TestApplyImageSearchMatchesSupportedFields(t *testing.T) {
 			UserId:           1,
 			Storage:          "default",
 			ContentHash:      "hash-other",
-			UUID:             "admin",
 		},
 	}
 	if err := db.Create(&images).Error; err != nil {
@@ -70,11 +68,11 @@ func TestApplyImageSearchMatchesSupportedFields(t *testing.T) {
 	}
 
 	var scoped []models.Image
-	if err := applyImageSearch(db.Model(&models.Image{}).Where("images.uuid = ?", "guest"), "summer-photo").Find(&scoped).Error; err != nil {
+	if err := applyImageSearch(db.Model(&models.Image{}).Where("images.user_id = ?", 2), "summer-photo").Find(&scoped).Error; err != nil {
 		t.Fatalf("scoped Find() error = %v", err)
 	}
 	if len(scoped) != 0 {
-		t.Fatalf("scoped search got %+v, want no images outside uuid scope", scoped)
+		t.Fatalf("scoped search got %+v, want no images outside user scope", scoped)
 	}
 }
 

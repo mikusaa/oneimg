@@ -12,7 +12,7 @@
           <div class="gallery-topbar-filters">
             <div v-if="isAdmin" class="gallery-inline-control gallery-inline-control-role">
               <span class="gallery-inline-label">角色</span>
-              <div class="role-buttons grid w-full grid-cols-4 overflow-hidden rounded-[16px] border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto">
+              <div class="role-buttons grid w-full grid-cols-3 overflow-hidden rounded-[16px] border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto">
             <button
               @click="changeRole('all')"
               class="px-3 py-1.5 text-sm transition-all"
@@ -45,17 +45,6 @@
               ]"
             >
               用户
-            </button>
-            <button
-              @click="changeRole('guest')"
-              class="px-3 py-1.5 text-sm transition-all"
-              :class="[
-                roleImage === 'guest' 
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' 
-                  : 'bg-transparent hover:bg-slate-100 dark:hover:bg-white/10'
-              ]"
-            >
-              游客
             </button>
           </div>
             </div>
@@ -138,7 +127,6 @@
                 <i class="ri-bookmark-2-fill"></i>
                 批量设置标签
             </button>
-            <!-- 批量删除按钮 - 游客和管理员都可见 -->
             <button
               v-if="canBatchDelete"
               @click="handleBatchDelete"
@@ -334,7 +322,7 @@ import AppDialog from '@/components/AppDialog.vue'
 import TagSelector from '@/components/TagSelector.vue'
 import errorImg from '@/assets/images/error.webp';
 import { getStorageSyncSummary, renderStorageStatusesHtml } from '@/utils/storageStatus.js';
-import { getStoredUser, hasPermission, isSuperAdmin, ROLE_ADMIN, ROLE_GUEST } from '@/utils/permissions.js';
+import { getStoredUser, hasPermission, isSuperAdmin, ROLE_ADMIN } from '@/utils/permissions.js';
 
 // ====================== 常量定义 ======================
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -342,8 +330,7 @@ const PAGE_SIZE = 20;
 const ROLE_MAP = {
   all: '全部',
   admin: '管理员',
-  user: '普通用户',
-  guest: '游客'
+  user: '普通用户'
 };
 const STORAGE_MAP = {
   default: '本地'
@@ -402,7 +389,7 @@ const getRoleName = (image) => {
   if (Number(image?.uploader_role) === 1) return '管理员';
   if (Number(image?.uploader_role) === 3) return '普通用户';
   if (image?.user_id == '1') return '管理员';
-  return '游客';
+  return '已删除用户';
 };
 
 const getRoleTagClass = (image) => {
@@ -413,7 +400,7 @@ const getRoleTagClass = (image) => {
   if (role === 3) {
     return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
   }
-  return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+  return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
 };
 
 // ====================== 响应式数据 ======================
@@ -465,7 +452,6 @@ const canManageImage = (image, permission) => {
   if (!image) return false;
   if (isSuperAdmin(currentUser)) return true;
   if (Number(image.user_id) === 1) return false;
-  if (Number(currentUser.role) === ROLE_GUEST || currentUser.isTourist === true) return true;
   if (Number(image.user_id) === Number(currentUser.id)) return true;
   return Number(currentUser.role) === ROLE_ADMIN && hasPermission(permission, currentUser);
 };
@@ -739,7 +725,7 @@ const deleteImageTagAsync = async (imageId, tagId) => {
 // ====================== 事件处理函数 ======================
 /**
  * 切换角色筛选
- * @param {string} role - 角色类型（admin/guest）
+ * @param {string} role - 角色类型（admin/user）
  */
 const changeRole = (role) => {
   if (roleImage.value !== role) {
@@ -1465,10 +1451,7 @@ const addImageTagModal = imageId => {
 onMounted(() => {
   // 初始化用户角色
   const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-  if (userInfo?.isTourist === true) {
-    roleImage.value = "guest";
-    isAdmin.value = false;
-  } else if (Number(userInfo?.role) === 1) {
+  if (Number(userInfo?.role) === 1) {
     isAdmin.value = true;
     roleImage.value = "all";
   } else {

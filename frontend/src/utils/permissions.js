@@ -1,6 +1,5 @@
 export const SUPER_ADMIN_ID = 1
 export const ROLE_ADMIN = 1
-export const ROLE_GUEST = 2
 export const ROLE_USER = 3
 
 export const getStoredUser = () => {

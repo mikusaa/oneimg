@@ -17,7 +17,6 @@ import (
 
 	"oneimg/backend/models"
 	"oneimg/backend/utils/images"
-	"oneimg/backend/utils/md5"
 )
 
 type Options struct {
@@ -25,7 +24,6 @@ type Options struct {
 	DataRoot           string
 	BucketID           int
 	UserID             int
-	Username           string
 	DryRun             bool
 	DateSource         string
 	UpdateExistingDate bool
@@ -54,7 +52,6 @@ func DefaultOptions() Options {
 		DataRoot:   "./data",
 		BucketID:   1,
 		UserID:     1,
-		Username:   "admin",
 		DateSource: "mtime",
 		Logger:     log.Default(),
 	}
@@ -66,7 +63,6 @@ func RunCLI(args []string, db *gorm.DB) int {
 	flags.StringVar(&options.Root, "root", options.Root, "本地 uploads 根目录")
 	flags.IntVar(&options.BucketID, "bucket-id", options.BucketID, "导入到的存储桶 ID")
 	flags.IntVar(&options.UserID, "user-id", options.UserID, "图片归属用户 ID")
-	flags.StringVar(&options.Username, "username", options.Username, "用于生成权限 MD5/UUID 的用户名")
 	flags.StringVar(&options.DateSource, "date-source", options.DateSource, "导入日期来源：mtime、path、now")
 	flags.BoolVar(&options.UpdateExistingDate, "update-existing-date", false, "更新已入库图片的 created_at")
 	flags.BoolVar(&options.DryRun, "dry-run", false, "只扫描并打印统计，不写入数据库或缩略图")
@@ -108,9 +104,6 @@ func NewImporter(db *gorm.DB, options Options) *Importer {
 	}
 	if options.UserID == 0 {
 		options.UserID = defaults.UserID
-	}
-	if options.Username == "" {
-		options.Username = defaults.Username
 	}
 	if options.DateSource == "" {
 		options.DateSource = defaults.DateSource
@@ -261,9 +254,7 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 		Storage:          "default",
 		BucketId:         i.options.BucketID,
 		UserId:           i.options.UserID,
-		MD5:              md5.Md5(i.options.Username + filepath.Base(path)),
 		ContentHash:      images.HashBytes(fileBytes),
-		UUID:             i.options.Username,
 		CreatedAt:        createdAt,
 	}
 	if err := i.db.Create(&imageModel).Error; err != nil {

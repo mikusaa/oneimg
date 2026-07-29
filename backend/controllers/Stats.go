@@ -58,14 +58,10 @@ func GetDashboardStats(c *gin.Context) {
 	var stats DashboardStats
 	roleID := c.GetInt("user_role")
 	userID := c.GetInt("user_id")
-	userUUID := GetUUID(c)
 	imageScope := func() *gorm.DB {
 		query := db.Model(&models.Image{})
 		if roleID == models.RoleAdmin {
 			return query
-		}
-		if roleID == models.RoleGuest {
-			return query.Where("uuid = ?", userUUID)
 		}
 		return query.Where("user_id = ?", userID)
 	}
@@ -218,11 +214,8 @@ func GetImageStats(c *gin.Context) {
 	var stats any
 	roleID := c.GetInt("user_role")
 	userID := c.GetInt("user_id")
-	userUUID := GetUUID(c)
 	imageScope := db.Model(&models.Image{})
-	if roleID == models.RoleGuest {
-		imageScope = imageScope.Where("uuid = ?", userUUID)
-	} else if roleID != models.RoleAdmin {
+	if roleID != models.RoleAdmin {
 		imageScope = imageScope.Where("user_id = ?", userID)
 	}
 

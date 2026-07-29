@@ -86,7 +86,6 @@ func quietOptions(root, dataRoot string) Options {
 		DataRoot: dataRoot,
 		BucketID: 1,
 		UserID:   1,
-		Username: "admin",
 		Logger:   log.New(ioDiscard{}, "", 0),
 	}
 }
@@ -220,7 +219,6 @@ func TestImportSkipsExistingImageURL(t *testing.T) {
 		UserId:           1,
 		Storage:          "default",
 		ContentHash:      "existing-hash",
-		UUID:             "admin",
 	}).Error; err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -255,7 +253,6 @@ func TestImportBackfillsExistingContentHash(t *testing.T) {
 		BucketId: 1,
 		UserId:   1,
 		Storage:  "default",
-		UUID:     "admin",
 	}).Error; err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -295,7 +292,6 @@ func TestImportUpdatesExistingDateWhenEnabled(t *testing.T) {
 		BucketId:  1,
 		UserId:    1,
 		Storage:   "default",
-		UUID:      "admin",
 		CreatedAt: oldTime,
 	}).Error; err != nil {
 		t.Fatalf("Create() error = %v", err)

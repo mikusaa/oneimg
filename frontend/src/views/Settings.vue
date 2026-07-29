@@ -78,7 +78,7 @@
                                             {{ bucket.name }} ({{ bucket.type }})
                                         </option>
                                     </select>
-                                    <p class="field-hint">游客仅可使用系统默认存储。</p>
+                                    <p class="field-hint">普通用户始终可使用默认存储，其他存储按用户权限开放。</p>
                                 </div>
 
                                 <div class="settings-toggle-field">
@@ -334,22 +334,6 @@
                             <div class="settings-toggle-list">
                                 <div class="settings-toggle-row">
                                     <div>
-                                        <p class="setting-row-title">允许游客上传</p>
-                                    </div>
-                                    <label class="settings-switch" title="允许游客上传">
-                                        <input
-                                            v-model="systemSettings.tourist"
-                                            type="checkbox"
-                                            class="sr-only peer"
-                                            @change="handleSwitchChange('tourist', systemSettings.tourist)"
-                                        >
-                                        <span class="switch-track"></span>
-                                        <span class="switch-thumb"></span>
-                                    </label>
-                                </div>
-
-                                <div class="settings-toggle-row">
-                                    <div>
                                         <p class="setting-row-title">开放用户注册</p>
                                         <p class="setting-row-hint">新账号固定为普通用户，注册后需要自行登录。</p>
                                     </div>
@@ -365,21 +349,6 @@
                                     </label>
                                 </div>
 
-                                <div class="settings-toggle-row">
-                                    <div>
-                                        <p class="setting-row-title">启用 PoW 验证</p>
-                                    </div>
-                                    <label class="settings-switch" title="启用 PoW 验证">
-                                        <input
-                                            v-model="systemSettings.pow_verify"
-                                            type="checkbox"
-                                            class="sr-only peer"
-                                            @change="handleSwitchChange('pow_verify', systemSettings.pow_verify)"
-                                        >
-                                        <span class="switch-track"></span>
-                                        <span class="switch-thumb"></span>
-                                    </label>
-                                </div>
                             </div>
                         </section>
 
@@ -573,9 +542,7 @@ const systemSettings = reactive({
     original_image: false,
     save_webp: false,
     thumbnail: false,
-    tourist: false,
     start_register: false,
-    pow_verify: false,
     referer_white_list: '',
     referer_white_enable: false,
     seo_title: '',

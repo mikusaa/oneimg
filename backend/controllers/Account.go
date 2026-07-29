@@ -3,7 +3,6 @@ package controllers
 import (
 	"errors"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"oneimg/backend/database"
@@ -29,8 +28,6 @@ type AccountResponse struct {
 	Success bool   `json:"success"`
 }
 
-var uuidRegex = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-
 func ChangeAccountInfo(c *gin.Context) {
 	var req ChangeAccountInfoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -44,10 +41,6 @@ func ChangeAccountInfo(c *gin.Context) {
 
 	userID := c.GetInt("user_id")
 	role := c.GetInt("user_role")
-	if role == models.RoleGuest {
-		c.JSON(http.StatusForbidden, AccountResponse{Code: 403, Message: "游客不能修改账户信息", Success: false})
-		return
-	}
 	if role != models.RoleAdmin && strings.TrimSpace(req.NewUsername) != "" {
 		c.JSON(http.StatusForbidden, AccountResponse{Code: 403, Message: "普通用户不能修改用户名", Success: false})
 		return
@@ -57,11 +50,6 @@ func ChangeAccountInfo(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, AccountResponse{Code: 400, Message: "请至少修改一项", Success: false})
 		return
 	}
-	if req.NewUsername != "" && isTouristUsername(req.NewUsername) {
-		c.JSON(http.StatusBadRequest, AccountResponse{Code: 400, Message: "游客保留用户名", Success: false})
-		return
-	}
-
 	errCurrentPassword := errors.New("当前密码错误")
 	errUsernameExists := errors.New("用户名已存在")
 	db := database.GetDB().DB
@@ -126,11 +114,6 @@ func ChangeAccountInfo(c *gin.Context) {
 	})
 }
 
-// isTouristUsername 辅助函数，检查是否为游客账号
-func isTouristUsername(username string) bool {
-	return strings.HasPrefix(username, "guest_") || username == "guest" || uuidRegex.MatchString(username)
-}
-
 // ClearAllSessions 清除所有会话
 func ClearAllSessions(c *gin.Context) {
 	// 获取当前session
@@ -150,16 +133,4 @@ func ClearAllSessions(c *gin.Context) {
 		Message: "所有会话已清除",
 		Success: true,
 	})
-}
-
-// 辅助函数，获取用户UUID
-func GetUUID(c *gin.Context) string {
-	uuidRegex := regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-	if uuidRegex.MatchString(c.GetString("username")) {
-		return c.GetString("username")
-	} else if c.GetString("username") == "00000000-0000-0000-0000-000000000000" {
-		return "00000000-0000-0000-0000-000000000000"
-	} else {
-		return c.GetString("username")
-	}
 }
