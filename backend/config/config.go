@@ -17,18 +17,8 @@ type Config struct {
 	Port   string
 	AppURL string
 
-	// Sqlite3数据库
+	// SQLite 数据库
 	SqlitePath string
-
-	// 数据库配置
-	DbType           string
-	DbHost           string
-	DbPort           int
-	DbUser           string
-	DbPassword       string
-	DbName           string
-	DbCaCertPath     string
-	DbSkipCertVerify bool
 
 	// 上传文件配置
 	MaxFileSize  int64
@@ -94,18 +84,8 @@ func CreateDefaultEnv() {
 SERVER_PORT=8080
 APP_URL=http://localhost:8080
 
-# 数据库配置
-DB_TYPE=sqlite
-# 类型可选：sqlite | mysql | postgres
+# SQLite 数据库
 SQLITE_PATH=./data/data.db
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=
-DB_NAME=oneimg
-# CA证书路径，如果不需要TLS加密连接则将其注释
-DB_CA_CERT_PATH=./ca/isrgrootx1.pem
-DB_SKIP_CERT_VERIFY=false
 
 # 文件上传配置
 MAX_FILE_SIZE=10485760
@@ -175,22 +155,12 @@ func NewConfig() {
 	port := getEnv("SERVER_PORT", getEnv("PORT", "8080"))
 	appURL := getEnv("APP_URL", "http://localhost:"+port)
 
-	// Sqlite3配置
+	// SQLite 配置
 	sqlitePath := getEnv("SQLITE_PATH", "./data/data.db")
 	// 确保SQLite目录存在
 	if err := os.MkdirAll(filepath.Dir(sqlitePath), 0755); err != nil {
 		log.Printf("警告：创建SQLite目录失败：%v", err)
 	}
-
-	// Mysql配置
-	dbType := getEnv("DB_TYPE", "sqlite3")
-	dbHost := getEnv("DB_HOST", "localhost")
-	dbPort, _ := strconv.Atoi(getEnv("DB_PORT", "3306"))
-	dbUser := getEnv("DB_USER", "root")
-	dbPassword := getEnv("DB_PASSWORD", "")
-	dbName := getEnv("DB_NAME", "oneimg")
-	dbCaCertPath := getEnv("DB_CA_CERT_PATH", "")
-	dbSkipCertVerify := getEnv("DB_SKIP_CERT_VERIFY", "false") == "true"
 
 	// 默认用户配置
 	defaultUser := getEnv("DEFAULT_USER", "admin")
@@ -205,24 +175,16 @@ func NewConfig() {
 
 	// 初始化全局配置
 	App = &Config{
-		Port:             port,
-		AppURL:           appURL,
-		SqlitePath:       sqlitePath,
-		DbType:           dbType,
-		DbHost:           dbHost,
-		DbPort:           dbPort,
-		DbUser:           dbUser,
-		DbPassword:       dbPassword,
-		DbName:           dbName,
-		MaxFileSize:      maxFileSize,
-		AllowedTypes:     allowedTypes,
-		DefaultUser:      defaultUser,
-		DefaultPass:      defaultPass,
-		JWTSecret:        jwtSecret,
-		SessionSecret:    sessionSecret,
-		ConfigSecret:     configSecret,
-		DbCaCertPath:     dbCaCertPath,
-		DbSkipCertVerify: dbSkipCertVerify,
+		Port:          port,
+		AppURL:        appURL,
+		SqlitePath:    sqlitePath,
+		MaxFileSize:   maxFileSize,
+		AllowedTypes:  allowedTypes,
+		DefaultUser:   defaultUser,
+		DefaultPass:   defaultPass,
+		JWTSecret:     jwtSecret,
+		SessionSecret: sessionSecret,
+		ConfigSecret:  configSecret,
 	}
 
 	log.Println("✅ 配置初始化完成")

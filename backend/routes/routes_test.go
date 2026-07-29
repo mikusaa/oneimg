@@ -17,7 +17,6 @@ import (
 func TestExternalAuthenticationRoutesAreRemoved(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
-		DbType:        "sqlite",
 		SqlitePath:    filepath.Join(t.TempDir(), "oneimg.db"),
 		SessionSecret: "test-session-secret",
 		ConfigSecret:  "test-config-secret-with-enough-bytes",

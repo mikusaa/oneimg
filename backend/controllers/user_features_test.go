@@ -27,7 +27,6 @@ import (
 func setupFeatureTestDB(t *testing.T) {
 	t.Helper()
 	cfg := &config.Config{
-		DbType:       "sqlite",
 		SqlitePath:   filepath.Join(t.TempDir(), "oneimg.db"),
 		ConfigSecret: "test-config-secret-with-enough-bytes",
 	}
@@ -406,7 +405,7 @@ func TestLegacyExternalAuthSchemaRemainsCompatible(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.Config{DbType: "sqlite", SqlitePath: path, ConfigSecret: "test-config-secret-with-enough-bytes"}
+	cfg := &config.Config{SqlitePath: path, ConfigSecret: "test-config-secret-with-enough-bytes"}
 	config.App = cfg
 	database.InitDB(cfg)
 	migratedDB := database.GetDB().DB
