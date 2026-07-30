@@ -16,22 +16,21 @@ import (
 )
 
 type ImageWithTags struct {
-	Id               int                          `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
-	Url              string                       `json:"url" gorm:"column:url"`
-	Thumbnail        string                       `json:"thumbnail" gorm:"column:thumbnail"`
-	Filename         string                       `json:"filename" gorm:"column:file_name"`
-	OriginalFileName string                       `json:"original_filename" gorm:"column:original_filename"`
-	FileSize         int64                        `json:"file_size" gorm:"column:file_size"`
-	MimeType         string                       `json:"mimeType" gorm:"column:mime_type"`
-	Width            int                          `json:"width" gorm:"column:width"`
-	Height           int                          `json:"height" gorm:"column:height"`
-	Storage          string                       `json:"storage" gorm:"column:storage"`
-	BucketId         int                          `json:"bucket_id" gorm:"column:bucket_id"`
-	UserId           int                          `json:"user_id" gorm:"column:user_id"`
-	CreatedAt        time.Time                    `json:"created_at" gorm:"column:created_at"`
-	UploaderRole     int                          `json:"uploader_role" gorm:"-"`
-	Tags             []models.Tags                `json:"tags" gorm:"-"`
-	StorageStatuses  []ImageStorageStatusResponse `json:"storage_statuses" gorm:"-"`
+	Id               int           `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
+	Url              string        `json:"url" gorm:"column:url"`
+	Thumbnail        string        `json:"thumbnail" gorm:"column:thumbnail"`
+	Filename         string        `json:"filename" gorm:"column:file_name"`
+	OriginalFileName string        `json:"original_filename" gorm:"column:original_filename"`
+	FileSize         int64         `json:"file_size" gorm:"column:file_size"`
+	MimeType         string        `json:"mimeType" gorm:"column:mime_type"`
+	Width            int           `json:"width" gorm:"column:width"`
+	Height           int           `json:"height" gorm:"column:height"`
+	Storage          string        `json:"storage" gorm:"column:storage"`
+	BucketId         int           `json:"bucket_id" gorm:"column:bucket_id"`
+	UserId           int           `json:"user_id" gorm:"column:user_id"`
+	CreatedAt        time.Time     `json:"created_at" gorm:"column:created_at"`
+	UploaderRole     int           `json:"uploader_role" gorm:"-"`
+	Tags             []models.Tags `json:"tags" gorm:"-"`
 }
 
 // 映射到数据库表
@@ -101,12 +100,7 @@ func GetImageList(c *gin.Context) {
 	idQuery := db.Model(&models.Image{}).Select("images.id")
 
 	bucket := c.Query("bucket")
-	if bucket != "" && bucket != "all" && bucket != "null" {
-		idQuery = idQuery.Where(
-			"EXISTS (SELECT 1 FROM image_storages WHERE image_storages.image_id = images.id AND image_storages.bucket_id = ?)",
-			bucket,
-		)
-	}
+	idQuery = applyImageBucketFilter(idQuery, bucket)
 
 	// 基础筛选：角色+权限+搜索
 	if roleFilter != "" {
@@ -258,7 +252,7 @@ func GetImageList(c *gin.Context) {
 		images[i].Url = applyPublicImageURL(setting, images[i].Storage, images[i].BucketId, images[i].Url)
 		images[i].Thumbnail = applyThumbnailURL(setting, images[i].Storage, images[i].BucketId, images[i].Thumbnail)
 	}
-	attachStorageStatuses(db, setting, images)
+	attachUploaderRoles(db, images)
 
 	// 返回结果
 	c.JSON(http.StatusOK, result.Success("ok", gin.H{
@@ -281,25 +275,16 @@ func applyImageSearch(query *gorm.DB, search string) *gorm.DB {
 	)
 }
 
-func attachStorageStatuses(db *gorm.DB, setting models.Settings, images []ImageWithTags) {
+func applyImageBucketFilter(query *gorm.DB, bucket string) *gorm.DB {
+	if bucket == "" || bucket == "all" || bucket == "null" {
+		return query
+	}
+	return query.Where("images.bucket_id = ?", bucket)
+}
+
+func attachUploaderRoles(db *gorm.DB, images []ImageWithTags) {
 	if len(images) == 0 {
 		return
-	}
-	ids := make([]int, 0, len(images))
-	imageIndex := make(map[int]int, len(images))
-	for i, img := range images {
-		ids = append(ids, img.Id)
-		imageIndex[img.Id] = i
-	}
-
-	statusMap, err := loadImageStorageStatuses(ids, setting)
-	if err != nil {
-		return
-	}
-	for imageID, statuses := range statusMap {
-		if idx, ok := imageIndex[imageID]; ok {
-			images[idx].StorageStatuses = statuses
-		}
 	}
 
 	userIDs := make([]int, 0, len(images))

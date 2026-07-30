@@ -14,8 +14,7 @@ type Settings struct {
 	SaveOriginalName bool   `gorm:"column:save_original_name;default:false" json:"save_original_name"` // 是否保存原文件名（默认不保存）
 
 	// 默认存储
-	DefaultStorage   int  `gorm:"column:default_storage;default:1" json:"default_storage"`           // 单存储模式下的默认存储
-	MultiStorageSync bool `gorm:"column:multi_storage_sync;default:false" json:"multi_storage_sync"` // 是否启用本机落盘后的多存储后台同步
+	DefaultStorage int `gorm:"column:default_storage;default:1" json:"default_storage"` // 默认存储
 
 	// 默认上传配置
 	MaxFileSize        int    `gorm:"column:max_file_size;default:10485760" json:"max_file_size"` // 文件最大上传大小

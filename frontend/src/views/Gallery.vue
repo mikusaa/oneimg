@@ -219,15 +219,6 @@
                 {{ image.width }}×{{ image.height }}
               </p>
               <p class="gallery-image-card-meta">{{ formatDate(image.created_at) }}</p>
-              <div v-if="getStorageSyncSummary(image).total > 0" class="mt-2">
-                <span
-                  class="inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
-                  :class="getStorageSyncSummary(image).badgeClass"
-                >
-                  <i :class="getStorageSyncSummary(image).icon"></i>
-                  <span class="truncate">{{ getStorageSyncSummary(image).label }}</span>
-                </span>
-              </div>
             </div>
           </div>
         </div>
@@ -347,7 +338,6 @@ import errorImg from '@/assets/images/error.webp';
 import Loading from '@/utils/loading.js'
 import Message from '@/utils/message.js'
 import PopupModal from '@/utils/popupModal.js'
-import { getStorageSyncSummary, renderStorageStatusesHtml } from '@/utils/storageStatus.js';
 import { getStoredUser, hasPermission, isSuperAdmin, ROLE_ADMIN } from '@/utils/permissions.js';
 
 // ====================== 常量定义 ======================
@@ -1312,10 +1302,6 @@ const generatePreviewContent = (image) => {
           <i class="ri-user-line"></i>
           角色: ${getRoleName(image)}
         </div>
-      </div>
-      <div class="mt-3 space-y-2">
-        <p class="text-xs font-semibold text-secondary">同步状态</p>
-        ${renderStorageStatusesHtml(image)}
       </div>
     </div>
   `;

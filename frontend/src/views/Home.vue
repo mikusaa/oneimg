@@ -230,14 +230,6 @@
                   <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <span class="result-meta-pill">{{ formatFileSize(image.file_size) }}</span>
                     <span class="result-meta-pill">{{ image.width }}×{{ image.height }}</span>
-                    <span
-                      v-if="getStorageSyncSummary(image).total > 0"
-                      class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5"
-                      :class="getStorageSyncSummary(image).badgeClass"
-                    >
-                      <i :class="getStorageSyncSummary(image).icon"></i>
-                      {{ getStorageSyncSummary(image).label }}
-                    </span>
                   </div>
                 </div>
                 <div class="flex items-center justify-end gap-1.5 sm:self-end lg:justify-end">
@@ -362,7 +354,6 @@ import TagSelector from '@/components/TagSelector.vue'
 import Loading from '@/utils/loading.js'
 import Message from '@/utils/message.js'
 import PopupModal from '@/utils/popupModal.js'
-import { getStorageSyncSummary } from '@/utils/storageStatus.js'
 
 // ====================== 常量定义 ======================
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';

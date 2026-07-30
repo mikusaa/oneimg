@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"net/http"
 	"oneimg/backend/database"
 	"oneimg/backend/models"
-	"oneimg/backend/services"
 	"oneimg/backend/utils/buckets"
 	"oneimg/backend/utils/publicurl"
 	"oneimg/backend/utils/result"
@@ -19,7 +17,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -149,7 +146,7 @@ func GetBucketsList(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, result.Error(500, "获取系统配置失败"))
 		return
 	}
-	allowedBuckets, err := resolveSingleStorageUploadBuckets(c, setting)
+	allowedBuckets, err := resolveUploadBuckets(c, setting)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, result.Error(500, "获取存储桶权限失败"))
 		return
@@ -463,7 +460,7 @@ func UpdateBuckets(c *gin.Context) {
 	c.JSON(http.StatusOK, result.Success("更新成功", bucket))
 }
 
-// DeleteBuckets 删除存储源及其副本记录，尽量保留仍有其他副本的图片主记录。
+// DeleteBuckets 删除存储源及其中的图片。
 func DeleteBuckets(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
@@ -482,48 +479,23 @@ func DeleteBuckets(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
-	defer cancel()
-	if err := services.DeleteBucketReplicas(ctx, bucket); err != nil {
-		log.Printf("删除存储桶 %d 的文件副本失败：%v", id, err)
-		c.JSON(http.StatusBadGateway, result.Error(502, "部分文件副本删除失败，存储源已保留"))
+	var storedImages []models.Image
+	if err := db.DB.Where("bucket_id = ?", id).Find(&storedImages).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, result.Error(500, "查询存储桶图片失败"))
 		return
 	}
+	for _, image := range storedImages {
+		if !deleteStoredImage(image, bucket) {
+			c.JSON(http.StatusBadGateway, result.Error(502, "部分图片物理删除失败，存储源已保留"))
+			return
+		}
+	}
 
-	err = db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var primaryImages []models.Image
-		if err := tx.Where("bucket_id = ?", id).Find(&primaryImages).Error; err != nil {
+	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("image_id IN (SELECT id FROM images WHERE bucket_id = ?)", id).Delete(&models.ImageToTags{}).Error; err != nil {
 			return err
 		}
-		for _, image := range primaryImages {
-			var replacement models.ImageStorage
-			replacementErr := tx.Where(
-				"image_id = ? AND bucket_id != ? AND status = ?",
-				image.Id, id, models.ImageStorageStatusSuccess,
-			).Order("bucket_id ASC").First(&replacement).Error
-			if replacementErr == nil {
-				if err := tx.Model(&image).Updates(map[string]any{
-					"bucket_id": replacement.BucketID,
-					"storage":   replacement.Storage,
-					"url":       replacement.URL,
-					"thumbnail": replacement.Thumbnail,
-				}).Error; err != nil {
-					return err
-				}
-				continue
-			}
-			if !errors.Is(replacementErr, gorm.ErrRecordNotFound) {
-				return replacementErr
-			}
-			if err := tx.Where("image_id = ?", image.Id).Delete(&models.ImageToTags{}).Error; err != nil {
-				return err
-			}
-			if err := tx.Delete(&image).Error; err != nil {
-				return err
-			}
-		}
-
-		if err := tx.Where("bucket_id = ?", id).Delete(&models.ImageStorage{}).Error; err != nil {
+		if err := tx.Where("bucket_id = ?", id).Delete(&models.Image{}).Error; err != nil {
 			return err
 		}
 		var users []models.User
@@ -538,7 +510,10 @@ func DeleteBuckets(c *gin.Context) {
 				}
 			}
 			if len(filtered) != len(user.Permission.Buckets) {
-				if err := tx.Model(&user).Update("permission", models.Permission{Buckets: filtered}).Error; err != nil {
+				if err := tx.Model(&user).Update("permission", models.Permission{
+					Codes:   user.Permission.Codes,
+					Buckets: filtered,
+				}).Error; err != nil {
 					return err
 				}
 			}

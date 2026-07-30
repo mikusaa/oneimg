@@ -519,7 +519,7 @@ func settingValueToInt(value any) (int, error) {
 var settingKeyPermissions = map[string]string{
 	"default_storage": "setting:upload", "public_image_domain": "setting:upload", "cdn_domain": "setting:upload",
 	"default_path": "setting:upload", "file_name": "setting:upload", "max_file_size": "setting:upload",
-	"allowed_types": "setting:upload", "multi_storage_sync": "setting:upload", "save_original_name": "setting:upload",
+	"allowed_types": "setting:upload", "save_original_name": "setting:upload",
 	"original_image": "setting:image", "save_webp": "setting:image", "thumbnail": "setting:image",
 	"main_image_quality": "setting:image", "skip_compress_formats": "setting:image",
 	"start_register":       "setting:security",

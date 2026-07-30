@@ -6,7 +6,6 @@ import (
 	"oneimg/backend/database"
 	"oneimg/backend/models"
 	"oneimg/backend/utils/result"
-	"oneimg/backend/utils/settings"
 	"strconv"
 	"strings"
 	"time"
@@ -295,11 +294,6 @@ func UpdateUserPermission(c *gin.Context) {
 		return
 	}
 
-	setting, err := settings.GetSettings()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, result.Fail(500, "读取多存储设置失败"))
-		return
-	}
 	if id == models.SuperAdminID {
 		c.JSON(http.StatusBadRequest, result.Fail(400, "不能修改超级管理员权限"))
 		return
@@ -338,17 +332,12 @@ func UpdateUserPermission(c *gin.Context) {
 	if len(uniquePermissions) > 0 {
 		var bucketCount int64
 		bucketQuery := db.Model(&models.Buckets{}).Where("id IN ?", uniquePermissions)
-		invalidMessage := "包含不存在的存储源"
-		if setting.MultiStorageSync {
-			bucketQuery = bucketQuery.Where("type <> ?", "default")
-			invalidMessage = "同步存储源必须存在且不能是本地默认存储"
-		}
 		if err := bucketQuery.Count(&bucketCount).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, result.Fail(500, "校验存储源失败"))
 			return
 		}
 		if bucketCount != int64(len(uniquePermissions)) {
-			c.JSON(http.StatusBadRequest, result.Fail(400, invalidMessage))
+			c.JSON(http.StatusBadRequest, result.Fail(400, "包含不存在的存储源"))
 			return
 		}
 	}
@@ -368,11 +357,7 @@ func UpdateUserPermission(c *gin.Context) {
 		return
 	}
 
-	message := "更新成功"
-	if setting.MultiStorageSync {
-		message = "同步存储源更新成功"
-	}
-	c.JSON(http.StatusOK, result.Success(message, nil))
+	c.JSON(http.StatusOK, result.Success("更新成功", nil))
 }
 
 // hashPassword bcrypt加密密码

@@ -14,7 +14,6 @@ import (
 	"oneimg/backend/database"
 	"oneimg/backend/middlewares"
 	"oneimg/backend/models"
-	"oneimg/backend/services"
 	"oneimg/backend/utils/buckets"
 	"oneimg/backend/utils/ftp"
 	"oneimg/backend/utils/result"
@@ -81,36 +80,7 @@ func DeleteImage(c *gin.Context) {
 		return
 	}
 
-	var deleteStatus bool
-	multiStorageDelete := false
-	setting, settingErr := settings.GetSettings()
-	if settingErr == nil && setting.MultiStorageSync {
-		multiStorageDelete = true
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
-		defer cancel()
-		if err := services.DeleteImageReplicas(ctx, image); err != nil {
-			log.Printf("多存储删除图片失败(image_id=%d): %v", image.Id, err)
-			c.JSON(http.StatusBadGateway, result.Error(502, "物理删除失败，图片记录已保留"))
-			return
-		}
-		deleteStatus = true
-	} else {
-		// 检查存储
-		switch image.Storage {
-		case "default":
-			deleteStatus = DeleteDefaultStorageImage(image)
-		case "s3":
-			deleteStatus = DeleteS3StorageImage(image, bucket)
-		case "r2":
-			deleteStatus = DeleteR2StorageImage(image, bucket)
-		case "webdav":
-			deleteStatus = DeleteWebDavStorageImage(image, bucket)
-		case "ftp":
-			deleteStatus = DeleteFtpStorageImage(image, bucket)
-		default:
-			deleteStatus = false
-		}
-	}
+	deleteStatus := deleteStoredImage(image, bucket)
 
 	// 删除数据库记录
 	if err := db.Delete(&image).Error; err != nil {
@@ -121,8 +91,8 @@ func DeleteImage(c *gin.Context) {
 		return
 	}
 
-	// 对应存储减去存储空间。多存储模式下副本删除流程已按副本扣减容量。
-	if !multiStorageDelete && image.BucketId != 1 {
+	// 对应存储减去存储空间。
+	if image.BucketId != 1 {
 		result := db.Model(&models.Buckets{}).
 			Where("id = ? AND usage >= ?", image.BucketId, image.FileSize).
 			UpdateColumn("usage", gorm.Expr("usage - ?", image.FileSize))
@@ -143,6 +113,23 @@ func DeleteImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result.Success("删除成功", nil))
+}
+
+func deleteStoredImage(image models.Image, bucket models.Buckets) bool {
+	switch image.Storage {
+	case "default":
+		return DeleteDefaultStorageImage(image)
+	case "s3":
+		return DeleteS3StorageImage(image, bucket)
+	case "r2":
+		return DeleteR2StorageImage(image, bucket)
+	case "webdav":
+		return DeleteWebDavStorageImage(image, bucket)
+	case "ftp":
+		return DeleteFtpStorageImage(image, bucket)
+	default:
+		return false
+	}
 }
 
 // 删除默认存储的图片

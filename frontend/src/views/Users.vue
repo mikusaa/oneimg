@@ -197,7 +197,7 @@
                 class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200/80 dark:border-white/10"
               >
                 <i class="ri-folder-3-line text-xs"></i>
-                {{ getUserBucketCount(user) }} {{ multiStorageSync ? '个同步源' : '个存储桶' }}
+                {{ getUserBucketCount(user) }} 个存储桶
               </span>
 			  <span v-if="user.role === RoleAdmin" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20">
 				<i class="ri-shield-keyhole-line text-xs"></i>{{ getUserCodeCount(user) }} 个权限
@@ -237,7 +237,7 @@
             @click="openProfileModal(user)"
           >
             <i class="ri-shield-keyhole-line text-base"></i>
-            {{ multiStorageSync ? '设置同步源' : '设置权限' }}
+            设置权限
           </button>
 			  <button v-if="canResetPassword"
             class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition text-left"
@@ -361,7 +361,6 @@ const PERMISSION_GROUPS = [
 const users = ref([])
 const total = ref(0)
 const buckets = ref([]);
-const multiStorageSync = ref(false)
 const totalPages = ref(0)
 const page = ref(1)
 const loading = ref(true)
@@ -398,9 +397,7 @@ function formatDate(dateStr) {
 }
 
 function getUserBucketCount(user) {
-  const userBucketIds = user.permission?.buckets || []
-  if (!multiStorageSync.value) return userBucketIds.length
-  return userBucketIds.filter(id => buckets.value.some(bucket => bucket.id === id && bucket.type !== 'default')).length
+  return (user.permission?.buckets || []).length
 }
 
 function getUserCodeCount(user) {
@@ -659,7 +656,7 @@ function openDeleteModal(user) {
 }
 
 function openProfileModal(user) {
-  const bucketOptions = multiStorageSync.value ? buckets.value.filter(item => item.type !== 'default') : buckets.value
+  const bucketOptions = buckets.value
   const selectedIds = [...(user.permission?.buckets || [])].filter(id => bucketOptions.some(item => item.id === id))
   const selectedCodes = [...(user.permission?.codes || [])]
 
@@ -684,7 +681,7 @@ function openProfileModal(user) {
     content: `<div class="max-h-[65vh] space-y-6 overflow-y-auto pr-1">
       <p class="text-sm text-slate-600 dark:text-slate-300">设置用户 <strong>${escapeHtml(user.username)}</strong> 的功能与存储权限。</p>
       ${user.role === RoleAdmin ? `<section><h4 class="mb-3 font-medium">功能权限</h4><div id="codeCardWrap" class="space-y-4 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">${renderCodeCards()}</div></section>` : ''}
-      <section><h4 class="mb-3 font-medium">${multiStorageSync.value ? '后台同步存储源' : '可用存储桶'}</h4><div id="bucketCardWrap" class="flex flex-wrap gap-2">${renderBucketCards()}</div></section>
+      <section><h4 class="mb-3 font-medium">可用存储桶</h4><div id="bucketCardWrap" class="flex flex-wrap gap-2">${renderBucketCards()}</div></section>
     </div>`,
     buttons: [
       { text: '取消', type: 'default', callback: () => modal.close() },
@@ -933,25 +930,10 @@ const GetBuckets = async () => {
   }
 };
 
-const getStorageMode = async () => {
-  try {
-    const response = await fetch('/api/uploadConfig', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-      }
-    })
-    const result = await response.json()
-    multiStorageSync.value = response.ok && result.code === 200 && result.data?.multi_storage_sync === true
-  } catch (error) {
-    console.error('获取多存储模式失败:', error)
-    multiStorageSync.value = false
-  }
-}
-
 onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
   document.addEventListener('keydown', handleDropdownKeydown)
-  await Promise.all([getStorageMode(), GetBuckets()])
+  await GetBuckets()
   fetchUsers()
 })
 

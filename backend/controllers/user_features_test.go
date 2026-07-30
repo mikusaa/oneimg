@@ -287,6 +287,9 @@ func TestSettingsResponseKeysHavePermissionGroups(t *testing.T) {
 		if lowerKey == "tourist" {
 			t.Errorf("removed guest setting %q is still exposed", key)
 		}
+		if lowerKey == "multi_storage_sync" {
+			t.Errorf("removed storage sync setting %q is still exposed", key)
+		}
 		if key == "id" {
 			continue
 		}

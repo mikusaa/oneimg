@@ -14,7 +14,6 @@ import (
 	"oneimg/backend/database"
 	"oneimg/backend/interfaces"
 	"oneimg/backend/models"
-	"oneimg/backend/services"
 	"oneimg/backend/utils/result"
 	"oneimg/backend/utils/settings"
 	"oneimg/backend/utils/uploads"
@@ -59,11 +58,6 @@ func UploadImages(c *gin.Context) {
 		uc.Fail(500, "获取上传配置失败：%v", err)
 		return
 	}
-	if setting.MultiStorageSync {
-		uploadImagesMultiStorage(c, setting, existingTags)
-		return
-	}
-
 	// 获取存储ID
 	var bucketID int
 	bucketIDStr := c.PostForm("bucket_id")
@@ -78,7 +72,7 @@ func UploadImages(c *gin.Context) {
 		bucketID = setting.DefaultStorage
 	}
 
-	allowed, err := canUseSingleStorageUploadBucket(c, setting, bucketID)
+	allowed, err := canUseUploadBucket(c, setting, bucketID)
 	if err != nil {
 		uc.Fail(500, "校验存储权限失败：%v", err)
 		return
@@ -201,138 +195,6 @@ func UploadImages(c *gin.Context) {
 		responseResult := *fileResult
 		responseResult.URL = applyPublicImageURL(setting, buckets.Type, bucketID, fileResult.URL)
 		responseResult.ThumbnailURL = applyThumbnailURL(setting, buckets.Type, bucketID, fileResult.ThumbnailURL)
-		uploadResults = append(uploadResults, responseResult)
-
-		successCount++
-	}
-
-	writeUploadBatchResult(c, uc, uploadResults, successCount)
-}
-
-func uploadImagesMultiStorage(c *gin.Context, setting models.Settings, existingTags []models.Tags) {
-	uc := uploads.NewUploadContext(c)
-	db := database.GetDB()
-
-	localBucket, syncBuckets, err := resolveUploadBuckets(c)
-	if err != nil {
-		uc.Fail(500, "获取用户同步存储源失败：%v", err)
-		return
-	}
-
-	files, err := uc.ParseAndValidateFiles()
-	if err != nil {
-		uc.Fail(400, "文件解析失败")
-		return
-	}
-
-	uploader, err := uc.GetStorageUploader(&setting, &localBucket)
-	if err != nil {
-		uc.Fail(500, "初始化本机存储失败：%s", err.Error())
-		return
-	}
-
-	uploadResults := make([]interfaces.ImageUploadResult, 0, len(files))
-	successCount := 0
-
-	for _, file := range files {
-		fileResult, err := uploader.Upload(c, &setting, &localBucket, file)
-		if err != nil {
-			uploadResults = append(uploadResults, failedUploadResult(file.Filename, err))
-			continue
-		}
-
-		imageModel := models.Image{Id: fileResult.ID}
-		if !fileResult.Duplicate {
-			imageModel = models.Image{
-				Url:              fileResult.URL,
-				Thumbnail:        fileResult.ThumbnailURL,
-				FileName:         fileResult.FileName,
-				OriginalFileName: fileResult.OriginalFileName,
-				FileSize:         fileResult.FileSize,
-				MimeType:         fileResult.MimeType,
-				Width:            fileResult.Width,
-				Height:           fileResult.Height,
-				Storage:          fileResult.Storage,
-				BucketId:         localBucket.Id,
-				UserId:           c.GetInt("user_id"),
-				ContentHash:      fileResult.ContentHash,
-			}
-
-			now := time.Now()
-			err = db.DB.Transaction(func(tx *gorm.DB) error {
-				if err := tx.Create(&imageModel).Error; err != nil {
-					return err
-				}
-				fileResult.ID = imageModel.Id
-
-				localStatus := models.ImageStorage{
-					ImageID:       imageModel.Id,
-					BucketID:      localBucket.Id,
-					Storage:       localBucket.Type,
-					Status:        models.ImageStorageStatusSuccess,
-					URL:           fileResult.URL,
-					Thumbnail:     fileResult.ThumbnailURL,
-					FileSize:      fileResult.FileSize,
-					ThumbnailSize: fileResult.ThumbnailSize,
-					SyncedAt:      &now,
-				}
-				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&localStatus).Error; err != nil {
-					return err
-				}
-
-				for _, bucket := range syncBuckets {
-					storageStatus := models.ImageStorage{
-						ImageID:       imageModel.Id,
-						BucketID:      bucket.Id,
-						Storage:       bucket.Type,
-						Status:        models.ImageStorageStatusPending,
-						URL:           fileResult.URL,
-						Thumbnail:     fileResult.ThumbnailURL,
-						FileSize:      fileResult.FileSize,
-						ThumbnailSize: fileResult.ThumbnailSize,
-					}
-					if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&storageStatus).Error; err != nil {
-						return err
-					}
-				}
-
-				if len(existingTags) > 0 {
-					imageTagRelations := make([]models.ImageToTags, 0, len(existingTags))
-					for _, tag := range existingTags {
-						imageTagRelations = append(imageTagRelations, models.ImageToTags{
-							ImageId: imageModel.Id,
-							TagId:   tag.Id,
-						})
-					}
-					if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&imageTagRelations).Error; err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-			if err != nil {
-				cleanupLocalUpload(imageModel)
-				uploadResults = append(uploadResults, failedUploadResult(file.Filename, fmt.Errorf("保存文件记录失败：%w", err)))
-				continue
-			}
-			services.WakeStorageSyncWorker()
-		}
-
-		if fileResult.Duplicate && len(existingTags) > 0 && imageModel.Id > 0 {
-			var imageTagRelations []models.ImageToTags
-			for _, tag := range existingTags {
-				imageTagRelations = append(imageTagRelations, models.ImageToTags{
-					ImageId: imageModel.Id,
-					TagId:   tag.Id,
-				})
-			}
-			db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&imageTagRelations)
-		}
-
-		responseResult := *fileResult
-		responseResult.ID = imageModel.Id
-		responseResult.URL = applyPublicImageURL(setting, localBucket.Type, localBucket.Id, fileResult.URL)
-		responseResult.ThumbnailURL = applyThumbnailURL(setting, localBucket.Type, localBucket.Id, fileResult.ThumbnailURL)
 		uploadResults = append(uploadResults, responseResult)
 
 		successCount++
@@ -713,7 +575,7 @@ func GetUploadConfig(c *gin.Context) {
 	}
 
 	setting, _ := settings.GetSettings()
-	allowedBuckets, bucketErr := resolveSingleStorageUploadBuckets(c, setting)
+	allowedBuckets, bucketErr := resolveUploadBuckets(c, setting)
 	if bucketErr != nil {
 		c.JSON(http.StatusInternalServerError, result.Error(500, "获取存储桶权限失败"))
 		return
@@ -790,35 +652,23 @@ func UploadImagesByURL(c *gin.Context) {
 		bucketID = setting.DefaultStorage
 	}
 
+	allowed, err := canUseUploadBucket(c, setting, bucketID)
+	if err != nil {
+		uc.Fail(500, "校验存储权限失败：%v", err)
+		return
+	}
+	if !allowed {
+		uc.Fail(403, "无权使用该存储源")
+		return
+	}
 	var buckets models.Buckets
-	var syncBuckets []models.Buckets
-	if setting.MultiStorageSync {
-		localBucket, targets, err := resolveUploadBuckets(c)
-		if err != nil {
-			uc.Fail(500, "获取用户同步存储源失败：%v", err)
+	if err := db.DB.Where("id = ?", bucketID).First(&buckets).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			uc.Fail(400, "存储配置不存在")
 			return
 		}
-		buckets = localBucket
-		syncBuckets = targets
-		bucketID = localBucket.Id
-	} else {
-		allowed, err := canUseSingleStorageUploadBucket(c, setting, bucketID)
-		if err != nil {
-			uc.Fail(500, "校验存储权限失败：%v", err)
-			return
-		}
-		if !allowed {
-			uc.Fail(403, "无权使用该存储源")
-			return
-		}
-		if err := db.DB.Where("id = ?", bucketID).First(&buckets).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				uc.Fail(400, "存储配置不存在")
-				return
-			}
-			uc.Fail(500, "存储配置查询失败：%v", err)
-			return
-		}
+		uc.Fail(500, "存储配置查询失败：%v", err)
+		return
 	}
 
 	// 下载图片
@@ -916,51 +766,14 @@ func UploadImagesByURL(c *gin.Context) {
 			UserId:           c.GetInt("user_id"),
 			ContentHash:      fileResult.ContentHash,
 		}
-		err := db.DB.Transaction(func(tx *gorm.DB) error {
-			if err := tx.Create(&imageModel).Error; err != nil {
-				return err
+		if err := db.DB.Create(&imageModel).Error; err != nil {
+			if buckets.Type == uploads.DefaultStorageType {
+				cleanupLocalUpload(imageModel)
 			}
-			now := time.Now()
-			localStatus := models.ImageStorage{
-				ImageID:       imageModel.Id,
-				BucketID:      buckets.Id,
-				Storage:       buckets.Type,
-				Status:        models.ImageStorageStatusSuccess,
-				URL:           fileResult.URL,
-				Thumbnail:     fileResult.ThumbnailURL,
-				FileSize:      fileResult.FileSize,
-				ThumbnailSize: fileResult.ThumbnailSize,
-				SyncedAt:      &now,
-			}
-			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&localStatus).Error; err != nil {
-				return err
-			}
-			for _, bucket := range syncBuckets {
-				status := models.ImageStorage{
-					ImageID:       imageModel.Id,
-					BucketID:      bucket.Id,
-					Storage:       bucket.Type,
-					Status:        models.ImageStorageStatusPending,
-					URL:           fileResult.URL,
-					Thumbnail:     fileResult.ThumbnailURL,
-					FileSize:      fileResult.FileSize,
-					ThumbnailSize: fileResult.ThumbnailSize,
-				}
-				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&status).Error; err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			cleanupLocalUpload(imageModel)
 			uc.Fail(500, "保存文件记录失败：%v", err)
 			return
 		}
 		fileResult.ID = imageModel.Id
-		if setting.MultiStorageSync {
-			services.WakeStorageSyncWorker()
-		}
 	}
 
 	// 更新容量

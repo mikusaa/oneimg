@@ -51,24 +51,6 @@
                                     </select>
                                     <p class="field-hint">普通用户始终可使用默认存储，其他存储按用户权限开放。</p>
                                 </div>
-
-                                <div class="settings-toggle-field">
-                                    <div>
-                                        <p class="setting-row-title">多存储后台同步</p>
-                                        <p class="setting-row-hint">先保存到本地，再按用户权限异步同步到远端存储。</p>
-                                    </div>
-                                    <label class="settings-switch" title="多存储后台同步">
-                                        <input
-                                            v-model="systemSettings.multi_storage_sync"
-                                            :data-save-state="saveStates.multi_storage_sync"
-                                            type="checkbox"
-                                            class="sr-only peer"
-                                            @change="handleSwitchChange('multi_storage_sync', systemSettings.multi_storage_sync)"
-                                        >
-                                        <span class="switch-track"></span>
-                                        <span class="switch-thumb"></span>
-                                    </label>
-                                </div>
                             </div>
                         </section>
 
@@ -551,7 +533,6 @@ const systemSettings = reactive({
     start_api: false,
     save_original_name: false,
     default_storage: 1,
-    multi_storage_sync: false,
     max_file_size: 10485760,
     allowed_types: 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml',
     main_image_quality: 85,

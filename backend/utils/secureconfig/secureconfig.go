@@ -77,7 +77,6 @@ func SanitizeSettingsForResponse(setting models.Settings) map[string]any {
 		"api_token_configured":  strings.TrimSpace(setting.APITokenHash) != "",
 		"save_original_name":    setting.SaveOriginalName,
 		"default_storage":       setting.DefaultStorage,
-		"multi_storage_sync":    setting.MultiStorageSync,
 		"max_file_size":         setting.MaxFileSize,
 		"allowed_types":         setting.AllowedTypes,
 		"main_image_quality":    setting.MainImageQuality,
