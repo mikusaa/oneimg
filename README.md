@@ -1,28 +1,19 @@
-# 初春图床系统
+# OneImg
 
-一个功能完整的现代化图床管理系统，基于 Vue.js 3 + Go 构建，支持剪贴板上传等功能。
+基于 [onexru/oneimg](https://github.com/onexru/oneimg) 维护的个人部署分支，面向个人图床和受控多账号使用。
 
-## 开发者
+## 主要功能
 
-- [onexru](https://github.com/onexru)
-- [雾创岛](https://www.tr0.cn)
-- [打赏赞助](https://www.cv0.cn/donate)
-- [QQ群](https://qm.qq.com/q/lzT9IDkKVG)
+- 支持本地文件、剪贴板、拖拽和图片 URL 上传，可批量处理上传任务
+- 支持本地、S3/R2、WebDAV 和 FTP 存储；本地可配置 CDN 域名，S3/R2 可配置图片直链域名
+- 支持 WebP 转换、主图压缩、缩略图生成和动态 WebP 尺寸识别
+- 使用内容哈希跳过重复图片，记录原始文件名并支持文件名、URL 和哈希搜索
+- 支持标签筛选与管理、批量复制 URL/Markdown/HTML/BBCode，以及历史本地图片导入
+- 支持多账号、开放注册和管理员细粒度权限，数据统一存储在 SQLite
+- 支持密码与 Passkey 登录，一个账号可绑定多个 Passkey
+- 支持浅色、深色和跟随设备主题，可在桌面端和移动端使用
 
-## API文档
-- [API文档](https://www.tr0.cn/oneimgapi/)
-
-## Demo
-[初春图床v3.0](https://www.ip6s.com)
-
-## 预览
-![18bce5ad46f261fb288.webp](https://eta.im/uploads/2026/06/18bce5ad46f261fb288.webp)
-![18bce5d81ad53298181.webp](https://eta.im/uploads/2026/06/18bce5d81ad53298181.webp)
-![18bce5e035f58315808.webp](https://eta.im/uploads/2026/06/18bce5e035f58315808.webp)
-![18bce6194f707b25401.webp](https://eta.im/uploads/2026/06/18bce6194f707b25401.webp)
-![18bce624c55e939e703.webp](https://eta.im/uploads/2026/06/18bce624c55e939e703.webp)
-
-**默认账号密码**
+## 默认账号
 
 - 用户名：`admin`
 - 密码：`123456`
@@ -90,6 +81,22 @@ GHCR 镜像同时提供 `linux/amd64` 和 `linux/arm64` 架构。
 
 备份时应同时备份 `data` 和 `uploads`。其中 `data/.env` 内的 `CONFIG_SECRET` 用于加密 Passkey 凭据和其他敏感配置，丢失或改变后已有加密数据将无法读取。
 
+### 导入历史图片
+
+`import-local` 可以将 `uploads` 中已有的图片登记到图库。建议先执行预览：
+
+```bash
+docker compose run --rm oneimg ./main import-local --root /app/uploads --dry-run
+```
+
+确认统计结果后正式导入：
+
+```bash
+docker compose run --rm oneimg ./main import-local --root /app/uploads
+```
+
+默认归属用户和存储桶均为 `1`，图片时间取文件修改时间。可使用 `--user-id`、`--bucket-id`、`--date-source` 和 `--update-existing-date` 调整；导入过程不会移动或重命名原图。
+
 ### 自定义配置
 
 Compose 模板会从项目根目录的 `.env` 读取变量并传入容器。例如生产环境可创建以下配置：
@@ -146,42 +153,3 @@ Passkey 功能已启用 (RP ID: oneimg.example.com)
 配置或密钥无效时，密码登录不会受影响，启动日志会显示 `Passkey 功能已禁用` 及具体原因。
 
 登录后可在“账户设置”中添加、重命名和删除 Passkey。添加和删除时需要验证当前密码，每个账号最多绑定 10 个 Passkey；密码始终保留作为恢复方式。登录页会在服务端配置有效且浏览器支持 WebAuthn 时显示“使用 Passkey”。具有对应权限的管理员也可以在用户管理页撤销其他用户的全部 Passkey。
-
-## 功能特性
-
-### 多存储支持
-- 本地存储
-- S3 兼容存储（R2、OSS等）
-- WebDAV 存储
-- FTP 存储
-
-### 安全认证
-- Session 会话管理
-- 密码加密存储
-- Passkey 登录与多设备凭据管理
-- 会话超时保护
-
-### 图片上传
-- **剪贴板粘贴直接上传** - 支持 Ctrl+V 粘贴上传
-- 拖拽上传支持
-- 批量文件选择上传
-- 支持多种图片格式 (JPEG, PNG, GIF, WebP, SVG, BMP)
-- 文件大小限制和格式验证
-- 上传进度显示
-
-### 图片管理
-- 图片预览和详情查看
-- 复制链接功能
-- 图片信息展示
-
-### 数据统计
-- 仪表板概览
-- 存储空间统计
-- 实时数据更新
-
-### 用户界面
-- 现代化设计风格
-- 响应式布局 (支持移动端)
-- 深色/浅色主题
-- 流畅的动画效果
-- 直观的操作体验
