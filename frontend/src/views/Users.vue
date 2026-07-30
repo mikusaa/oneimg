@@ -69,17 +69,17 @@
       </span>
     </div>
 
-    <!-- 加载骨架 -->
+    <!-- 首次加载 -->
     <div
-      v-if="loading"
-      class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 mt-4"
+      v-if="loading && users.length === 0"
+      class="flex min-h-40 items-center justify-center"
     >
       <div
-        v-for="i in 8"
-        :key="i"
-        class="section-card h-[190px] animate-pulse overflow-hidden"
+        v-if="showLoading"
+        class="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"
       >
-        <div class="h-full rounded-lg bg-slate-200 dark:bg-slate-800"></div>
+        <i class="ri-loader-4-line animate-spin text-base" aria-hidden="true"></i>
+        <span>正在加载用户</span>
       </div>
     </div>
 
@@ -382,6 +382,8 @@ const buckets = ref([]);
 const totalPages = ref(0)
 const page = ref(1)
 const loading = ref(true)
+const showLoading = ref(false)
+const loadingTimer = ref(null)
 const searchInput = ref('')
 const debouncedSearch = ref('')
 const roleFilter = ref('all')
@@ -496,6 +498,11 @@ function onRoleFilterChange() {
 
 async function fetchUsers() {
   loading.value = true
+  showLoading.value = false
+  if (loadingTimer.value) clearTimeout(loadingTimer.value)
+  loadingTimer.value = setTimeout(() => {
+    if (loading.value) showLoading.value = true
+  }, 180)
   try {
     const params = new URLSearchParams({
       page: String(page.value),
@@ -520,6 +527,9 @@ async function fetchUsers() {
     console.error('获取用户列表失败:', err)
     message.error('网络错误，请重试')
   } finally {
+    if (loadingTimer.value) clearTimeout(loadingTimer.value)
+    loadingTimer.value = null
+    showLoading.value = false
     loading.value = false
   }
 }
@@ -994,15 +1004,16 @@ const GetBuckets = async () => {
   }
 };
 
-onMounted(async () => {
+onMounted(() => {
   document.addEventListener('click', handleClickOutside)
   document.addEventListener('keydown', handleDropdownKeydown)
-  await GetBuckets()
-  fetchUsers()
+  void GetBuckets()
+  void fetchUsers()
 })
 
 onUnmounted(() => {
   if (searchTimer.value) clearTimeout(searchTimer.value)
+  if (loadingTimer.value) clearTimeout(loadingTimer.value)
   document.removeEventListener('click', handleClickOutside)
   document.removeEventListener('keydown', handleDropdownKeydown)
   dropdownRefs.value.clear()
