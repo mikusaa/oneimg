@@ -473,6 +473,32 @@ const visiblePages = computed(() => {
 
 const getImageAltText = (image) => image?.original_filename || image?.filename || '图片';
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+const getPreviewFileName = image => image?.original_filename || image?.filename || '图片预览';
+const getImageSizeSummary = image => {
+  const originalSize = Number(image?.original_file_size || 0);
+  const savedSize = Number(image?.file_size || 0);
+  const savedLabel = formatFileSize(savedSize);
+
+  if (originalSize <= 0) return `原图大小未知 · 保存后 ${savedLabel}`;
+
+  const originalLabel = formatFileSize(originalSize);
+  if (savedSize === originalSize) {
+    return `原图 ${originalLabel} · 保存后 ${savedLabel}（保留原图）`;
+  }
+
+  const retained = savedSize / originalSize * 100;
+  if (savedSize < originalSize) {
+    return `原图 ${originalLabel} · 压缩后 ${savedLabel}（节省 ${(100 - retained).toFixed(1)}%）`;
+  }
+  return `原图 ${originalLabel} · 保存后 ${savedLabel}（原图的 ${retained.toFixed(1)}%）`;
+};
+const getSpotlightDescription = image => [
+  getPreviewFileName(image),
+  `尺寸: ${image?.width || '未知'}×${image?.height || '未知'}`,
+  getImageSizeSummary(image),
+  `上传日期: ${formatDate(image?.created_at)}`,
+  `角色: ${getRoleName(image)}`
+].join(' | ');
 
 const canManageImage = (image, permission) => {
   if (!image) return false;
@@ -1133,7 +1159,7 @@ const openPreview = (image) => {
   const previewContent = generatePreviewContent(image);
   
   const customModal = new PopupModal({
-    title: image.filename,
+    title: escapeHtml(getPreviewFileName(image)),
     content: previewContent,
     type: 'default',
     buttons: [
@@ -1165,6 +1191,8 @@ const openPreview = (image) => {
  */
 const generatePreviewContent = (image) => {
   const altText = escapeHtml(getImageAltText(image));
+  const sizeSummary = escapeHtml(getImageSizeSummary(image));
+  const spotlightDescription = escapeHtml(getSpotlightDescription(image));
   const canDelete = canManageImage(image, 'image:delete');
   const canAddTag = canManageImage(image, 'image:tag:add');
   const canDeleteTag = canManageImage(image, 'image:tag:delete');
@@ -1223,7 +1251,7 @@ const generatePreviewContent = (image) => {
         <a 
           class="spotlight min-w-full max-w-full min-h-[260px] block" 
           href="${getFullUrl(image.url)}" 
-          data-description="尺寸: ${image.width || '未知'}×${image.height || '未知'} | 大小: ${formatFileSize(image.file_size || 0)} | 上传日期：${formatDate(image.created_at)} | 角色：${getRoleName(image)}"
+          data-description="${spotlightDescription}"
         >
           <div class="relative max-w-full w-fill max-h-[360px] min-h-[260px] rounded-lg overflow-hidden animate-pulse flex items-center justify-center">
             <div class="absolute inset-0 flex items-center justify-center">
@@ -1288,11 +1316,11 @@ const generatePreviewContent = (image) => {
         </div>
         <div class="flex items-center gap-1.5">
           <i class="ri-file-text-line w-3.5 text-center"></i>
-          原始: ${escapeHtml(image.original_filename || image.filename || '未知')}
+          原始文件名: ${escapeHtml(image.original_filename || image.filename || '未知')}
         </div>
         <div class="flex items-center gap-1.5">
           <i class="ri-image-line w-3.5 text-center"></i>
-          大小: ${formatFileSize(image.file_size || 0)}
+          ${sizeSummary}
         </div>
         <div class="flex items-center gap-1.5">
           <i class="ri-hard-drive-3-line"></i>

@@ -207,13 +207,15 @@ func TestImportSkipsExistingImageURL(t *testing.T) {
 	tmp := t.TempDir()
 	root := filepath.Join(tmp, "uploads")
 	path := filepath.Join(root, "2026", "07", "a.jpg")
-	writeFile(t, path, []byte{})
+	fileBytes := []byte("existing local image")
+	writeFile(t, path, fileBytes)
 
 	db := testDB(t)
 	if err := db.Create(&models.Image{
 		Url:              "/uploads/2026/07/a.jpg",
 		FileName:         "a.jpg",
 		OriginalFileName: "a.jpg",
+		OriginalFileSize: 0,
 		FileSize:         1,
 		BucketId:         1,
 		UserId:           1,
@@ -227,14 +229,21 @@ func TestImportSkipsExistingImageURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if summary.SkippedExisting != 1 || summary.Imported != 0 {
-		t.Fatalf("summary = %+v, want skipped existing only", summary)
+	if summary.Updated != 1 || summary.Imported != 0 {
+		t.Fatalf("summary = %+v, want original size backfill only", summary)
 	}
 
 	var count int64
 	db.Model(&models.Image{}).Count(&count)
 	if count != 1 {
 		t.Fatalf("image count = %d, want 1", count)
+	}
+	var imageModel models.Image
+	if err := db.First(&imageModel).Error; err != nil {
+		t.Fatal(err)
+	}
+	if imageModel.OriginalFileSize != int64(len(fileBytes)) {
+		t.Fatalf("original_file_size = %d, want %d", imageModel.OriginalFileSize, len(fileBytes))
 	}
 }
 
@@ -274,6 +283,9 @@ func TestImportBackfillsExistingContentHash(t *testing.T) {
 	}
 	if imageModel.OriginalFileName != "a.jpg" {
 		t.Fatalf("OriginalFileName = %q, want a.jpg", imageModel.OriginalFileName)
+	}
+	if imageModel.OriginalFileSize != int64(len(fileBytes)) {
+		t.Fatalf("OriginalFileSize = %d, want %d", imageModel.OriginalFileSize, len(fileBytes))
 	}
 }
 
@@ -357,6 +369,9 @@ func TestImportOrdinaryImagesGenerateWebPThumbnails(t *testing.T) {
 			}
 			if imageModel.OriginalFileName != tt.file {
 				t.Fatalf("original_filename = %q, want %q", imageModel.OriginalFileName, tt.file)
+			}
+			if imageModel.OriginalFileSize != int64(len(tt.data)) {
+				t.Fatalf("original_file_size = %d, want %d", imageModel.OriginalFileSize, len(tt.data))
 			}
 			thumbPath := filepath.Join(dataRoot, filepath.FromSlash(imageModel.Thumbnail))
 			thumbBytes, err := os.ReadFile(thumbPath)

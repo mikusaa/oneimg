@@ -32,7 +32,9 @@ const (
 	ThumbnailMaxWidth      = 300
 	ThumbnailMaxHeight     = 300
 	ThumbnailQuality       = 80
-	CompressSizeThreshold  = 1024 * 1024 // 1MB
+	MinWebPSavingsBytes    = 32 * 1024
+	MinWebPSavingsRatio    = 0.05
+	SlowProcessingDuration = 2 * time.Second
 )
 
 // 特殊格式常量
@@ -152,6 +154,8 @@ func (s *ImageService) ProcessImage(
 	setting models.Settings,
 	userRole int,
 ) (*ProcessedImage, error) {
+	processingStarted := time.Now()
+
 	// 1. 读取文件内容（一次性读取，避免多次IO）
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
@@ -162,7 +166,9 @@ func (s *ImageService) ProcessImage(
 	originalFileName := header.Filename
 
 	// 2. 解码图片（获取原图信息）
+	decodeStarted := time.Now()
 	img, format, err := s.decodeImage(bytes.NewReader(fileBytes), mimeType) // 新增MIME参数
+	decodeDuration := time.Since(decodeStarted)
 	if err != nil {
 		if s.shouldKeepOriginalOnDecodeError(formatFromFilename(originalFileName), mimeType, setting.SkipCompressFormat) {
 			return s.buildSkippedImage(fileBytes, originalFileName, mimeType, setting, userRole), nil
@@ -177,9 +183,11 @@ func (s *ImageService) ProcessImage(
 		width, height = bounds.Dx(), bounds.Dy()
 	}
 	// 4. 处理主图片（压缩/格式转换）
+	mainImageStarted := time.Now()
 	processedBytes, finalFormat, finalMimeType, err := s.processMainImage(
 		fileBytes, img, format, mimeType, header.Size, setting,
 	)
+	mainImageDuration := time.Since(mainImageStarted)
 	if err != nil {
 		return nil, fmt.Errorf("process main image failed: %w", err)
 	}
@@ -188,7 +196,9 @@ func (s *ImageService) ProcessImage(
 	finalExt := extensionForImage(finalFormat, finalMimeType)
 
 	// 6. 生成缩略图。缩略图仅作后台快速预览，统一生成小 WebP；不可生成时留空。
+	thumbnailStarted := time.Now()
 	thumbnailBytes, err := s.generateThumbnail(img, finalFormat, finalMimeType)
+	thumbnailDuration := time.Since(thumbnailStarted)
 	if err != nil {
 		if !errors.Is(err, ErrSVGThumbnail) {
 			log.Printf("generate thumbnail failed: %v", err)
@@ -200,7 +210,7 @@ func (s *ImageService) ProcessImage(
 	fileName := s.buildOutputFileName(originalFileName, finalExt, setting, userRole)
 
 	// 8. 组装返回结果
-	return &ProcessedImage{
+	processedImage := &ProcessedImage{
 		OriginalBytes:   fileBytes,
 		CompressedBytes: processedBytes,
 		ThumbnailBytes:  thumbnailBytes,
@@ -211,7 +221,22 @@ func (s *ImageService) ProcessImage(
 		OutputExt:       finalExt,
 		UniqueFileName:  fileName,
 		ContentHash:     HashBytes(processedBytes),
-	}, nil
+	}
+	if totalDuration := time.Since(processingStarted); totalDuration >= SlowProcessingDuration {
+		logSlowImageProcessing(
+			originalFileName,
+			width,
+			height,
+			decodeDuration,
+			mainImageDuration,
+			thumbnailDuration,
+			totalDuration,
+			len(fileBytes),
+			len(processedBytes),
+			finalFormat,
+		)
+	}
+	return processedImage, nil
 }
 
 func HashBytes(data []byte) string {
@@ -224,7 +249,7 @@ func (s *ImageService) processMainImage(
 	fileBytes []byte,
 	img image.Image,
 	format, mimeType string,
-	fileSize int64,
+	_ int64,
 	setting models.Settings,
 ) ([]byte, string, string, error) {
 	finalMimeType := normalizeMimeType(format, mimeType)
@@ -239,36 +264,55 @@ func (s *ImageService) processMainImage(
 		return fileBytes, format, finalMimeType, nil
 	}
 
-	quality := normalizeMainImageQuality(setting.MainImageQuality)
-
-	// WebP格式处理
-	if strings.ToLower(format) == "webp" {
-		if fileSize <= CompressSizeThreshold {
-			return fileBytes, "webp", "image/webp", nil
-		}
-		compressed, err := s.compressWebP(img, quality)
-		if err != nil {
-			return nil, "", "", fmt.Errorf("compress webp: %w", err)
-		}
-		return compressed, "webp", "image/webp", nil
+	// 未开启 WebP 时保持原始主图；缩略图仍由独立流程生成。
+	if !setting.SaveWebp {
+		return fileBytes, format, finalMimeType, nil
 	}
 
-	// 需要转换为WebP
-	if setting.SaveWebp {
-		webpData, err := s.convertToWebP(img, quality)
-		if err != nil {
-			return nil, "", "", fmt.Errorf("convert to webp: %w", err)
-		}
-		log.Println("转换webp")
-		return webpData, "webp", "image/webp", nil
-	}
-
-	// 默认进行压缩
-	compressed, err := s.compressWebP(img, quality)
+	webpData, err := s.convertToWebP(img, normalizeMainImageQuality(setting.MainImageQuality))
 	if err != nil {
-		return nil, "", "", fmt.Errorf("compress webp: %w", err)
+		return nil, "", "", fmt.Errorf("convert to webp: %w", err)
 	}
-	return compressed, "webp", "image/webp", nil
+	if !shouldUseWebP(fileBytes, webpData) {
+		return fileBytes, format, finalMimeType, nil
+	}
+	return webpData, "webp", "image/webp", nil
+}
+
+func shouldUseWebP(original, encoded []byte) bool {
+	if len(original) == 0 || len(encoded) >= len(original) {
+		return false
+	}
+	savedBytes := len(original) - len(encoded)
+	savedRatio := float64(savedBytes) / float64(len(original))
+	return savedBytes >= MinWebPSavingsBytes && savedRatio >= MinWebPSavingsRatio
+}
+
+func logSlowImageProcessing(
+	fileName string,
+	width, height int,
+	decodeDuration, mainImageDuration, thumbnailDuration, totalDuration time.Duration,
+	originalSize, finalSize int,
+	finalFormat string,
+) {
+	retainedPercent := 100.0
+	if originalSize > 0 {
+		retainedPercent = float64(finalSize) / float64(originalSize) * 100
+	}
+	log.Printf(
+		"图片处理较慢: 文件=%q 尺寸=%dx%d 解码=%s 主图=%s 缩略图=%s 总计=%s 原图=%dB 保存后=%dB 占比=%.1f%% 格式=%s",
+		fileName,
+		width,
+		height,
+		decodeDuration.Round(time.Millisecond),
+		mainImageDuration.Round(time.Millisecond),
+		thumbnailDuration.Round(time.Millisecond),
+		totalDuration.Round(time.Millisecond),
+		originalSize,
+		finalSize,
+		retainedPercent,
+		finalFormat,
+	)
 }
 
 // generateThumbnail 生成 WebP 缩略图。SVG 和空图不生成缩略图，由前端回退主图预览。
@@ -509,17 +553,12 @@ func (s *ImageService) convertToWebP(img image.Image, quality int) ([]byte, erro
 		return nil, fmt.Errorf("invalid quality: %d (must be 0-100)", quality)
 	}
 
-	data, err := webp.EncodeRGBA(img, float32(quality))
-	if err != nil {
+	var output bytes.Buffer
+	if err := webp.Encode(&output, img, &webp.Options{Quality: float32(quality)}); err != nil {
 		return nil, fmt.Errorf("encode webp: %w", err)
 	}
 
-	return data, nil
-}
-
-// compressWebP 压缩webp图片
-func (s *ImageService) compressWebP(img image.Image, quality int) ([]byte, error) {
-	return s.convertToWebP(img, quality)
+	return output.Bytes(), nil
 }
 
 // ValidateImage 验证图片格式和大小
@@ -560,7 +599,7 @@ func (s *ImageService) generateWebPThumbnail(
 	}
 
 	// 调整图片大小
-	thumbnail := imaging.Fit(img, maxWidth, maxHeight, imaging.Lanczos)
+	thumbnail := imaging.Fit(img, maxWidth, maxHeight, imaging.Linear)
 
 	// 转换为WebP
 	return s.convertToWebP(thumbnail, quality)

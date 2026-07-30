@@ -106,7 +106,7 @@ class PopupModal {
     
     // 标题
     this.titleEl = document.createElement('h3');
-    this.titleEl.className = 'font-semibold text-lg text-dark-300 dark:text-light-100 w-[50%] truncate';
+    this.titleEl.className = 'min-w-0 flex-1 pr-4 font-semibold text-lg text-dark-300 dark:text-light-100 truncate';
     this.titleEl.id = `${this.config.id}-title`;
     this.titleEl.innerHTML = this.config.title;
     this.modal.setAttribute('aria-labelledby', this.titleEl.id);

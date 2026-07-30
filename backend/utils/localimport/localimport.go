@@ -247,6 +247,7 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 		Thumbnail:        thumbnailURL,
 		FileName:         filepath.Base(path),
 		OriginalFileName: filepath.Base(path),
+		OriginalFileSize: int64(len(fileBytes)),
 		FileSize:         int64(len(fileBytes)),
 		MimeType:         mimeType,
 		Width:            info.Width,
@@ -279,6 +280,13 @@ func (i *Importer) updateExistingImage(existing *models.Image, path string, crea
 	}
 	if strings.TrimSpace(existing.OriginalFileName) == "" {
 		updates["original_filename"] = filepath.Base(path)
+	}
+	if existing.OriginalFileSize <= 0 {
+		fileInfo, err := os.Stat(path)
+		if err != nil {
+			return false, fmt.Errorf("stat file for original size: %w", err)
+		}
+		updates["original_file_size"] = fileInfo.Size()
 	}
 	if len(updates) == 0 {
 		return false, nil

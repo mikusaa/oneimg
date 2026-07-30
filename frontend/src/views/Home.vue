@@ -472,6 +472,32 @@ const getImageAltText = (image) => image?.original_filename || image?.filename |
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
 })[character]);
+const getPreviewFileName = image => image?.original_filename || image?.filename || '图片预览';
+const getImageSizeSummary = image => {
+  const originalSize = Number(image?.original_file_size || 0);
+  const savedSize = Number(image?.file_size || 0);
+  const savedLabel = formatFileSize(savedSize);
+
+  if (originalSize <= 0) return `原图大小未知 · 保存后 ${savedLabel}`;
+
+  const originalLabel = formatFileSize(originalSize);
+  if (savedSize === originalSize) {
+    return `原图 ${originalLabel} · 保存后 ${savedLabel}（保留原图）`;
+  }
+
+  const retained = savedSize / originalSize * 100;
+  if (savedSize < originalSize) {
+    return `原图 ${originalLabel} · 压缩后 ${savedLabel}（节省 ${(100 - retained).toFixed(1)}%）`;
+  }
+  return `原图 ${originalLabel} · 保存后 ${savedLabel}（原图的 ${retained.toFixed(1)}%）`;
+};
+const getSpotlightDescription = image => [
+  getPreviewFileName(image),
+  `尺寸: ${image?.width || '未知'}×${image?.height || '未知'}`,
+  getImageSizeSummary(image),
+  `上传日期: ${formatDate(image?.created_at)}`,
+  `角色: ${Number(image?.uploader_role) === 1 ? '管理员' : Number(image?.uploader_role) === 3 ? '普通用户' : '已删除用户'}`
+].join(' | ');
 
 /**
  * 生成HTML代码
@@ -1118,6 +1144,10 @@ const previewImage = (image) => {
   }
   
   currentPreviewImage = image;
+  const previewFileName = escapeHtml(getPreviewFileName(image));
+  const originalFileName = escapeHtml(image.original_filename || image.filename || '未知');
+  const sizeSummary = escapeHtml(getImageSizeSummary(image));
+  const spotlightDescription = escapeHtml(getSpotlightDescription(image));
 
   const imageTags = image.tags || [];
   const extraTagCount = Math.max(0, imageTags.length - 2);
@@ -1131,9 +1161,9 @@ const previewImage = (image) => {
   const previewContent = `
     <div class="image-preview-popup w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden bg-white dark:bg-dark-200">
       <!-- 顶部操作栏 -->
-      <div class="preview-header bg-light-50 pb-2 flex justify-between items-center">
-          <h3 class="text-xs font-medium truncate max-w-[50%]">${image.filename}</h3>
-          <div class="flex gap-1">
+      <div class="preview-header bg-light-50 pb-2 flex justify-between items-center gap-3">
+          <h3 class="min-w-0 flex-1 text-xs font-medium truncate" title="${previewFileName}">${previewFileName}</h3>
+          <div class="flex shrink-0 gap-1">
               <!-- 下载按钮 -->
               <button 
                   class="px-3 py-1.5 text-xs bg-light-100 dark:bg-dark-300 hover:bg-light-200 whitespace-nowrap dark:hover:bg-dark-400 text-secondary rounded-md transition-colors duration-200 flex items-center gap-1"
@@ -1158,7 +1188,7 @@ const previewImage = (image) => {
           <a 
               class="spotlight min-w-full max-w-full min-h-[260px] block" 
               href="${getFullUrl(image.url)}" 
-              data-description="尺寸: ${image.width || '未知'}×${image.height || '未知'} | 大小: ${formatFileSize(image.file_size || 0)} | 上传日期：${formatDate(image.created_at)} | 角色：${Number(image.uploader_role) === 1 ? '管理员' : Number(image.uploader_role) === 3 ? '普通用户' : '已删除用户'}"
+              data-description="${spotlightDescription}"
           >
               <div class="relative max-w-full w-fill max-h-[360px] min-h-[260px] rounded-lg overflow-hidden animate-pulse flex items-center justify-center">
                   <div class="absolute inset-0 flex items-center justify-center">
@@ -1168,7 +1198,7 @@ const previewImage = (image) => {
                   </div>
                   <img 
                       src="${getFullUrl(image.url)}"
-                      alt="${image.filename}" 
+                      alt="${previewFileName}"
                       class="max-w-full w-fill max-h-[360px] min-h-[260px] object-contain rounded-lg relative z-10 opacity-0 transition-opacity duration-300"
                       onload="this.classList.remove('opacity-0'); this.parentElement.classList.remove('animate-pulse'); this.parentElement.querySelector('.loading-svg').classList.add('hidden');"
                       onerror="this.parentElement.classList.remove('animate-pulse'); this.classList.remove('opacity-0'); this.src='${errorImg}';"
@@ -1219,12 +1249,20 @@ const previewImage = (image) => {
               尺寸: ${image.width || '未知'}×${image.height || '未知'}
           </div>
           <div class="flex items-center gap-1.5">
+              <i class="ri-file-text-line w-3.5 text-center"></i>
+              原始文件名: ${originalFileName}
+          </div>
+          <div class="flex items-center gap-1.5">
               <i class="ri-image-line w-3.5 text-center"></i>
-              大小: ${formatFileSize(image.file_size || 0)}
+              ${sizeSummary}
           </div>
           <div class="flex items-center gap-1.5">
               <i class="ri-hard-drive-3-line"></i>
               存储: ${(image.storage === 'default' ? '本地' : image.storage) || '未知'}
+          </div>
+          <div class="flex items-center gap-1.5">
+              <i class="ri-user-line w-3.5 text-center"></i>
+              角色: ${Number(image.uploader_role) === 1 ? '管理员' : Number(image.uploader_role) === 3 ? '普通用户' : '已删除用户'}
           </div>
       </div>
   </div>
@@ -1253,7 +1291,7 @@ const previewImage = (image) => {
 
   // 创建预览弹窗
   previewModalInstance = new PopupModal({
-    title: '图片预览',
+    title: previewFileName,
     content: previewContent,
     type: 'default',
     buttons: [{

@@ -31,6 +31,7 @@ type uploadBatchFile struct {
 	Success          bool   `json:"success"`
 	Message          string `json:"message"`
 	OriginalFileName string `json:"original_filename"`
+	OriginalFileSize int64  `json:"original_file_size"`
 }
 
 func setupUploadBatchTest(t *testing.T) {
@@ -128,6 +129,16 @@ func TestUploadImagesReturnsOrderedPerFileResults(t *testing.T) {
 	}
 	if !response.Data.Files[0].Success || response.Data.Files[0].OriginalFileName != "valid.png" {
 		t.Fatalf("first result = %+v", response.Data.Files[0])
+	}
+	if response.Data.Files[0].OriginalFileSize != int64(len(validPNG)) {
+		t.Fatalf("original file size = %d, want %d", response.Data.Files[0].OriginalFileSize, len(validPNG))
+	}
+	var storedImage models.Image
+	if err := database.GetDB().DB.First(&storedImage).Error; err != nil {
+		t.Fatal(err)
+	}
+	if storedImage.OriginalFileSize != int64(len(validPNG)) {
+		t.Fatalf("stored original file size = %d, want %d", storedImage.OriginalFileSize, len(validPNG))
 	}
 	if response.Data.Files[1].Success || response.Data.Files[1].OriginalFileName != "broken.png" || response.Data.Files[1].Message == "" {
 		t.Fatalf("second result = %+v", response.Data.Files[1])

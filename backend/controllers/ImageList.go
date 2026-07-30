@@ -21,6 +21,7 @@ type ImageWithTags struct {
 	Thumbnail        string        `json:"thumbnail" gorm:"column:thumbnail"`
 	Filename         string        `json:"filename" gorm:"column:file_name"`
 	OriginalFileName string        `json:"original_filename" gorm:"column:original_filename"`
+	OriginalFileSize int64         `json:"original_file_size" gorm:"column:original_file_size"`
 	FileSize         int64         `json:"file_size" gorm:"column:file_size"`
 	MimeType         string        `json:"mimeType" gorm:"column:mime_type"`
 	Width            int           `json:"width" gorm:"column:width"`
@@ -174,7 +175,7 @@ func GetImageList(c *gin.Context) {
 	// 查询图片详情
 	var images []ImageWithTags
 	if len(imageIds) > 0 {
-		imageFields := "id, url, thumbnail, file_name, original_filename, file_size, mime_type, width, height, storage, bucket_id, user_id, created_at"
+		imageFields := "id, url, thumbnail, file_name, original_filename, original_file_size, file_size, mime_type, width, height, storage, bucket_id, user_id, created_at"
 		if err := db.Model(&ImageWithTags{}).
 			Select(imageFields).
 			Where("id IN (?)", imageIds).

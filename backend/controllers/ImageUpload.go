@@ -138,6 +138,7 @@ func UploadImages(c *gin.Context) {
 				Thumbnail:        fileResult.ThumbnailURL,
 				FileName:         fileResult.FileName,
 				OriginalFileName: fileResult.OriginalFileName,
+				OriginalFileSize: fileResult.OriginalFileSize,
 				FileSize:         fileResult.FileSize,
 				MimeType:         fileResult.MimeType,
 				Width:            fileResult.Width,
@@ -280,6 +281,8 @@ type urlUploadRequest struct {
 	TagID    optionalRequestID `json:"tag_id"`
 	BucketID optionalRequestID `json:"bucket_id"`
 }
+
+var remoteImageHTTPClient = &http.Client{Timeout: 60 * time.Second}
 
 func AddImageTag(c *gin.Context) {
 	// 获取请求参数
@@ -672,13 +675,12 @@ func UploadImagesByURL(c *gin.Context) {
 	}
 
 	// 下载图片
-	client := &http.Client{Timeout: 60 * time.Second}
 	downloadRequest, err := newRemoteImageRequest(c.Request.Context(), req.URL)
 	if err != nil {
 		uc.Fail(400, "图片URL无效：%v", err)
 		return
 	}
-	resp, err := client.Do(downloadRequest)
+	resp, err := remoteImageHTTPClient.Do(downloadRequest)
 	if err != nil {
 		uc.Fail(500, "图片下载失败：%v", err)
 		return
@@ -757,6 +759,7 @@ func UploadImagesByURL(c *gin.Context) {
 			Thumbnail:        fileResult.ThumbnailURL,
 			FileName:         fileResult.FileName,
 			OriginalFileName: fileResult.OriginalFileName,
+			OriginalFileSize: fileResult.OriginalFileSize,
 			FileSize:         fileResult.FileSize,
 			MimeType:         fileResult.MimeType,
 			Width:            fileResult.Width,

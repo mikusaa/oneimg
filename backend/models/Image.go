@@ -9,6 +9,7 @@ type Image struct {
 	Thumbnail        string    `json:"thumbnail"`
 	FileName         string    `json:"filename" gorm:"not null"`
 	OriginalFileName string    `json:"original_filename" gorm:"column:original_filename;default:''"`
+	OriginalFileSize int64     `json:"original_file_size" gorm:"column:original_file_size;default:0"`
 	FileSize         int64     `json:"file_size" gorm:"not null"`
 	MimeType         string    `json:"mimeType"`
 	Width            int       `json:"width"`

@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/gif"
+	"image/jpeg"
 	"image/png"
 	"mime/multipart"
 	"net/textproto"
@@ -32,6 +33,28 @@ func testPNGBytes(t *testing.T) ([]byte, image.Image) {
 	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
 	for y := 0; y < 64; y++ {
 		for x := 0; x < 64; x++ {
+			img.Set(x, y, color.RGBA{
+				R: uint8((x*y + y) % 255),
+				G: uint8((x*3 + y*5) % 255),
+				B: uint8((x*7 + y*11) % 255),
+				A: 255,
+			})
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("png.Encode() error = %v", err)
+	}
+	return buf.Bytes(), img
+}
+
+func testLargePNGBytes(t *testing.T) ([]byte, image.Image) {
+	t.Helper()
+
+	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	for y := 0; y < 512; y++ {
+		for x := 0; x < 512; x++ {
 			img.Set(x, y, color.RGBA{
 				R: uint8((x*y + y) % 255),
 				G: uint8((x*3 + y*5) % 255),
@@ -141,9 +164,9 @@ func TestProcessMainImageSkipCompressFormatKeepsOriginal(t *testing.T) {
 	}
 }
 
-func TestProcessMainImageSaveWebPUsesConfiguredQuality(t *testing.T) {
+func TestProcessMainImageSaveWebPUsesConfiguredQualityAndSavingsThreshold(t *testing.T) {
 	svc := &ImageService{}
-	fileBytes, img := testPNGBytes(t)
+	fileBytes, img := testLargePNGBytes(t)
 
 	lowQuality, lowFormat, lowMime, err := svc.processMainImage(fileBytes, img, "png", "image/png", int64(len(fileBytes)), models.Settings{
 		SaveWebp:         true,
@@ -160,11 +183,93 @@ func TestProcessMainImageSaveWebPUsesConfiguredQuality(t *testing.T) {
 		t.Fatalf("processMainImage(high quality) error = %v", err)
 	}
 
-	if lowFormat != "webp" || lowMime != "image/webp" || highFormat != "webp" || highMime != "image/webp" {
-		t.Fatalf("processMainImage() should convert to webp, got %q/%q and %q/%q", lowFormat, lowMime, highFormat, highMime)
+	if lowFormat != "webp" || lowMime != "image/webp" {
+		t.Fatalf("processMainImage(low quality) format/mime = %q/%q, want webp/image/webp", lowFormat, lowMime)
 	}
-	if bytes.Equal(lowQuality, highQuality) {
-		t.Fatal("processMainImage() should produce different bytes for different main_image_quality values")
+	if highFormat != "png" || highMime != "image/png" || !bytes.Equal(highQuality, fileBytes) {
+		t.Fatalf("processMainImage(high quality) should retain PNG when savings are too small, got %q/%q", highFormat, highMime)
+	}
+	if bytes.Equal(lowQuality, fileBytes) {
+		t.Fatal("processMainImage(low quality) should use the smaller WebP bytes")
+	}
+}
+
+func TestShouldUseWebPRequiresRatioAndAbsoluteSavings(t *testing.T) {
+	tests := []struct {
+		name         string
+		originalSize int
+		encodedSize  int
+		want         bool
+	}{
+		{name: "both thresholds", originalSize: 100_000, encodedSize: 60_000, want: true},
+		{name: "ratio only", originalSize: 100_000, encodedSize: 75_000, want: false},
+		{name: "bytes only", originalSize: 2_000_000, encodedSize: 1_960_000, want: false},
+		{name: "same size", originalSize: 100_000, encodedSize: 100_000, want: false},
+		{name: "larger", originalSize: 100_000, encodedSize: 110_000, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldUseWebP(make([]byte, tt.originalSize), make([]byte, tt.encodedSize)); got != tt.want {
+				t.Fatalf("shouldUseWebP(%d, %d) = %v, want %v", tt.originalSize, tt.encodedSize, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProcessMainImageDisabledWebPKeepsOriginal(t *testing.T) {
+	svc := &ImageService{}
+	fileBytes, img := testPNGBytes(t)
+
+	gotBytes, gotFormat, gotMime, err := svc.processMainImage(
+		fileBytes,
+		img,
+		"png",
+		"image/png",
+		int64(len(fileBytes)),
+		models.Settings{SaveWebp: false, MainImageQuality: 85},
+	)
+	if err != nil {
+		t.Fatalf("processMainImage() error = %v", err)
+	}
+	if !bytes.Equal(gotBytes, fileBytes) || gotFormat != "png" || gotMime != "image/png" {
+		t.Fatalf("processMainImage() = %q/%q (%d bytes), want original png (%d bytes)", gotFormat, gotMime, len(gotBytes), len(fileBytes))
+	}
+}
+
+func TestConvertToWebPHandlesJPEGAndTransparentPNG(t *testing.T) {
+	svc := &ImageService{}
+	opaque := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 32; x++ {
+			opaque.SetRGBA(x, y, color.RGBA{R: uint8(x * 7), G: uint8(y * 7), B: 120, A: 255})
+		}
+	}
+	var jpegBuffer bytes.Buffer
+	if err := jpeg.Encode(&jpegBuffer, opaque, &jpeg.Options{Quality: 90}); err != nil {
+		t.Fatal(err)
+	}
+	jpegImage, err := jpeg.Decode(bytes.NewReader(jpegBuffer.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded, err := svc.convertToWebP(jpegImage, 85); err != nil || len(encoded) == 0 {
+		t.Fatalf("convert jpeg to webp = %d bytes, %v", len(encoded), err)
+	}
+
+	transparent := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	transparent.SetNRGBA(0, 0, color.NRGBA{R: 255, G: 40, B: 20, A: 80})
+	encoded, err := svc.convertToWebP(transparent, 85)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := webp.Decode(bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, alpha := decoded.At(0, 0).RGBA()
+	if alpha == 0 || alpha == 0xffff {
+		t.Fatalf("transparent alpha was not preserved: %d", alpha)
 	}
 }
 
@@ -201,13 +306,13 @@ func TestShouldKeepOriginalOnDecodeErrorOnlyForSkippedWebP(t *testing.T) {
 
 func TestProcessImageSaveOriginalNameUsesFinalExtension(t *testing.T) {
 	svc := &ImageService{}
-	fileBytes, _ := testPNGBytes(t)
+	fileBytes, _ := testLargePNGBytes(t)
 	header := testHeader("sample.png", "image/png", len(fileBytes))
 
 	processed, err := svc.ProcessImage(readSeekCloser{bytes.NewReader(fileBytes)}, header, models.Settings{
 		SaveOriginalName: true,
 		SaveWebp:         true,
-		MainImageQuality: 85,
+		MainImageQuality: 10,
 	}, 1)
 	if err != nil {
 		t.Fatalf("ProcessImage() error = %v", err)
@@ -220,6 +325,30 @@ func TestProcessImageSaveOriginalNameUsesFinalExtension(t *testing.T) {
 	}
 	if processed.ContentHash == "" || processed.ContentHash != HashBytes(processed.CompressedBytes) {
 		t.Fatal("ProcessImage() should set content hash from final main image bytes")
+	}
+}
+
+func TestProcessImageKeepsOriginalMetadataWhenWebPSavingsAreTooSmall(t *testing.T) {
+	svc := &ImageService{}
+	fileBytes, _ := testPNGBytes(t)
+	header := testHeader("sample.png", "image/png", len(fileBytes))
+
+	processed, err := svc.ProcessImage(readSeekCloser{bytes.NewReader(fileBytes)}, header, models.Settings{
+		SaveOriginalName: true,
+		SaveWebp:         true,
+		MainImageQuality: 85,
+	}, 1)
+	if err != nil {
+		t.Fatalf("ProcessImage() error = %v", err)
+	}
+	if !bytes.Equal(processed.CompressedBytes, fileBytes) {
+		t.Fatal("ProcessImage() should keep the original bytes when savings are below the absolute threshold")
+	}
+	if processed.UniqueFileName != "sample.png" || processed.MimeType != "image/png" || processed.OutputExt != ".png" {
+		t.Fatalf("ProcessImage() = %q %q %q, want sample.png image/png .png", processed.UniqueFileName, processed.MimeType, processed.OutputExt)
+	}
+	if processed.ContentHash != HashBytes(fileBytes) {
+		t.Fatal("ProcessImage() content hash should use the retained original bytes")
 	}
 }
 

@@ -1,10 +1,26 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"oneimg/backend/database"
+	"oneimg/backend/models"
+
+	"github.com/gin-gonic/gin"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
 
 func TestURLUploadRequestAcceptsNumericAndStringIDs(t *testing.T) {
 	tests := []struct {
@@ -46,5 +62,62 @@ func TestNewRemoteImageRequestSetsPixivReferer(t *testing.T) {
 	}
 	if got := request.Header.Get("Referer"); got != "" {
 		t.Fatalf("unexpected Referer = %q", got)
+	}
+}
+
+func TestURLUploadStoresOriginalFileSize(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupUploadBatchTest(t)
+
+	pngBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalClient := remoteImageHTTPClient
+	remoteImageHTTPClient = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       io.NopCloser(bytes.NewReader(pngBytes)),
+		}, nil
+	})}
+	t.Cleanup(func() { remoteImageHTTPClient = originalClient })
+
+	payload, err := json.Marshal(map[string]any{"url": "https://example.test/remote.png", "bucket_id": 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/upload/url", bytes.NewReader(payload))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("user_id", 1)
+	ctx.Set("user_role", models.RoleAdmin)
+	UploadImagesByURL(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("URL upload status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Code int `json:"code"`
+		Data struct {
+			File struct {
+				OriginalFileSize int64 `json:"original_file_size"`
+			} `json:"file"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusOK || response.Data.File.OriginalFileSize != int64(len(pngBytes)) {
+		t.Fatalf("URL upload response = %+v, want original size %d", response, len(pngBytes))
+	}
+
+	var stored models.Image
+	if err := database.GetDB().DB.First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.OriginalFileSize != int64(len(pngBytes)) {
+		t.Fatalf("stored original_file_size = %d, want %d", stored.OriginalFileSize, len(pngBytes))
 	}
 }
