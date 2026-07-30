@@ -51,6 +51,20 @@ type SizeDistributionItem struct {
 	Count int64  `json:"count"`
 }
 
+func startOfLocalDay(value time.Time) time.Time {
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, value.Location())
+}
+
+func countImagesCreatedBetween(scope *gorm.DB, start, end time.Time) int64 {
+	var count int64
+	scope.Where(
+		"julianday(created_at) >= julianday(?) AND julianday(created_at) < julianday(?)",
+		start.UTC().Format(time.RFC3339Nano),
+		end.UTC().Format(time.RFC3339Nano),
+	).Count(&count)
+	return count
+}
+
 // GetDashboardStats 获取仪表板统计数据
 func GetDashboardStats(c *gin.Context) {
 	db := database.GetDB().DB
@@ -76,19 +90,14 @@ func GetDashboardStats(c *gin.Context) {
 	imageScope().Select("COALESCE(SUM(file_size), 0) as total").Scan(&totalSize)
 	stats.TotalSize = totalSize.Total
 
-	// 获取今日上传数量
-	today := time.Now().Format("2006-01-02")
-	imageScope().Where("DATE(created_at) = ?", today).Count(&stats.TodayUploads)
-
-	// 获取本月上传数量
 	now := time.Now()
-	year := now.Year()
-	month := now.Month()
 
-	startTime := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-	endTime := startTime.AddDate(0, 1, 0)
+	// 按程序本地时区统计，避免 SQLite 将带时区时间转换成 UTC 日期后错日。
+	todayStart := startOfLocalDay(now)
+	stats.TodayUploads = countImagesCreatedBetween(imageScope(), todayStart, todayStart.AddDate(0, 0, 1))
 
-	imageScope().Where("created_at >= ? AND created_at < ?", startTime, endTime).Count(&stats.MonthUploads)
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	stats.MonthUploads = countImagesCreatedBetween(imageScope(), monthStart, monthStart.AddDate(0, 1, 0))
 
 	// 获取最近上传的图片
 	imageScope().Order("created_at DESC").Limit(10).Find(&stats.RecentImages)
@@ -125,15 +134,14 @@ func GetDashboardStats(c *gin.Context) {
 // getUploadTrend 获取上传趋势
 func getUploadTrend(db *gorm.DB, days int) []UploadTrendItem {
 	var trend []UploadTrendItem
+	now := time.Now()
 
 	for i := days - 1; i >= 0; i-- {
-		date := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
-
-		var count int64
-		db.Model(&models.Image{}).Where("DATE(created_at) = ?", date).Count(&count)
+		dayStart := startOfLocalDay(now.AddDate(0, 0, -i))
+		count := countImagesCreatedBetween(db, dayStart, dayStart.AddDate(0, 0, 1))
 
 		trend = append(trend, UploadTrendItem{
-			Date:  date,
+			Date:  dayStart.Format("2006-01-02"),
 			Count: count,
 		})
 	}
@@ -243,16 +251,15 @@ func GetImageStats(c *gin.Context) {
 // getDailyStats 获取每日统计
 func getDailyStats(db *gorm.DB) []UploadTrendItem {
 	var stats []UploadTrendItem
+	now := time.Now()
 
 	// 获取最近30天的数据
 	for i := 29; i >= 0; i-- {
-		date := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
-
-		var count int64
-		db.Model(&models.Image{}).Where("DATE(created_at) = ?", date).Count(&count)
+		dayStart := startOfLocalDay(now.AddDate(0, 0, -i))
+		count := countImagesCreatedBetween(db, dayStart, dayStart.AddDate(0, 0, 1))
 
 		stats = append(stats, UploadTrendItem{
-			Date:  date,
+			Date:  dayStart.Format("2006-01-02"),
 			Count: count,
 		})
 	}
@@ -263,19 +270,15 @@ func getDailyStats(db *gorm.DB) []UploadTrendItem {
 // getWeeklyStats 获取每周统计
 func getWeeklyStats(db *gorm.DB) []UploadTrendItem {
 	var stats []UploadTrendItem
+	now := time.Now()
+	currentDay := startOfLocalDay(now)
+	daysSinceMonday := (int(currentDay.Weekday()) + 6) % 7
+	currentWeekStart := currentDay.AddDate(0, 0, -daysSinceMonday)
 
 	// 获取最近12周的数据
 	for i := 11; i >= 0; i-- {
-		// 计算周的开始日期
-		weekStart := time.Now().AddDate(0, 0, -i*7-int(time.Now().Weekday())+1)
-		weekEnd := weekStart.AddDate(0, 0, 6)
-
-		var count int64
-		db.Model(&models.Image{}).
-			Where("created_at >= ? AND created_at <= ?",
-				weekStart.Format("2006-01-02"),
-				weekEnd.Format("2006-01-02 23:59:59")).
-			Count(&count)
+		weekStart := currentWeekStart.AddDate(0, 0, -i*7)
+		count := countImagesCreatedBetween(db, weekStart, weekStart.AddDate(0, 0, 7))
 
 		stats = append(stats, UploadTrendItem{
 			Date:  weekStart.Format("2006-01-02"),
@@ -289,19 +292,16 @@ func getWeeklyStats(db *gorm.DB) []UploadTrendItem {
 // getMonthlyStats 获取每月统计
 func getMonthlyStats(db *gorm.DB) []UploadTrendItem {
 	var stats []UploadTrendItem
+	now := time.Now()
 
 	// 获取最近12个月的数据
 	for i := 11; i >= 0; i-- {
-		date := time.Now().AddDate(0, -i, 0)
-		monthStr := date.Format("2006-01")
-
-		var count int64
-		db.Model(&models.Image{}).
-			Where("strftime('%Y-%m', created_at) = ?", monthStr).
-			Count(&count)
+		date := now.AddDate(0, -i, 0)
+		monthStart := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+		count := countImagesCreatedBetween(db, monthStart, monthStart.AddDate(0, 1, 0))
 
 		stats = append(stats, UploadTrendItem{
-			Date:  monthStr,
+			Date:  monthStart.Format("2006-01"),
 			Count: count,
 		})
 	}
@@ -312,18 +312,16 @@ func getMonthlyStats(db *gorm.DB) []UploadTrendItem {
 // getYearlyStats 获取每年统计
 func getYearlyStats(db *gorm.DB) []UploadTrendItem {
 	var stats []UploadTrendItem
+	now := time.Now()
 
 	// 获取最近5年的数据
 	for i := 4; i >= 0; i-- {
-		year := time.Now().AddDate(-i, 0, 0).Format("2006")
-
-		var count int64
-		db.Model(&models.Image{}).
-			Where("strftime('%Y', created_at) = ?", year).
-			Count(&count)
+		date := now.AddDate(-i, 0, 0)
+		yearStart := time.Date(date.Year(), time.January, 1, 0, 0, 0, 0, date.Location())
+		count := countImagesCreatedBetween(db, yearStart, yearStart.AddDate(1, 0, 0))
 
 		stats = append(stats, UploadTrendItem{
-			Date:  year,
+			Date:  yearStart.Format("2006"),
 			Count: count,
 		})
 	}

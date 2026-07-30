@@ -624,7 +624,7 @@ const deleteAsync = async (imageId) => {
       
       previewCopyMenu = false;
       activeCopyMenu.value = null;
-      await loadRecentImages();
+      await Promise.all([loadRecentImages(), loadDashboardStats()]);
     } else {
       const result = await response.json();
       throw new Error(result.message || '删除失败');
@@ -1324,7 +1324,7 @@ const postuploadbyurl = async (formData) => {
     });
     const result = await res.json();
     if (res.ok && result.code === 200) {
-      await loadRecentImages();
+      await Promise.all([loadRecentImages(), loadDashboardStats()]);
       showUploadResultMessage(result.data?.file ? [result.data.file] : []);
       return true;
     } else {
