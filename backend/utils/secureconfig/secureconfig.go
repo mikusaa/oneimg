@@ -156,6 +156,20 @@ func IsEncryptedValue(value string) bool {
 	return strings.HasPrefix(strings.TrimSpace(value), encryptedPrefix)
 }
 
+// EncryptBytes encrypts opaque application data with CONFIG_SECRET.
+func EncryptBytes(plainText []byte) (string, error) {
+	return encryptString(string(plainText))
+}
+
+// DecryptBytes decrypts opaque application data encrypted by EncryptBytes.
+func DecryptBytes(cipherText string) ([]byte, error) {
+	plainText, err := decryptString(cipherText)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(plainText), nil
+}
+
 func GetString(configMap map[string]any, key string) string {
 	if configMap == nil {
 		return ""

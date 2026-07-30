@@ -66,6 +66,7 @@ func InitDB(cfg *config.Config) {
 	err = db.DB.AutoMigrate(
 		&models.Tags{},
 		&models.User{},
+		&models.PasskeyCredential{},
 		&models.Image{},
 		&models.Settings{},
 		&models.ImageToTags{},

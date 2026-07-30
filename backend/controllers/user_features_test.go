@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"oneimg/backend/database"
 	"oneimg/backend/middlewares"
 	"oneimg/backend/models"
+	passkeyutil "oneimg/backend/utils/passkeys"
 	"oneimg/backend/utils/secureconfig"
 
 	"github.com/gin-contrib/sessions"
@@ -316,8 +318,11 @@ func TestLoginSettingsOnlyExposeLocalAuthenticationOptions(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Data) != 1 || response.Data["start_register"] != true {
+	if len(response.Data) != 2 || response.Data["start_register"] != true {
 		t.Fatalf("unexpected login settings: %#v", response.Data)
+	}
+	if _, ok := response.Data["passkey_available"].(bool); !ok {
+		t.Fatalf("passkey_available is missing or not boolean: %#v", response.Data)
 	}
 	for key := range response.Data {
 		lowerKey := strings.ToLower(key)
@@ -359,6 +364,15 @@ func TestDeleteUserDoesNotRequireExternalIdentityTable(t *testing.T) {
 	if err := db.Create(&users).Error; err != nil {
 		t.Fatal(err)
 	}
+	credential := models.PasskeyCredential{
+		UserID:         users[1].ID,
+		Name:           "test device",
+		CredentialID:   "delete-user-credential",
+		CredentialData: "encrypted",
+	}
+	if err := db.Create(&credential).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
@@ -375,6 +389,129 @@ func TestDeleteUserDoesNotRequireExternalIdentityTable(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatal("user was not deleted")
+	}
+	if err := db.Model(&models.PasskeyCredential{}).Where("user_id = ?", users[1].ID).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("deleted user's Passkeys were not deleted")
+	}
+}
+
+func TestPasskeyCredentialUniqueIndex(t *testing.T) {
+	setupFeatureTestDB(t)
+	db := database.GetDB().DB
+	first := models.PasskeyCredential{UserID: 1, Name: "first", CredentialID: "duplicate-id", CredentialData: "encrypted"}
+	second := models.PasskeyCredential{UserID: 2, Name: "second", CredentialID: "duplicate-id", CredentialData: "encrypted"}
+	if err := db.Create(&first).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&second).Error; err == nil {
+		t.Fatal("duplicate credential ID was accepted")
+	}
+	third := models.PasskeyCredential{UserID: 1, Name: "FIRST", CredentialID: "other-id", CredentialData: "encrypted"}
+	if err := db.Create(&third).Error; err == nil {
+		t.Fatal("case-insensitive duplicate Passkey name was accepted for one user")
+	}
+}
+
+func TestDeletePasskeyRequiresCurrentPassword(t *testing.T) {
+	setupFeatureTestDB(t)
+	db := database.GetDB().DB
+	hash, err := bcrypt.GenerateFromPassword([]byte("current-password"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := models.User{Username: "passkey-owner", Password: string(hash), Role: models.RoleUser}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	credential := models.PasskeyCredential{UserID: user.ID, Name: "device", CredentialID: "password-test", CredentialData: "encrypted"}
+	if err := db.Create(&credential).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	request := func(password string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(recorder)
+		context.Request = httptest.NewRequest(http.MethodDelete, "/api/passkeys/1", bytes.NewReader([]byte(`{"current_password":"`+password+`"}`)))
+		context.Request.Header.Set("Content-Type", "application/json")
+		context.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(credential.ID), 10)}}
+		context.Set("user_id", user.ID)
+		DeletePasskey(context)
+		return recorder
+	}
+	if got := request("wrong-password").Code; got != http.StatusBadRequest {
+		t.Fatalf("wrong password status = %d", got)
+	}
+	if got := request("current-password").Code; got != http.StatusOK {
+		t.Fatalf("correct password status = %d", got)
+	}
+}
+
+func TestBeginPasskeyRegistrationRequiresCurrentPassword(t *testing.T) {
+	setupFeatureTestDB(t)
+	config.App.AppURL = "http://localhost:8080"
+	if err := passkeyutil.Init(config.App); err != nil {
+		t.Fatal(err)
+	}
+	db := database.GetDB().DB
+	hash, err := bcrypt.GenerateFromPassword([]byte("current-password"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := models.User{Username: "register-owner", Password: string(hash), Role: models.RoleUser}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	recorder := performJSONRequest(BeginPasskeyRegistration, http.MethodPost, "/api/passkeys/register/begin", map[string]any{
+		"name":             "MacBook",
+		"current_password": "wrong-password",
+	}, map[string]any{"user_id": user.ID})
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("wrong password status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestRevokeUserPasskeysBoundaries(t *testing.T) {
+	setupFeatureTestDB(t)
+	db := database.GetDB().DB
+	users := []models.User{
+		{Username: "super", Password: "hash", Role: models.RoleAdmin},
+		{Username: "operator", Password: "hash", Role: models.RoleAdmin},
+		{Username: "target", Password: "hash", Role: models.RoleUser},
+	}
+	if err := db.Create(&users).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.PasskeyCredential{UserID: users[2].ID, Name: "device", CredentialID: "target-id", CredentialData: "encrypted"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	request := func(targetID, actorID int) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(recorder)
+		context.Request = httptest.NewRequest(http.MethodDelete, "/api/users/passkeys", nil)
+		context.Params = gin.Params{{Key: "id", Value: strconv.Itoa(targetID)}}
+		context.Set("user_id", actorID)
+		RevokeUserPasskeys(context)
+		return recorder
+	}
+	if got := request(models.SuperAdminID, users[1].ID).Code; got != http.StatusBadRequest {
+		t.Fatalf("revoke superadmin status = %d", got)
+	}
+	if got := request(users[1].ID, users[1].ID).Code; got != http.StatusBadRequest {
+		t.Fatalf("revoke self status = %d", got)
+	}
+	if recorder := request(users[2].ID, users[1].ID); recorder.Code != http.StatusOK {
+		t.Fatalf("revoke target status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var count int64
+	if err := db.Model(&models.PasskeyCredential{}).Where("user_id = ?", users[2].ID).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("target Passkeys were not revoked")
 	}
 }
 
@@ -410,6 +547,12 @@ func TestLegacyRemovedFeatureSchemaRemainsCompatible(t *testing.T) {
 	migratedDB := database.GetDB().DB
 	if !migratedDB.Migrator().HasTable("external_auth_flows") || !migratedDB.Migrator().HasTable("external_identities") {
 		t.Fatal("legacy external authentication tables were removed")
+	}
+	if !migratedDB.Migrator().HasTable(&models.PasskeyCredential{}) {
+		t.Fatal("legacy database did not receive passkey_credentials table")
+	}
+	if migratedDB.Migrator().HasColumn(&models.User{}, "webauthn_handle") {
+		t.Fatal("Passkey migration unexpectedly modified users table")
 	}
 	if !migratedDB.Migrator().HasColumn("settings", "oidc_enable") || !migratedDB.Migrator().HasColumn("settings", "cas_enable") {
 		t.Fatal("legacy external authentication columns were removed")

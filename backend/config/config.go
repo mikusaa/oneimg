@@ -28,6 +28,11 @@ type Config struct {
 
 	// 配置加密
 	ConfigSecret string
+
+	// Passkey / WebAuthn配置
+	PasskeyRPID    string
+	PasskeyOrigins []string
+	PasskeyRPName  string
 }
 
 // 全局配置实例
@@ -88,6 +93,11 @@ SESSION_SECRET=
 
 # 配置加密密钥（用于敏感配置字段加密存储）
 CONFIG_SECRET=
+
+# Passkey配置（留空时根据APP_URL自动推导）
+PASSKEY_RP_ID=
+PASSKEY_ORIGINS=
+PASSKEY_RP_NAME=OneImg
 `
 
 	configSecret := generateRandomSecret(32)
@@ -154,20 +164,38 @@ func NewConfig() {
 
 	// Session配置（读取.env中的值，无则生成）
 	sessionSecret := getEnv("SESSION_SECRET", generateRandomSecret(32))
-	configSecret := getEnv("CONFIG_SECRET", generateRandomSecret(32))
+	// CONFIG_SECRET 不能使用未持久化的随机值，否则加密数据会在重启后失效。
+	configSecret := strings.TrimSpace(os.Getenv("CONFIG_SECRET"))
+	passkeyRPID := strings.TrimSpace(getEnv("PASSKEY_RP_ID", ""))
+	passkeyOrigins := splitCommaSeparated(getEnv("PASSKEY_ORIGINS", ""))
+	passkeyRPName := strings.TrimSpace(getEnv("PASSKEY_RP_NAME", "OneImg"))
 
 	// 初始化全局配置
 	App = &Config{
-		Port:          port,
-		AppURL:        appURL,
-		SqlitePath:    sqlitePath,
-		DefaultUser:   defaultUser,
-		DefaultPass:   defaultPass,
-		SessionSecret: sessionSecret,
-		ConfigSecret:  configSecret,
+		Port:           port,
+		AppURL:         appURL,
+		SqlitePath:     sqlitePath,
+		DefaultUser:    defaultUser,
+		DefaultPass:    defaultPass,
+		SessionSecret:  sessionSecret,
+		ConfigSecret:   configSecret,
+		PasskeyRPID:    passkeyRPID,
+		PasskeyOrigins: passkeyOrigins,
+		PasskeyRPName:  passkeyRPName,
 	}
 
 	log.Println("✅ 配置初始化完成")
+}
+
+func splitCommaSeparated(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 // 获取环境变量

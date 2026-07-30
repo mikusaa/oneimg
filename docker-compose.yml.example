@@ -2,11 +2,18 @@ services:
   oneimg:
     build: .
     container_name: oneimg
+    restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+    environment:
+      TZ: Asia/Shanghai
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-}
+      PASSKEY_ORIGINS: ${PASSKEY_ORIGINS:-}
+      PASSKEY_RP_NAME: ${PASSKEY_RP_NAME:-OneImg}
     logging:
       driver: "json-file"
       options:

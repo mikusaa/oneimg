@@ -7,6 +7,7 @@ import (
 	"oneimg/backend/database"
 	"oneimg/backend/models"
 	"oneimg/backend/utils/images"
+	"oneimg/backend/utils/passkeys"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -27,6 +28,11 @@ func Init() *System {
 
 	// 初始化图片服务
 	images.InitImageService()
+	if err := passkeys.Init(cfg); err != nil {
+		log.Printf("Passkey 功能已禁用: %v", err)
+	} else {
+		log.Printf("Passkey 功能已启用 (RP ID: %s)", passkeys.RPID())
+	}
 
 	// 初始化默认用户
 	InitDefaultUser(cfg, db)

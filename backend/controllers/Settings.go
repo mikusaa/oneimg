@@ -14,6 +14,7 @@ import (
 	"oneimg/backend/database"
 	"oneimg/backend/middlewares"
 	"oneimg/backend/models"
+	"oneimg/backend/utils/passkeys"
 	"oneimg/backend/utils/publicurl"
 	"oneimg/backend/utils/result"
 	"oneimg/backend/utils/secureconfig"
@@ -75,7 +76,8 @@ func GetLoginSettings(c *gin.Context) {
 
 	c.JSON(200, result.Success("ok",
 		map[string]any{
-			"start_register": settingModel.StartRegister,
+			"start_register":    settingModel.StartRegister,
+			"passkey_available": passkeys.Available(),
 		},
 	))
 }

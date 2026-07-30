@@ -60,6 +60,8 @@ func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 	{
 		// 公开接口（无需认证）
 		api.POST("/login", controllers.Login)
+		api.POST("/passkeys/login/begin", controllers.BeginPasskeyLogin)
+		api.POST("/passkeys/login/finish", controllers.FinishPasskeyLogin)
 		api.POST("/register", controllers.Register)
 		api.POST("/logout", controllers.Logout)
 		api.GET("/logout", controllers.Logout)
@@ -75,6 +77,11 @@ func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 		{
 			// 用户信息接口
 			auth.GET("/user/status", controllers.CheckLoginStatus)
+			auth.POST("/passkeys/register/begin", controllers.BeginPasskeyRegistration)
+			auth.POST("/passkeys/register/finish", controllers.FinishPasskeyRegistration)
+			auth.GET("/passkeys", controllers.GetPasskeys)
+			auth.PUT("/passkeys/:id", controllers.RenamePasskey)
+			auth.DELETE("/passkeys/:id", controllers.DeletePasskey)
 
 			// 获取上传配置
 			auth.GET("/uploadConfig", controllers.GetUploadConfig)
@@ -121,6 +128,7 @@ func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 			auth.POST("/users/updateRole", middlewares.RequirePermission("user:role:update"), controllers.UpdateUserRole)
 			auth.POST("/users/resetPassword/:id", middlewares.RequirePermission("user:password:reset"), controllers.ResetPassword)
 			auth.POST("/users/updatePermission/:id", middlewares.RequirePermission("user:permission:update"), controllers.UpdateUserPermission)
+			auth.DELETE("/users/:id/passkeys", middlewares.RequirePermission("user:passkey:reset"), controllers.RevokeUserPasskeys)
 
 			// 系统设置接口，控制器按字段分组再次校验权限。
 			auth.Any("/settings/get", controllers.GetSettings)

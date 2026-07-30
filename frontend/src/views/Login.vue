@@ -57,6 +57,24 @@
                         {{ isLoading ? '正在登录' : '登录' }}
                     </button>
                 </form>
+                <template v-if="loginConfig.passkey_available">
+                    <div class="my-5 flex items-center gap-3" aria-hidden="true">
+                        <span class="h-px flex-1 bg-slate-200 dark:bg-white/10"></span>
+                        <span class="text-xs text-slate-400">或</span>
+                        <span class="h-px flex-1 bg-slate-200 dark:bg-white/10"></span>
+                    </div>
+                    <button
+                        type="button"
+                        class="soft-button w-full py-3 text-base"
+                        :disabled="isLoading || !passkeySupported"
+                        :title="passkeySupported ? '使用设备上的 Passkey 登录' : '当前浏览器不支持 Passkey'"
+                        @click="loginWithPasskey"
+                    >
+                        <i v-if="isPasskeyLoading" class="ri-loader-4-line animate-spin" aria-hidden="true"></i>
+                        <i v-else class="ri-fingerprint-line" aria-hidden="true"></i>
+                        {{ isPasskeyLoading ? '正在验证' : '使用 Passkey' }}
+                    </button>
+                </template>
             </div>
         </div>
 
@@ -65,18 +83,33 @@
 
 <script setup>
 import { ref, onMounted, reactive } from 'vue';
+import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import message from '@/utils/message.js';
 
 // 响应式数据
 const username = ref('');
 const password = ref('');
 const isLoading = ref(false);
+const isPasskeyLoading = ref(false);
+const passkeySupported = ref(false);
 const showPassword = ref(false);
 
 // 登录配置
 const loginConfig = reactive({
-    start_register: false
+    start_register: false,
+    passkey_available: false
 })
+
+const saveLogin = (user) => {
+    const userInfo = {
+        id: user?.id,
+        username: user?.username,
+        role: user?.role,
+        permission: user?.permission || { codes: [], buckets: [] }
+    };
+    localStorage.setItem('userInfo', JSON.stringify(userInfo));
+    window.location.replace('/');
+};
 
 // 加载状态管理
 // 登录处理
@@ -113,16 +146,7 @@ const putLogin = async () => {
         const result = await response.json();
         
         if (response.ok && result.code === 200) {
-            // 保存用户信息
-            const userInfo = {
-                id: result.data?.user?.id,
-				username: username.value,
-                role: result.data?.user?.role,
-				permission: result.data?.user?.permission || { codes: [], buckets: [] }
-            };
-            localStorage.setItem('userInfo', JSON.stringify(userInfo));
-
-            window.location.replace('/');
+            saveLogin(result.data?.user);
         } else {
             isLoading.value = false;
             message.error('登录失败: ' + (result.message || '未知错误'));
@@ -130,6 +154,45 @@ const putLogin = async () => {
     } catch (error) {
         isLoading.value = false;
         message.error('登录请求失败，请检查网络连接: ' + error.message);
+    }
+};
+
+const isPasskeyCancellation = (error) => {
+    const name = error?.cause?.name || error?.name;
+    return name === 'NotAllowedError' || name === 'AbortError' || error?.code === 'ERROR_CEREMONY_ABORTED';
+};
+
+const loginWithPasskey = async () => {
+    if (isLoading.value || !passkeySupported.value || !loginConfig.passkey_available) return;
+    isLoading.value = true;
+    isPasskeyLoading.value = true;
+    try {
+        const beginResponse = await fetch('/api/passkeys/login/begin', { method: 'POST' });
+        const beginResult = await beginResponse.json();
+        if (!beginResponse.ok || beginResult.code !== 200) {
+            throw new Error(beginResult.message || '无法开始 Passkey 登录');
+        }
+
+        const authentication = await startAuthentication({
+            optionsJSON: beginResult.data.options
+        });
+        const finishResponse = await fetch('/api/passkeys/login/finish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(authentication)
+        });
+        const finishResult = await finishResponse.json();
+        if (!finishResponse.ok || finishResult.code !== 200) {
+            throw new Error(finishResult.message || 'Passkey 登录失败');
+        }
+        saveLogin(finishResult.data?.user);
+    } catch (error) {
+        if (!isPasskeyCancellation(error)) {
+            message.error(error.message || 'Passkey 登录失败');
+        }
+    } finally {
+        isLoading.value = false;
+        isPasskeyLoading.value = false;
     }
 };
 
@@ -153,6 +216,7 @@ const getLoginSettings = async () => {
 };
 
 onMounted(async () => {
+    passkeySupported.value = browserSupportsWebAuthn();
     await getLoginSettings();
 });
 </script>

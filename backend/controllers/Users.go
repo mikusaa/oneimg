@@ -12,7 +12,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
+
+type userListItem struct {
+	models.User
+	PasskeyCount int64 `json:"passkey_count"`
+}
 
 // 包初始化：初始化随机种子
 func init() {
@@ -70,9 +76,36 @@ func GetUsers(c *gin.Context) {
 		return
 	}
 
+	items := make([]userListItem, 0, len(users))
+	if len(users) > 0 {
+		userIDs := make([]int, 0, len(users))
+		for _, user := range users {
+			userIDs = append(userIDs, user.ID)
+		}
+		type passkeyCountRow struct {
+			UserID int   `gorm:"column:user_id"`
+			Count  int64 `gorm:"column:count"`
+		}
+		var rows []passkeyCountRow
+		if err := db.Model(&models.PasskeyCredential{}).
+			Select("user_id, COUNT(*) AS count").
+			Where("user_id IN ?", userIDs).
+			Group("user_id").Scan(&rows).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, result.Fail(500, "查询 Passkey 数量失败："+err.Error()))
+			return
+		}
+		counts := make(map[int]int64, len(rows))
+		for _, row := range rows {
+			counts[row.UserID] = row.Count
+		}
+		for _, user := range users {
+			items = append(items, userListItem{User: user, PasskeyCount: counts[user.ID]})
+		}
+	}
+
 	resultData := map[string]any{
 		"total": total,
-		"list":  users,
+		"list":  items,
 	}
 	c.JSON(http.StatusOK, result.Success("查询成功", resultData))
 }
@@ -170,7 +203,12 @@ func DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if err := db.Delete(&user).Error; err != nil {
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", user.ID).Delete(&models.PasskeyCredential{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&user).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, result.Fail(500, "删除用户失败："+err.Error()))
 		return
 	}

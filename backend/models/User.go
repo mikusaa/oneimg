@@ -32,6 +32,7 @@ var permissionNames = map[string]string{
 	"user:role:update":       "修改角色",
 	"user:permission:update": "编辑权限",
 	"user:password:reset":    "重置密码",
+	"user:passkey:reset":     "撤销 Passkey",
 	"tag:create":             "新增标签",
 	"tag:update":             "编辑标签",
 	"tag:delete":             "删除标签",
@@ -49,7 +50,7 @@ var permissionNames = map[string]string{
 }
 
 var allPermissionCodes = []string{
-	"user:list", "user:create", "user:delete", "user:role:update", "user:permission:update", "user:password:reset",
+	"user:list", "user:create", "user:delete", "user:role:update", "user:permission:update", "user:password:reset", "user:passkey:reset",
 	"tag:create", "tag:update", "tag:delete",
 	"storage:create", "storage:update", "storage:delete",
 	"image:delete", "image:tag:add", "image:tag:delete",

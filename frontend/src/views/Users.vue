@@ -199,6 +199,12 @@
                 <i class="ri-folder-3-line text-xs"></i>
                 {{ getUserBucketCount(user) }} 个存储桶
               </span>
+			  <span
+				class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200/80 dark:border-white/10"
+			  >
+				<i class="ri-fingerprint-line text-xs"></i>
+				{{ user.passkey_count || 0 }} 个 Passkey
+			  </span>
 			  <span v-if="user.role === RoleAdmin" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20">
 				<i class="ri-shield-keyhole-line text-xs"></i>{{ getUserCodeCount(user) }} 个权限
 			  </span>
@@ -247,6 +253,15 @@
             <i class="ri-key-2-line text-base"></i>
             重置密码
           </button>
+			  <button
+				v-if="canRevokePasskeys && user.id !== SuperAdminID && user.id !== currentUserID && user.passkey_count > 0"
+				class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition text-left"
+				role="menuitem"
+				@click="openRevokePasskeysModal(user)"
+			  >
+				<i class="ri-fingerprint-line text-base"></i>
+				撤销全部 Passkey
+			  </button>
 		  <div v-if="canDeleteUser"
             class="my-1.5 border-t border-slate-100 dark:border-white/5"
           ></div>
@@ -334,13 +349,16 @@ const canDeleteUser = hasPermission('user:delete', currentUser)
 const canUpdateRole = hasPermission('user:role:update', currentUser)
 const canUpdatePermission = hasPermission('user:permission:update', currentUser)
 const canResetPassword = hasPermission('user:password:reset', currentUser)
-const canManageUsers = canDeleteUser || canUpdateRole || canUpdatePermission || canResetPassword
+const canRevokePasskeys = hasPermission('user:passkey:reset', currentUser)
+const currentUserID = Number(currentUser?.id ?? currentUser?.ID)
+const canManageUsers = canDeleteUser || canUpdateRole || canUpdatePermission || canResetPassword || canRevokePasskeys
 
 const PERMISSION_GROUPS = [
   { title: '用户管理', items: [
     { code: 'user:list', name: '查看用户' }, { code: 'user:create', name: '添加用户' },
     { code: 'user:delete', name: '删除用户' }, { code: 'user:role:update', name: '修改角色' },
-    { code: 'user:permission:update', name: '编辑权限' }, { code: 'user:password:reset', name: '重置密码' }
+    { code: 'user:permission:update', name: '编辑权限' }, { code: 'user:password:reset', name: '重置密码' },
+    { code: 'user:passkey:reset', name: '撤销 Passkey' }
   ]},
   { title: '内容与标签', items: [
     { code: 'tag:create', name: '新增标签' }, { code: 'tag:update', name: '编辑标签' }, { code: 'tag:delete', name: '删除标签' }
@@ -651,6 +669,52 @@ function openDeleteModal(user) {
         },
       },
     ],
+  })
+  modal.open()
+}
+
+function openRevokePasskeysModal(user) {
+  closeDropdown()
+  const modal = new PopupModal({
+    title: '撤销全部 Passkey',
+    content: `
+      <div class="flex items-start gap-3">
+        <div class="shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+          <i class="ri-fingerprint-line text-red-500 text-xl"></i>
+        </div>
+        <div>
+          <p class="text-sm text-slate-700 dark:text-slate-200">
+            确认撤销用户 <strong>${escapeHtml(user.username)}</strong> 的全部 Passkey？
+          </p>
+          <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+            撤销后，这些设备将无法再用于登录。
+          </p>
+        </div>
+      </div>
+    `,
+    type: 'confirm',
+    buttons: [
+      { text: '取消', type: 'default', callback: currentModal => currentModal.close() },
+      {
+        text: '确认撤销',
+        type: 'danger',
+        callback: async currentModal => {
+          try {
+            const response = await fetch(`/api/users/${user.id}/passkeys`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+            })
+            const data = await response.json()
+            if (!response.ok || data.code !== 200) throw new Error(data.message || '撤销失败')
+            currentModal.close()
+            message.success(`已撤销 ${data.data?.count || 0} 个 Passkey`)
+            fetchUsers()
+          } catch (error) {
+            message.error(error.message || '撤销失败')
+          }
+        }
+      }
+    ]
   })
   modal.open()
 }
