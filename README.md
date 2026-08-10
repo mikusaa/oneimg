@@ -70,6 +70,8 @@ docker run -d \
   --name oneimg \
   --restart unless-stopped \
   -p 8080:8080 \
+  -e PUID=1000 \
+  -e PGID=1000 \
   -e TZ=Asia/Shanghai \
   -e APP_URL=http://localhost:8080 \
   -v /data/oneimg/data:/app/data \
@@ -87,6 +89,17 @@ GHCR 镜像同时提供 `linux/amd64` 和 `linux/arm64` 架构。
 - SQLite 数据库和应用配置存储在 `./data` 目录
 
 备份时应同时备份 `data` 和 `uploads`。其中 `data/.env` 内的 `CONFIG_SECRET` 用于加密 Passkey 凭据和其他敏感配置，丢失或改变后已有加密数据将无法读取。
+
+### 文件权限
+
+容器支持通过 `PUID` 和 `PGID` 指定 OneImg 进程及持久化文件的属主。Compose 模板默认使用 `1000:1000`，也可以在项目根目录的 `.env` 中设置为宿主机用户的 UID/GID：
+
+```dotenv
+PUID=1000
+PGID=1000
+```
+
+Linux 上可通过 `id -u` 和 `id -g` 查询当前用户的 UID/GID。容器每次启动时会将 `/app/data` 和 `/app/uploads`（包括已有文件）的属主调整为指定值，然后以该用户身份运行应用，因此 SQLite、配置文件、原图和缩略图都会使用指定的属主。不要同时设置 Compose 的 `user` 字段，否则入口脚本无法以 root 身份修正挂载目录权限。
 
 ### 导入历史图片
 
@@ -109,6 +122,8 @@ docker compose run --rm oneimg ./main import-local --root /app/uploads
 Compose 模板会从项目根目录的 `.env` 读取变量并传入容器。例如生产环境可创建以下配置：
 
 ```dotenv
+PUID=1000
+PGID=1000
 APP_URL=https://oneimg.example.com
 PASSKEY_RP_ID=oneimg.example.com
 PASSKEY_ORIGINS=https://oneimg.example.com

@@ -254,7 +254,11 @@ func testBucketConnection(ctx context.Context, bucket models.Buckets) (string, e
 }
 
 func testLocalStorage() (string, error) {
-	file, err := os.CreateTemp(".", ".oneimg-storage-test-*")
+	const uploadDir = "uploads"
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		return "", fmt.Errorf("本地目录不可写: %w", err)
+	}
+	file, err := os.CreateTemp(uploadDir, ".oneimg-storage-test-*")
 	if err != nil {
 		return "", fmt.Errorf("本地目录不可写: %w", err)
 	}

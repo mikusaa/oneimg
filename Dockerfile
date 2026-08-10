@@ -41,7 +41,8 @@ FROM alpine:3.24
 RUN apk --no-cache add \
     ca-certificates \
     tzdata \
-    libwebp
+    libwebp \
+    su-exec
 
 # 设置工作目录
 WORKDIR /app
@@ -52,8 +53,12 @@ COPY --from=backend-builder /app/main ./
 # 复制前端构建产物
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
+# 根据 PUID/PGID 修正持久化目录权限并降权启动应用
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
 # 暴露端口
 EXPOSE 8080
 
 # 运行应用
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["./main"]

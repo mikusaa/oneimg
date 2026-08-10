@@ -3,6 +3,7 @@ package controllers
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"testing"
 
@@ -11,6 +12,25 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func TestLocalStorageConnectionUsesUploadsDirectory(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	message, err := testLocalStorage()
+	if err != nil {
+		t.Fatalf("testLocalStorage() error = %v", err)
+	}
+	if message != "本地目录可读写" {
+		t.Fatalf("testLocalStorage() message = %q", message)
+	}
+	entries, err := os.ReadDir("uploads")
+	if err != nil {
+		t.Fatalf("ReadDir(uploads) error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("testLocalStorage() left temporary files: %v", entries)
+	}
+}
 
 func TestBucketConnectionRejectsRemovedTelegramStorage(t *testing.T) {
 	_, err := buildBucketConnectionCandidate(map[string]any{
