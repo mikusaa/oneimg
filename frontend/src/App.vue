@@ -23,6 +23,7 @@
             <a href="/" class="font-medium text-slate-700 transition hover:text-primary dark:text-slate-200 dark:hover:text-primary">
               {{ seoSetting.seo_title || '初春图床' }}
             </a>
+            <span class="whitespace-nowrap"> · OneImg v{{ appVersion }}</span>
           </div>
           <div class="flex flex-wrap items-center justify-center gap-2 md:justify-end md:gap-2.5">
             <a
@@ -56,6 +57,7 @@ import { useRoute } from 'vue-router'
 import Navbar from '@/components/NavBar.vue'
 import icpImg from '@/assets/images/icp.svg'
 import securityImg from '@/assets/images/gongan.png'
+import packageInfo from '../package.json'
 
 const route = useRoute()
 const useSidebarLayout = computed(() => !route.meta.public)
@@ -70,6 +72,7 @@ const seoSetting = ref({
 })
 
 const year = new Date().getFullYear()
+const appVersion = packageInfo.version
 
 const handleSeoUpdate = (data) => {
   if (!data || typeof data !== 'object') return
