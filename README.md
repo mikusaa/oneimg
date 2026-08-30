@@ -148,7 +148,7 @@ docker compose up -d
 
 API 基础路径为 `/api/v1`。完整契约通过 `/api/openapi.yaml` 和 `/api/openapi.json` 提供 YAML、JSON 两种格式，Swagger UI 位于 `/api/docs`。
 
-浏览器请求使用 Session Cookie 和 `X-OneImg-CSRF`；外部调用请在“账户设置”创建个人 Bearer Token。Token 明文只在创建成功的 `201` 响应中显示一次，可选择 30、90、365 天或永不过期，并通过 scope 限制访问范围。Token 管理、密码修改和 Passkey 管理始终要求浏览器会话及当前密码。
+浏览器请求使用 Session Cookie 和 `X-OneImg-CSRF`；外部调用请在“账户设置”创建个人 Bearer Token。Token 明文只在创建成功的 `201` 响应中显示一次，可选择 30、90、365 天或永不过期，并通过 scope 限制访问范围。Token 管理始终要求浏览器会话；密码修改和 Passkey 管理还要求当前密码。
 
 可用 scope 为：`images:read`、`images:write`、`images:delete`、`tags:read`、`tags:write`、`storage:read`、`storage:write`、`users:read`、`users:write`、`settings:read`、`settings:write`、`stats:read`。Token 的实际权限始终受所属用户当前角色、功能权限和资源所有权约束；用户降权或删除后立即生效。
 
@@ -167,7 +167,7 @@ ONEIMG_CSRF=$(awk '$6 == "oneimg-csrf" { print $7 }' oneimg-cookies.txt)
 curl -b oneimg-cookies.txt -X POST https://oneimg.example.com/api/v1/me/tokens \
   -H 'Content-Type: application/json' \
   -H "X-OneImg-CSRF: ${ONEIMG_CSRF}" \
-  -d '{"name":"backup","scopes":["images:read"],"expiration_days":90,"current_password":"your-password"}'
+  -d '{"name":"backup","scopes":["images:read"],"expiration_days":90}'
 
 curl -X GET https://oneimg.example.com/api/v1/images \
   -H 'Authorization: Bearer oneimg_pat_<prefix>_<secret>'

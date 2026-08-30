@@ -195,7 +195,6 @@ paths:
       summary: 撤销个人访问令牌
       tags: [Account]
       security: [{ cookieAuth: [] }]
-      requestBody: { $ref: '#/components/requestBodies/PasswordConfirmation' }
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
@@ -706,12 +705,12 @@ components:
       properties: { current_password: { type: string, format: password }, username: { type: string }, password: { type: string, format: password } }
     CreateTokenRequest:
       type: object
-      required: [name, scopes, current_password]
+      required: [name, scopes]
       properties:
         name: { type: string, maxLength: 50 }
         scopes: { type: array, minItems: 1, items: { type: string, enum: ['images:read', 'images:write', 'images:delete', 'tags:read', 'tags:write', 'storage:read', 'storage:write', 'users:read', 'users:write', 'settings:read', 'settings:write', 'stats:read'] } }
         expiration_days: { type: [integer, 'null'], enum: [0, 30, 90, 365, null], default: 90 }
-        current_password: { type: string, format: password }
+        current_password: { type: string, format: password, deprecated: true, description: 为兼容旧客户端保留，服务端不再校验此字段 }
     ImageImportRequest:
       type: object
       required: [url]

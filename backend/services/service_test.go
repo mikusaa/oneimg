@@ -59,7 +59,7 @@ func TestPersonalAccessTokenLifecycle(t *testing.T) {
 	service.now = func() time.Time { return now }
 
 	created, err := service.Create(user.ID, CreateTokenInput{
-		Name: "automation", Scopes: []string{"images:read", "images:read", "tags:read"}, CurrentPassword: "correct-password",
+		Name: "automation", Scopes: []string{"images:read", "images:read", "tags:read"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestPersonalAccessTokenLifecycle(t *testing.T) {
 	}
 
 	never := 0
-	permanent, err := service.Create(user.ID, CreateTokenInput{Name: "permanent", Scopes: []string{"stats:read"}, ExpirationDays: &never, CurrentPassword: "correct-password"})
+	permanent, err := service.Create(user.ID, CreateTokenInput{Name: "permanent", Scopes: []string{"stats:read"}, ExpirationDays: &never})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestPersonalAccessTokenLifecycle(t *testing.T) {
 		t.Fatalf("permanent token expiry = %v", permanent.Token.ExpiresAt)
 	}
 
-	if err := service.Revoke(user.ID, created.Token.ID, "correct-password"); err != nil {
+	if err := service.Revoke(user.ID, created.Token.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := service.Authenticate(created.Plain); !errors.Is(err, ErrInvalidToken) {
@@ -146,9 +146,9 @@ func TestPersonalAccessTokenValidation(t *testing.T) {
 		input CreateTokenInput
 		err   error
 	}{
-		{"missing scope", CreateTokenInput{Name: "test", CurrentPassword: "correct-password"}, ErrTokenScopesRequired},
-		{"unknown scope", CreateTokenInput{Name: "test", Scopes: []string{"admin:all"}, CurrentPassword: "correct-password"}, ErrInvalidTokenScope},
-		{"wrong password", CreateTokenInput{Name: "test", Scopes: []string{"images:read"}, CurrentPassword: "wrong"}, ErrCurrentPassword},
+		{"missing name", CreateTokenInput{Scopes: []string{"images:read"}}, ErrInvalidTokenName},
+		{"missing scope", CreateTokenInput{Name: "test"}, ErrTokenScopesRequired},
+		{"unknown scope", CreateTokenInput{Name: "test", Scopes: []string{"admin:all"}}, ErrInvalidTokenScope},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := service.Create(user.ID, test.input)

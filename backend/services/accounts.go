@@ -17,6 +17,7 @@ var (
 	ErrRegistrationDisabled    = errors.New("registration is disabled")
 	ErrAccountFieldsRequired   = errors.New("at least one account field is required")
 	ErrUsernameChangeForbidden = errors.New("username change is forbidden")
+	ErrCurrentPassword         = errors.New("current password is incorrect")
 )
 
 type AccountService struct{ db *gorm.DB }

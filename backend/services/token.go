@@ -15,7 +15,6 @@ import (
 
 	"oneimg/backend/models"
 
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -41,10 +40,9 @@ type TokenService struct {
 }
 
 type CreateTokenInput struct {
-	Name            string
-	Scopes          []string
-	ExpirationDays  *int
-	CurrentPassword string
+	Name           string
+	Scopes         []string
+	ExpirationDays *int
 }
 
 type CreatedToken struct {
@@ -66,9 +64,6 @@ func (s *TokenService) Create(userID int, input CreateTokenInput) (CreatedToken,
 	input.Name = strings.TrimSpace(input.Name)
 	if input.Name == "" || len([]rune(input.Name)) > 50 {
 		return CreatedToken{}, ErrInvalidTokenName
-	}
-	if err := s.verifyPassword(userID, input.CurrentPassword); err != nil {
-		return CreatedToken{}, err
 	}
 	scopes, err := normalizeScopes(input.Scopes)
 	if err != nil {
@@ -111,10 +106,7 @@ func (s *TokenService) Create(userID int, input CreateTokenInput) (CreatedToken,
 	return CreatedToken{Token: record, Plain: plain}, nil
 }
 
-func (s *TokenService) Revoke(userID int, tokenID uint, currentPassword string) error {
-	if err := s.verifyPassword(userID, currentPassword); err != nil {
-		return err
-	}
+func (s *TokenService) Revoke(userID int, tokenID uint) error {
 	now := s.now().UTC()
 	result := s.db.Model(&models.PersonalAccessToken{}).
 		Where("id = ? AND user_id = ? AND revoked_at IS NULL", tokenID, userID).
@@ -159,17 +151,6 @@ func (s *TokenService) Authenticate(plain string) (*models.PersonalAccessToken, 
 	_ = s.db.Model(&token).Update("last_used_at", &now).Error
 	token.LastUsedAt = &now
 	return &token, &user, nil
-}
-
-func (s *TokenService) verifyPassword(userID int, password string) error {
-	var user models.User
-	if err := s.db.Select("id", "password").First(&user, userID).Error; err != nil {
-		return err
-	}
-	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
-		return ErrCurrentPassword
-	}
-	return nil
 }
 
 func (s *TokenService) hash(plain string) string {
@@ -228,5 +209,4 @@ var (
 	ErrInvalidTokenScope      = errors.New("invalid token scope")
 	ErrTokenScopesRequired    = errors.New("at least one token scope is required")
 	ErrInvalidTokenExpiration = errors.New("invalid token expiration")
-	ErrCurrentPassword        = errors.New("current password is incorrect")
 )

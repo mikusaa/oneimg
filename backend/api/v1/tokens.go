@@ -54,10 +54,11 @@ func (s *Server) listTokens(c *gin.Context) {
 
 func (s *Server) createToken(c *gin.Context) {
 	var input struct {
-		Name            string   `json:"name"`
-		Scopes          []string `json:"scopes"`
-		ExpirationDays  *int     `json:"expiration_days"`
-		CurrentPassword string   `json:"current_password"`
+		Name           string   `json:"name"`
+		Scopes         []string `json:"scopes"`
+		ExpirationDays *int     `json:"expiration_days"`
+		// Deprecated: retained so strict JSON decoding remains compatible with older clients.
+		CurrentPassword string `json:"current_password"`
 	}
 	if !bindJSON(c, &input) {
 		return
@@ -65,7 +66,6 @@ func (s *Server) createToken(c *gin.Context) {
 	user, _ := currentUser(c)
 	created, err := s.services.Tokens.Create(user.ID, services.CreateTokenInput{
 		Name: input.Name, Scopes: input.Scopes, ExpirationDays: input.ExpirationDays,
-		CurrentPassword: input.CurrentPassword,
 	})
 	if err != nil {
 		tokenServiceError(c, err)
@@ -80,14 +80,8 @@ func (s *Server) revokeToken(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var input struct {
-		CurrentPassword string `json:"current_password"`
-	}
-	if !bindJSON(c, &input) {
-		return
-	}
 	user, _ := currentUser(c)
-	if err := s.services.Tokens.Revoke(user.ID, uint(id), input.CurrentPassword); err != nil {
+	if err := s.services.Tokens.Revoke(user.ID, uint(id)); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			writeProblem(c, http.StatusNotFound, "token_not_found", "Token 不存在或已撤销")
 			return

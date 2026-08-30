@@ -2,10 +2,12 @@ package routes
 
 import (
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -365,7 +367,7 @@ func TestBearerScopesAndCurrentUserPermissionsAreIntersected(t *testing.T) {
 	if err := system.Database.DB.Create(&admin).Error; err != nil {
 		t.Fatal(err)
 	}
-	created, err := system.Services.Tokens.Create(admin.ID, services.CreateTokenInput{Name: "users", Scopes: []string{"users:read"}, CurrentPassword: "correct-password"})
+	created, err := system.Services.Tokens.Create(admin.ID, services.CreateTokenInput{Name: "users", Scopes: []string{"users:read"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,17 +410,92 @@ func TestBearerCannotManagePersonalTokens(t *testing.T) {
 	if err := system.Database.DB.Create(&user).Error; err != nil {
 		t.Fatal(err)
 	}
-	created, err := system.Services.Tokens.Create(user.ID, services.CreateTokenInput{Name: "self", Scopes: []string{"images:read"}, CurrentPassword: "correct-password"})
+	created, err := system.Services.Tokens.Create(user.ID, services.CreateTokenInput{Name: "self", Scopes: []string{"images:read"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/me/tokens", strings.NewReader(`{"name":"nested","scopes":["images:read"],"current_password":"correct-password"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/me/tokens", strings.NewReader(`{"name":"nested","scopes":["images:read"]}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+created.Plain)
 	router.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestPersonalTokensCanBeCreatedAndRevokedWithoutPassword(t *testing.T) {
+	cfg := &config.Config{AppURL: "http://localhost:8080", SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
+	router, system := setupTestRouter(t, cfg)
+	hash, err := bcrypt.GenerateFromPassword([]byte("correct-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := models.User{Username: "session-token-owner", Password: string(hash), Role: models.RoleAdmin, Permission: models.Permission{Codes: models.AllPermissionCodes(), Buckets: []int{}}}
+	if err := system.Database.DB.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	login := httptest.NewRecorder()
+	loginRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"session-token-owner","password":"correct-password"}`))
+	loginRequest.Header.Set("Content-Type", "application/json")
+	loginRequest.Header.Set("Origin", cfg.AppURL)
+	router.ServeHTTP(login, loginRequest)
+	if login.Code != http.StatusOK {
+		t.Fatalf("login status = %d, body = %s", login.Code, login.Body.String())
+	}
+
+	cookies := login.Result().Cookies()
+	csrf := ""
+	for _, cookie := range cookies {
+		if cookie.Name == "oneimg-csrf" {
+			csrf = cookie.Value
+			break
+		}
+	}
+	if csrf == "" {
+		t.Fatal("login did not issue a CSRF cookie")
+	}
+	addSession := func(request *http.Request) {
+		for _, cookie := range cookies {
+			request.AddCookie(cookie)
+		}
+		request.Header.Set("Origin", cfg.AppURL)
+		request.Header.Set("X-OneImg-CSRF", csrf)
+	}
+
+	create := httptest.NewRecorder()
+	createRequest := httptest.NewRequest(http.MethodPost, "/api/v1/me/tokens", strings.NewReader(`{"name":"passwordless","scopes":["images:read"],"expiration_days":90}`))
+	createRequest.Header.Set("Content-Type", "application/json")
+	addSession(createRequest)
+	router.ServeHTTP(create, createRequest)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", create.Code, create.Body.String())
+	}
+	var created struct {
+		Data struct {
+			Token  string `json:"token"`
+			Record struct {
+				ID uint `json:"id"`
+			} `json:"record"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(create.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Data.Token == "" || created.Data.Record.ID == 0 {
+		t.Fatalf("unexpected create response: %#v", created)
+	}
+
+	revoke := httptest.NewRecorder()
+	revokeRequest := httptest.NewRequest(http.MethodPost, "/api/v1/me/tokens/"+strconv.FormatUint(uint64(created.Data.Record.ID), 10)+"/revoke", nil)
+	addSession(revokeRequest)
+	router.ServeHTTP(revoke, revokeRequest)
+	if revoke.Code != http.StatusNoContent {
+		t.Fatalf("revoke status = %d, body = %s", revoke.Code, revoke.Body.String())
+	}
+	if _, _, err := system.Services.Tokens.Authenticate(created.Data.Token); !errors.Is(err, services.ErrInvalidToken) {
+		t.Fatalf("revoked token error = %v", err)
 	}
 }
 

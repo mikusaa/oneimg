@@ -235,11 +235,7 @@ export const revokePersonalToken = <ThrowOnError extends boolean = false>(option
             type: 'apiKey'
         }],
     url: '/me/tokens/{id}/revoke',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+    ...options
 });
 
 /**

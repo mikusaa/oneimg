@@ -277,8 +277,6 @@ func currentUser(c *gin.Context) (*models.User, error) {
 
 func tokenServiceError(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, services.ErrCurrentPassword):
-		writeProblem(c, http.StatusUnauthorized, "current_password_invalid", "当前密码错误")
 	case errors.Is(err, services.ErrInvalidTokenName):
 		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "Token 名称长度必须为 1-50 个字符")
 	case errors.Is(err, services.ErrTokenScopesRequired), errors.Is(err, services.ErrInvalidTokenScope):

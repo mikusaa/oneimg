@@ -134,7 +134,12 @@ export type CreateTokenRequest = {
     name: string;
     scopes: Array<'images:read' | 'images:write' | 'images:delete' | 'tags:read' | 'tags:write' | 'storage:read' | 'storage:write' | 'users:read' | 'users:write' | 'settings:read' | 'settings:write' | 'stats:read'>;
     expiration_days?: 0 | 30 | 90 | 365 | null;
-    current_password: string;
+    /**
+     * 为兼容旧客户端保留，服务端不再校验此字段
+     *
+     * @deprecated
+     */
+    current_password?: string;
 };
 
 export type ImageImportRequest = {
@@ -651,7 +656,7 @@ export type CreatePersonalTokenResponses = {
 export type CreatePersonalTokenResponse = CreatePersonalTokenResponses[keyof CreatePersonalTokenResponses];
 
 export type RevokePersonalTokenData = {
-    body: PasswordConfirmation;
+    body?: never;
     path: {
         id: number;
     };

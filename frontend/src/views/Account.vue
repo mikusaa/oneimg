@@ -89,12 +89,22 @@
             </div>
             <button type="button" class="primary-button shrink-0 px-4 py-2" :disabled="tokenBusy" @click="showTokenForm = !showTokenForm">{{ showTokenForm ? '取消' : '创建令牌' }}</button>
           </div>
-          <form v-if="showTokenForm" class="mb-6 grid gap-3 border-b border-slate-200 pb-6 dark:border-white/10 md:grid-cols-3" @submit.prevent="createPersonalToken">
+          <form v-if="showTokenForm" class="mb-6 grid gap-3 border-b border-slate-200 pb-6 dark:border-white/10 md:grid-cols-2" @submit.prevent="createPersonalToken">
             <input v-model="tokenForm.name" class="input-modern" placeholder="令牌名称" maxlength="50" required />
-            <input v-model="tokenForm.currentPassword" class="input-modern" type="password" placeholder="当前密码" autocomplete="current-password" required />
             <select v-model.number="tokenForm.expirationDays" class="input-modern"><option :value="30">30 天</option><option :value="90">90 天</option><option :value="365">365 天</option><option :value="0">永不过期</option></select>
-            <fieldset class="md:col-span-3">
+            <fieldset class="md:col-span-2">
               <legend class="field-label mb-2">权限范围</legend>
+              <label v-if="isAdmin" class="mb-2 flex min-h-10 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+                <input
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-blue-300 text-primary focus:ring-primary"
+                  :checked="allTokenScopesSelected"
+                  :indeterminate="someTokenScopesSelected"
+                  @change="toggleAllTokenScopes"
+                />
+                <span class="font-medium">全部权限</span>
+                <code class="ml-auto text-[11px] text-blue-500 dark:text-blue-300">{{ tokenScopes.length }} scopes</code>
+              </label>
               <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <label v-for="scope in tokenScopes" :key="scope.value" class="flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-white/10">
                   <input v-model="tokenForm.scopes" type="checkbox" :value="scope.value" class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary" />
@@ -103,7 +113,7 @@
                 </label>
               </div>
             </fieldset>
-            <button type="submit" class="primary-button md:col-span-3" :disabled="tokenBusy">{{ tokenBusy ? '创建中...' : '确认创建' }}</button>
+            <button type="submit" class="primary-button md:col-span-2" :disabled="tokenBusy">{{ tokenBusy ? '创建中...' : '确认创建' }}</button>
           </form>
           <div v-if="newToken" class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
             <code class="min-w-0 flex-1 break-all">{{ newToken }}</code>
@@ -279,9 +289,15 @@ const tokenScopes: Array<{ value: TokenScope; label: string }> = [
   { value: 'settings:write', label: '修改系统设置' },
   { value: 'stats:read', label: '读取统计数据' },
 ]
-const tokenForm = reactive<{ name: string; currentPassword: string; expirationDays: 0 | 30 | 90 | 365; scopes: TokenScope[] }>({
-  name: '', currentPassword: '', expirationDays: 90, scopes: ['images:read'],
+const tokenForm = reactive<{ name: string; expirationDays: 0 | 30 | 90 | 365; scopes: TokenScope[] }>({
+  name: '', expirationDays: 90, scopes: ['images:read'],
 })
+const allTokenScopesSelected = computed(() => tokenForm.scopes.length === tokenScopes.length)
+const someTokenScopesSelected = computed(() => tokenForm.scopes.length > 0 && !allTokenScopesSelected.value)
+
+const toggleAllTokenScopes = (event: Event) => {
+  tokenForm.scopes = (event.target as HTMLInputElement).checked ? tokenScopes.map(scope => scope.value) : []
+}
 
 const authHeaders = (json = false) => ({
   ...(json ? { 'Content-Type': 'application/json' } : {})
@@ -339,9 +355,9 @@ const createPersonalToken = async () => {
   if (tokenForm.scopes.length === 0) return message.warning('请至少选择一个权限范围')
   tokenBusy.value = true; newToken.value = ''
   try {
-    const response = await apiFetch('/api/v1/me/tokens', { method: 'POST', headers: authHeaders(true), body: JSON.stringify({ name: tokenForm.name, current_password: tokenForm.currentPassword, expiration_days: tokenForm.expirationDays, scopes: tokenForm.scopes }) })
+    const response = await apiFetch('/api/v1/me/tokens', { method: 'POST', headers: authHeaders(true), body: JSON.stringify({ name: tokenForm.name, expiration_days: tokenForm.expirationDays, scopes: tokenForm.scopes }) })
     const data = await response.json(); if (!response.ok) throw new Error(data.detail || '创建令牌失败')
-    newToken.value = data.data.token; tokens.value.unshift(data.data.record); tokenForm.name = ''; tokenForm.currentPassword = ''; showTokenForm.value = false
+    newToken.value = data.data.token; tokens.value.unshift(data.data.record); tokenForm.name = ''; showTokenForm.value = false
   } catch (error) { message.error(error.message || '创建令牌失败') } finally { tokenBusy.value = false }
 }
 
@@ -356,13 +372,13 @@ const copyNewToken = async () => {
 }
 
 const revokePersonalToken = async (token) => {
-  const password = window.prompt('请输入当前密码以撤销令牌')
-  if (!password) return
+  if (!window.confirm(`确认撤销令牌“${token.name}”？`)) return
   tokenBusy.value = true
   try {
-    const response = await apiFetch(`/api/v1/me/tokens/${token.id}/revoke`, { method: 'POST', headers: authHeaders(true), body: JSON.stringify({ current_password: password }) })
+    const response = await apiFetch(`/api/v1/me/tokens/${token.id}/revoke`, { method: 'POST' })
     if (!response.ok) { const data = await response.json(); throw new Error(data.detail || '撤销令牌失败') }
     token.revoked_at = new Date().toISOString()
+    message.success('令牌已撤销')
   } catch (error) { message.error(error.message || '撤销令牌失败') } finally { tokenBusy.value = false }
 }
 
