@@ -1,0 +1,35 @@
+name: 校验 PicGo 插件
+
+on:
+  push:
+    branches:
+      - picgo-plugin-oneimg
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 配置 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 安装依赖并校验
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run typecheck
+          pnpm run test
+          pnpm run build
+          test -z "$(git status --porcelain --untracked-files=all -- dist)"

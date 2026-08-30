@@ -1,0 +1,29 @@
+{
+  "name": "picgo-plugin-oneimg",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PicGo 3 uploader for OneImg with optional remote deletion",
+  "main": "dist/index.cjs",
+  "keywords": [
+    "picgo-plugin",
+    "picgo-gui-plugin",
+    "oneimg"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "form-data": "^4.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "picgo": "3.0.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
