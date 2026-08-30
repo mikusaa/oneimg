@@ -1,7 +1,7 @@
-import type { Image, Problem, StorageBucket, Tag, UploadBatch, User } from './generated/types.gen'
+import type { DashboardStats, Image, Problem, StorageBucket, Tag, UploadBatch, User } from './generated/types.gen'
 import { client as generatedClient } from './generated/client.gen'
 
-export type { Image, Problem, StorageBucket, Tag, UploadBatch, User } from './generated/types.gen'
+export type { DashboardStats, Image, Problem, StorageBucket, Tag, UploadBatch, User } from './generated/types.gen'
 
 export type Envelope<T> = { data: T; meta?: { pagination?: { page: number; page_size: number; total: number; total_pages: number } } }
 
@@ -68,7 +68,7 @@ export const api = {
   uploadImages: (form: FormData, onProgress?: (value: number) => void) => uploadWithProgress<UploadBatch>(`${baseURL}/api/v1/images`, form, onProgress),
   importImage: (body: Record<string, unknown>) => request<Image>('/image-imports', { method: 'POST', body: JSON.stringify(body) }),
   uploadOptions: () => request<Record<string, unknown>>('/upload-options'),
-  dashboardStats: () => request<Record<string, unknown>>('/stats/dashboard'),
+  dashboardStats: () => request<DashboardStats>('/stats/dashboard'),
   imageStats: (period: string) => request<Record<string, unknown>[]>(`/stats/images?period=${encodeURIComponent(period)}`),
   listBuckets: () => request<StorageBucket[]>('/storage-buckets'),
   listUsers: (query = '') => request<User[]>(`/users${query ? `?${query}` : ''}`),

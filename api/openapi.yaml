@@ -386,7 +386,7 @@ paths:
       summary: 获取仪表盘统计
       tags: [Statistics]
       responses:
-        '200': { $ref: '#/components/responses/DataResponse' }
+        '200': { $ref: '#/components/responses/DashboardStatsResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
   /stats/images:
     get:
@@ -565,6 +565,10 @@ components:
       description: 存储桶列表
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/StorageBucket' } } } } } }
+    DashboardStatsResponse:
+      description: 仪表盘统计
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/DashboardStats' } } } } }
     UploadBatchResponse:
       description: 按文件返回的批量上传结果
       headers: { X-Request-ID: { schema: { type: string } } }
@@ -647,6 +651,30 @@ components:
         uploader_role: { type: integer }
         tags: { type: array, items: { $ref: '#/components/schemas/Tag' } }
         created_at: { type: string, format: date-time }
+    TrendPoint:
+      type: object
+      required: [date, count]
+      properties: { date: { type: string }, count: { type: integer, format: int64, minimum: 0 } }
+    FormatStats:
+      type: object
+      required: [format, count, size]
+      properties: { format: { type: string }, count: { type: integer, format: int64, minimum: 0 }, size: { type: integer, format: int64, minimum: 0 } }
+    SizeStats:
+      type: object
+      required: [range, count]
+      properties: { range: { type: string }, count: { type: integer, format: int64, minimum: 0 } }
+    DashboardStats:
+      type: object
+      required: [total_images, total_size, today_uploads, month_uploads, recent_images, upload_trend, format_stats, size_distribution]
+      properties:
+        total_images: { type: integer, format: int64, minimum: 0 }
+        total_size: { type: integer, format: int64, minimum: 0 }
+        today_uploads: { type: integer, format: int64, minimum: 0 }
+        month_uploads: { type: integer, format: int64, minimum: 0 }
+        recent_images: { type: array, items: { $ref: '#/components/schemas/Image' } }
+        upload_trend: { type: array, items: { $ref: '#/components/schemas/TrendPoint' } }
+        format_stats: { type: array, items: { $ref: '#/components/schemas/FormatStats' } }
+        size_distribution: { type: array, items: { $ref: '#/components/schemas/SizeStats' } }
     StorageBucket:
       type: object
       required: [id, name, type, capacity_bytes, usage_bytes]

@@ -594,12 +594,8 @@ const loadRecentImages = async () => {
 const loadDashboardStats = async () => {
   statsLoading.value = true;
   try {
-    const response = await apiFetch(`${API_BASE_URL}/api/v1/stats/dashboard`, {
-      headers: {}
-    });
-    const result = await response.json();
-    if (!response.ok || !result.data) throw new Error(result.detail || '获取统计数据失败');
-    dashboardStats.value = { ...dashboardStats.value, ...(result.data || {}) };
+    const result = await api.dashboardStats();
+    dashboardStats.value = { ...dashboardStats.value, ...result };
   } catch (error) {
     console.error('获取统计数据失败:', error);
   } finally {

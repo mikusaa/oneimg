@@ -77,6 +77,33 @@ export type Image = {
     created_at: string;
 };
 
+export type TrendPoint = {
+    date: string;
+    count: number;
+};
+
+export type FormatStats = {
+    format: string;
+    count: number;
+    size: number;
+};
+
+export type SizeStats = {
+    range: string;
+    count: number;
+};
+
+export type DashboardStats = {
+    total_images: number;
+    total_size: number;
+    today_uploads: number;
+    month_uploads: number;
+    recent_images: Array<Image>;
+    upload_trend: Array<TrendPoint>;
+    format_stats: Array<FormatStats>;
+    size_distribution: Array<SizeStats>;
+};
+
 export type StorageBucket = {
     id: number;
     name: string;
@@ -1235,9 +1262,11 @@ export type GetDashboardStatsError = GetDashboardStatsErrors[keyof GetDashboardS
 
 export type GetDashboardStatsResponses = {
     /**
-     * 请求成功
+     * 仪表盘统计
      */
-    200: DataEnvelope;
+    200: {
+        data: DashboardStats;
+    };
 };
 
 export type GetDashboardStatsResponse = GetDashboardStatsResponses[keyof GetDashboardStatsResponses];

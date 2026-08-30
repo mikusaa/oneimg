@@ -241,6 +241,59 @@ func TestStorageDeleteFailureKeepsDatabaseRecords(t *testing.T) {
 	}
 }
 
+func TestDashboardStatsQueriesAreIndependentAndUserScoped(t *testing.T) {
+	db := newServiceTestDB(t)
+	admin := createServiceTestUser(t, db, "stats-admin", "correct-password", models.RoleAdmin)
+	alice := createServiceTestUser(t, db, "stats-alice", "correct-password", models.RoleUser)
+	bob := createServiceTestUser(t, db, "stats-bob", "correct-password", models.RoleUser)
+	if err := db.Create(&models.Settings{}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	now := time.Date(2026, time.August, 30, 10, 0, 0, 0, location)
+	images := []models.Image{
+		{FileName: "before-month.jpg", FileSize: 10, MimeType: "image/jpeg", UserId: alice.ID, CreatedAt: time.Date(2026, time.July, 31, 23, 59, 59, 0, location)},
+		{FileName: "month-start.png", FileSize: 20, MimeType: "image/png", UserId: alice.ID, CreatedAt: time.Date(2026, time.August, 1, 0, 0, 0, 0, location)},
+		{FileName: "before-today.png", FileSize: 30, MimeType: "image/png", UserId: alice.ID, CreatedAt: time.Date(2026, time.August, 29, 23, 59, 59, 0, location)},
+		{FileName: "today-start.webp", FileSize: 40, MimeType: "image/webp", UserId: alice.ID, CreatedAt: time.Date(2026, time.August, 30, 0, 0, 0, 0, location)},
+		{FileName: "today-bob.jpg", FileSize: 50, MimeType: "image/jpeg", UserId: bob.ID, CreatedAt: time.Date(2026, time.August, 30, 9, 0, 0, 0, location)},
+		{FileName: "month-bob.png", FileSize: 60, MimeType: "image/png", UserId: bob.ID, CreatedAt: time.Date(2026, time.August, 15, 12, 0, 0, 0, location)},
+	}
+	if err := db.Create(&images).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewStatsService(db)
+	service.now = func() time.Time { return now }
+	for _, test := range []struct {
+		name                      string
+		user                      models.User
+		total, size, today, month int64
+	}{
+		{name: "administrator sees all images", user: admin, total: 6, size: 210, today: 2, month: 5},
+		{name: "ordinary user sees own images", user: alice, total: 4, size: 100, today: 1, month: 3},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stats, err := service.Dashboard(test.user)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stats.TotalImages != test.total || stats.TotalSize != test.size || stats.TodayUploads != test.today || stats.MonthUploads != test.month {
+				t.Fatalf("dashboard totals = (%d, %d, %d, %d), want (%d, %d, %d, %d)", stats.TotalImages, stats.TotalSize, stats.TodayUploads, stats.MonthUploads, test.total, test.size, test.today, test.month)
+			}
+			if int64(len(stats.RecentImages)) != test.total {
+				t.Fatalf("recent image count = %d, want %d", len(stats.RecentImages), test.total)
+			}
+		})
+	}
+
+	trend := service.ImageTrend(admin, "day")
+	if len(trend) != 30 || trend[len(trend)-2].Count != 1 || trend[len(trend)-1].Count != 2 {
+		t.Fatalf("unexpected daily trend tail: %#v", trend[len(trend)-2:])
+	}
+}
+
 func TestRemoteImportRejectsNonPublicAddresses(t *testing.T) {
 	for _, rawURL := range []string{
 		"http://127.0.0.1/image.png",

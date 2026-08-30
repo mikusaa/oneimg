@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"oneimg/backend/app"
 	"oneimg/backend/config"
@@ -396,6 +397,60 @@ func TestBearerScopesAndCurrentUserPermissionsAreIntersected(t *testing.T) {
 	}
 	if recorder := request("/api/v1/users"); recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("deleted user status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestDashboardStatsWithSession(t *testing.T) {
+	cfg := &config.Config{AppURL: "http://localhost:8080", SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
+	router, system := setupTestRouter(t, cfg)
+	hash, err := bcrypt.GenerateFromPassword([]byte("correct-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := models.User{Username: "stats-route-admin", Password: string(hash), Role: models.RoleAdmin, Permission: models.Permission{Codes: models.AllPermissionCodes(), Buckets: []int{}}}
+	if err := system.Database.DB.Create(&admin).Error; err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	images := []models.Image{
+		{FileName: "one.png", FileSize: 1024, MimeType: "image/png", UserId: admin.ID, CreatedAt: now},
+		{FileName: "two.webp", FileSize: 2048, MimeType: "image/webp", UserId: admin.ID, CreatedAt: now},
+	}
+	if err := system.Database.DB.Create(&images).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	login := httptest.NewRecorder()
+	loginRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"stats-route-admin","password":"correct-password"}`))
+	loginRequest.Header.Set("Content-Type", "application/json")
+	loginRequest.Header.Set("Origin", cfg.AppURL)
+	router.ServeHTTP(login, loginRequest)
+	if login.Code != http.StatusOK {
+		t.Fatalf("login status = %d, body = %s", login.Code, login.Body.String())
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/stats/dashboard", nil)
+	for _, cookie := range login.Result().Cookies() {
+		request.AddCookie(cookie)
+	}
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Data struct {
+			TotalImages  int64 `json:"total_images"`
+			TotalSize    int64 `json:"total_size"`
+			TodayUploads int64 `json:"today_uploads"`
+			MonthUploads int64 `json:"month_uploads"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Data.TotalImages != 2 || payload.Data.TotalSize != 3072 || payload.Data.TodayUploads != 2 || payload.Data.MonthUploads != 2 {
+		t.Fatalf("dashboard response = %#v", payload.Data)
 	}
 }
 
