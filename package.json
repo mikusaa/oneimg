@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "PicGo 3 uploader for OneImg with optional remote deletion",
+  "author": {
+    "name": "mikusa"
+  },
   "main": "dist/index.cjs",
   "keywords": [
     "picgo-plugin",
