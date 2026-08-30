@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/goccy/go-yaml"
 )
 
 // 设置路由
@@ -62,6 +63,19 @@ func SetupRoutes(frontendFS fs.FS, system *app.System) *gin.Engine {
 			return
 		}
 		c.Data(http.StatusOK, "application/yaml; charset=utf-8", content)
+	})
+	r.GET("/api/openapi.json", func(c *gin.Context) {
+		content, err := fs.ReadFile(frontendFS, "api/openapi.yaml")
+		if err != nil {
+			v1Server.NotFound(c)
+			return
+		}
+		jsonContent, err := yaml.YAMLToJSON(content)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "OpenAPI 文档转换失败")
+			return
+		}
+		c.Data(http.StatusOK, "application/json; charset=utf-8", jsonContent)
 	})
 	r.GET("/api/docs", func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<!doctype html><html><head><meta charset="utf-8"><title>OneImg API</title><link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script><script>SwaggerUIBundle({url:'/api/openapi.yaml',dom_id:'#swagger-ui',deepLinking:true,persistAuthorization:true})</script></body></html>`))

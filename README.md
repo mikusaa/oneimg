@@ -146,7 +146,7 @@ docker compose up -d
 
 ## API v1
 
-OneImg 现在只提供 `/api/v1/*`，旧 `/api/*` 路径会返回 RFC 9457 Problem Details 404。完整契约公开在 `/api/openapi.yaml`，Swagger UI 位于 `/api/docs`。
+API 基础路径为 `/api/v1`。完整契约通过 `/api/openapi.yaml` 和 `/api/openapi.json` 提供 YAML、JSON 两种格式，Swagger UI 位于 `/api/docs`。
 
 浏览器请求使用 Session Cookie 和 `X-OneImg-CSRF`；外部调用请在“账户设置”创建个人 Bearer Token。Token 明文只在创建成功的 `201` 响应中显示一次，可选择 30、90、365 天或永不过期，并通过 scope 限制访问范围。Token 管理、密码修改和 Passkey 管理始终要求浏览器会话及当前密码。
 

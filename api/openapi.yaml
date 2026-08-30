@@ -2,23 +2,33 @@ openapi: 3.1.0
 info:
   title: OneImg API
   version: 1.0.0
-  description: Breaking v1 API for OneImg. Legacy /api routes are not supported.
+  description: OneImg 图像托管服务开放接口文档。
 servers:
   - url: /api/v1
 tags:
   - name: Public
+    description: 无需登录即可访问的公开接口
   - name: Authentication
+    description: 账户认证与会话管理
   - name: Account
+    description: 当前账户、Passkey 与个人访问令牌管理
   - name: Images
+    description: 图片查询、上传、导入与标签关联
   - name: Tags
+    description: 标签管理
   - name: Storage
+    description: 存储桶与连接配置
   - name: Statistics
+    description: 统计数据
   - name: Users
+    description: 用户与权限管理
   - name: Settings
+    description: 系统设置
 paths:
   /public/config:
     get:
       operationId: getPublicConfig
+      summary: 获取公开配置
       tags: [Public]
       security: []
       responses:
@@ -27,15 +37,17 @@ paths:
   /public/images/random:
     get:
       operationId: getRandomImage
+      summary: 获取随机图片
       tags: [Public]
       security: []
-      description: Reserved endpoint. It currently returns 501 random_images_not_implemented.
+      description: 预留接口，当前返回 501 random_images_not_implemented。
       responses:
         '501': { $ref: '#/components/responses/ProblemResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
   /auth/login:
     post:
       operationId: login
+      summary: 登录
       tags: [Authentication]
       security: []
       requestBody: { $ref: '#/components/requestBodies/Login' }
@@ -45,6 +57,7 @@ paths:
   /auth/register:
     post:
       operationId: register
+      summary: 注册账户
       tags: [Authentication]
       security: []
       requestBody: { $ref: '#/components/requestBodies/Login' }
@@ -54,6 +67,7 @@ paths:
   /auth/logout:
     post:
       operationId: logout
+      summary: 退出登录
       tags: [Authentication]
       security: [{ cookieAuth: [] }]
       responses:
@@ -62,6 +76,7 @@ paths:
   /auth/passkeys/login/options:
     post:
       operationId: createPasskeyLoginOptions
+      summary: 创建 Passkey 登录选项
       tags: [Authentication]
       security: []
       responses:
@@ -70,6 +85,7 @@ paths:
   /auth/passkeys/login/verify:
     post:
       operationId: verifyPasskeyLogin
+      summary: 验证 Passkey 登录
       tags: [Authentication]
       security: []
       requestBody:
@@ -81,12 +97,14 @@ paths:
   /me:
     get:
       operationId: getMe
+      summary: 获取当前账户
       tags: [Account]
       responses:
         '200': { $ref: '#/components/responses/UserResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
     patch:
       operationId: updateMe
+      summary: 更新当前账户
       tags: [Account]
       security: [{ cookieAuth: [] }]
       requestBody:
@@ -98,6 +116,7 @@ paths:
   /me/passkeys:
     get:
       operationId: listPasskeys
+      summary: 获取 Passkey 列表
       tags: [Account]
       security: [{ cookieAuth: [] }]
       responses:
@@ -106,6 +125,7 @@ paths:
   /me/passkeys/registration/options:
     post:
       operationId: createPasskeyRegistrationOptions
+      summary: 创建 Passkey 注册选项
       tags: [Account]
       security: [{ cookieAuth: [] }]
       requestBody: { $ref: '#/components/requestBodies/PasskeyManagement' }
@@ -115,6 +135,7 @@ paths:
   /me/passkeys/registration/verify:
     post:
       operationId: verifyPasskeyRegistration
+      summary: 验证 Passkey 注册
       tags: [Account]
       security: [{ cookieAuth: [] }]
       requestBody:
@@ -127,6 +148,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     patch:
       operationId: renamePasskey
+      summary: 重命名 Passkey
       tags: [Account]
       security: [{ cookieAuth: [] }]
       requestBody:
@@ -139,6 +161,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     post:
       operationId: revokePasskey
+      summary: 撤销 Passkey
       tags: [Account]
       security: [{ cookieAuth: [] }]
       requestBody: { $ref: '#/components/requestBodies/PasswordConfirmation' }
@@ -148,6 +171,7 @@ paths:
   /me/tokens:
     get:
       operationId: listPersonalTokens
+      summary: 获取个人访问令牌列表
       tags: [Account]
       security: [{ cookieAuth: [] }]
       responses:
@@ -155,6 +179,7 @@ paths:
         default: { $ref: '#/components/responses/ProblemResponse' }
     post:
       operationId: createPersonalToken
+      summary: 创建个人访问令牌
       tags: [Account]
       security: [{ cookieAuth: [] }]
       requestBody:
@@ -167,6 +192,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     post:
       operationId: revokePersonalToken
+      summary: 撤销个人访问令牌
       tags: [Account]
       security: [{ cookieAuth: [] }]
       requestBody: { $ref: '#/components/requestBodies/PasswordConfirmation' }
@@ -176,6 +202,7 @@ paths:
   /upload-options:
     get:
       operationId: getUploadOptions
+      summary: 获取上传选项
       tags: [Images]
       responses:
         '200': { $ref: '#/components/responses/DataResponse' }
@@ -183,6 +210,7 @@ paths:
   /images:
     get:
       operationId: listImages
+      summary: 获取图片列表
       tags: [Images]
       parameters:
         - { $ref: '#/components/parameters/Page' }
@@ -191,7 +219,7 @@ paths:
         - { $ref: '#/components/parameters/Order' }
         - { name: q, in: query, schema: { type: string } }
         - { name: bucket_id, in: query, schema: { type: integer, minimum: 1 } }
-        - { name: tag_ids, in: query, description: Comma-separated positive IDs, schema: { type: string } }
+        - { name: tag_ids, in: query, description: 以逗号分隔的正整数 ID, schema: { type: string } }
         - { name: untagged, in: query, schema: { type: boolean } }
         - { name: uploader_role, in: query, schema: { type: integer, enum: [1, 3] } }
       responses:
@@ -199,6 +227,7 @@ paths:
         default: { $ref: '#/components/responses/ProblemResponse' }
     post:
       operationId: uploadImages
+      summary: 上传图片
       tags: [Images]
       requestBody:
         required: true
@@ -218,12 +247,14 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     get:
       operationId: getImage
+      summary: 获取图片详情
       tags: [Images]
       responses:
         '200': { $ref: '#/components/responses/ImageResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
     delete:
       operationId: deleteImage
+      summary: 删除图片
       tags: [Images]
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
@@ -231,6 +262,7 @@ paths:
   /image-imports:
     post:
       operationId: importImage
+      summary: 导入远程图片
       tags: [Images]
       requestBody:
         required: true
@@ -244,12 +276,14 @@ paths:
       - { $ref: '#/components/parameters/TagID' }
     put:
       operationId: addImageTag
+      summary: 添加图片标签
       tags: [Images]
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
     delete:
       operationId: removeImageTag
+      summary: 移除图片标签
       tags: [Images]
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
@@ -257,6 +291,7 @@ paths:
   /images/tags:
     patch:
       operationId: updateImageTags
+      summary: 批量更新图片标签
       tags: [Images]
       requestBody:
         required: true
@@ -267,12 +302,14 @@ paths:
   /tags:
     get:
       operationId: listTags
+      summary: 获取标签列表
       tags: [Tags]
       responses:
         '200': { $ref: '#/components/responses/TagCollectionResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
     post:
       operationId: createTag
+      summary: 创建标签
       tags: [Tags]
       requestBody: { $ref: '#/components/requestBodies/Tag' }
       responses:
@@ -282,6 +319,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     patch:
       operationId: updateTag
+      summary: 更新标签
       tags: [Tags]
       requestBody: { $ref: '#/components/requestBodies/Tag' }
       responses:
@@ -289,6 +327,7 @@ paths:
         default: { $ref: '#/components/responses/ProblemResponse' }
     delete:
       operationId: deleteTag
+      summary: 删除标签
       tags: [Tags]
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
@@ -296,12 +335,14 @@ paths:
   /storage-buckets:
     get:
       operationId: listStorageBuckets
+      summary: 获取存储桶列表
       tags: [Storage]
       responses:
         '200': { $ref: '#/components/responses/StorageBucketCollectionResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
     post:
       operationId: createStorageBucket
+      summary: 创建存储桶
       tags: [Storage]
       requestBody: { $ref: '#/components/requestBodies/Storage' }
       responses:
@@ -311,12 +352,14 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     get:
       operationId: getStorageBucket
+      summary: 获取存储桶详情
       tags: [Storage]
       responses:
         '200': { $ref: '#/components/responses/StorageBucketResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
     patch:
       operationId: updateStorageBucket
+      summary: 更新存储桶
       tags: [Storage]
       requestBody: { $ref: '#/components/requestBodies/Storage' }
       responses:
@@ -324,6 +367,7 @@ paths:
         default: { $ref: '#/components/responses/ProblemResponse' }
     delete:
       operationId: deleteStorageBucket
+      summary: 删除存储桶
       tags: [Storage]
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
@@ -331,6 +375,7 @@ paths:
   /storage-connection-tests:
     post:
       operationId: testStorageConnection
+      summary: 测试存储连接
       tags: [Storage]
       requestBody: { $ref: '#/components/requestBodies/Storage' }
       responses:
@@ -339,6 +384,7 @@ paths:
   /stats/dashboard:
     get:
       operationId: getDashboardStats
+      summary: 获取仪表盘统计
       tags: [Statistics]
       responses:
         '200': { $ref: '#/components/responses/DataResponse' }
@@ -346,6 +392,7 @@ paths:
   /stats/images:
     get:
       operationId: getImageStats
+      summary: 获取图片统计
       tags: [Statistics]
       parameters:
         - { name: period, in: query, schema: { type: string, enum: [day, week, month, year], default: month } }
@@ -355,6 +402,7 @@ paths:
   /users:
     get:
       operationId: listUsers
+      summary: 获取用户列表
       tags: [Users]
       parameters:
         - { $ref: '#/components/parameters/Page' }
@@ -369,6 +417,7 @@ paths:
         default: { $ref: '#/components/responses/ProblemResponse' }
     post:
       operationId: createUser
+      summary: 创建用户
       tags: [Users]
       requestBody:
         required: true
@@ -380,6 +429,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     patch:
       operationId: updateUser
+      summary: 更新用户
       tags: [Users]
       requestBody:
         required: true
@@ -389,6 +439,7 @@ paths:
         default: { $ref: '#/components/responses/ProblemResponse' }
     delete:
       operationId: deleteUser
+      summary: 删除用户
       tags: [Users]
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
@@ -397,6 +448,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     put:
       operationId: updateUserPermissions
+      summary: 更新用户权限
       tags: [Users]
       requestBody:
         required: true
@@ -408,6 +460,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     post:
       operationId: resetUserPassword
+      summary: 重置用户密码
       tags: [Users]
       responses:
         '200': { $ref: '#/components/responses/DataResponse' }
@@ -416,6 +469,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     post:
       operationId: revokeUserPasskeys
+      summary: 撤销用户的 Passkey
       tags: [Users]
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
@@ -423,14 +477,16 @@ paths:
   /settings:
     get:
       operationId: getSettings
+      summary: 获取系统设置
       tags: [Settings]
       parameters:
-        - { name: groups, in: query, description: Comma-separated setting groups, schema: { type: string } }
+        - { name: groups, in: query, description: 以逗号分隔的设置分组, schema: { type: string } }
       responses:
         '200': { $ref: '#/components/responses/DataResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
     patch:
       operationId: updateSettings
+      summary: 更新系统设置
       tags: [Settings]
       requestBody:
         required: true
@@ -468,58 +524,58 @@ components:
       content: { application/json: { schema: { $ref: '#/components/schemas/StorageRequest' } } }
   responses:
     ProblemResponse:
-      description: RFC 9457 Problem Details
+      description: RFC 9457 问题详情
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
     DataResponse:
-      description: Successful response
+      description: 请求成功
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } }
     NoContentResponse:
-      description: Successful response with no content
+      description: 请求成功，无响应内容
       headers: { X-Request-ID: { schema: { type: string } } }
     UserResponse:
-      description: User response
+      description: 用户信息
       headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/User' } } } } }
     UserCollectionResponse:
-      description: Paginated user response
+      description: 分页用户列表
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/ManagedUser' } }, meta: { $ref: '#/components/schemas/Meta' } } } } }
     ImageResponse:
-      description: Image response
+      description: 图片信息
       headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/Image' } } } } }
     ImageCollectionResponse:
-      description: Paginated image response
+      description: 分页图片列表
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/Image' } }, meta: { $ref: '#/components/schemas/Meta' } } } } }
     TagResponse:
-      description: Tag response
+      description: 标签信息
       headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/Tag' } } } } }
     TagCollectionResponse:
-      description: Tag collection response
+      description: 标签列表
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/Tag' } } } } } }
     StorageBucketResponse:
-      description: Storage bucket response
+      description: 存储桶信息
       headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/StorageBucket' } } } } }
     StorageBucketCollectionResponse:
-      description: Storage bucket collection response
+      description: 存储桶列表
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/StorageBucket' } } } } } }
     UploadBatchResponse:
-      description: Per-file upload results
+      description: 按文件返回的批量上传结果
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/UploadBatch' } } } } }
     TokenCollectionResponse:
-      description: Personal token collection response
+      description: 个人访问令牌列表
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/PersonalAccessToken' } } } } } }
     CreatedTokenResponse:
-      description: Newly created token; the plaintext token is returned only once
+      description: 新建的个人访问令牌，明文仅返回一次
       headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/CreatedPersonalAccessToken' } } } } }
   schemas:

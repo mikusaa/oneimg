@@ -78,6 +78,10 @@ func TestOpenAPIContract(t *testing.T) {
 				t.Fatalf("duplicate operationId %q on %s and %s %s", operationID, previous, method, path)
 			}
 			operationIDs[operationID] = method + " " + path
+			summary, _ := operation["summary"].(string)
+			if strings.TrimSpace(summary) == "" {
+				t.Fatalf("%s %s has no summary", method, path)
+			}
 
 			responses := object(t, operation["responses"], method+" "+path+" responses")
 			problem := object(t, responses["default"], method+" "+path+" default response")

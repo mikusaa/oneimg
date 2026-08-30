@@ -233,7 +233,7 @@ export type GetPublicConfigData = {
 
 export type GetPublicConfigErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -242,7 +242,7 @@ export type GetPublicConfigError = GetPublicConfigErrors[keyof GetPublicConfigEr
 
 export type GetPublicConfigResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -258,11 +258,11 @@ export type GetRandomImageData = {
 
 export type GetRandomImageErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     501: Problem;
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -271,7 +271,7 @@ export type GetRandomImageError = GetRandomImageErrors[keyof GetRandomImageError
 
 export type GetRandomImageResponses = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -287,7 +287,7 @@ export type LoginData = {
 
 export type LoginErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -296,7 +296,7 @@ export type LoginError = LoginErrors[keyof LoginErrors];
 
 export type LoginResponses = {
     /**
-     * User response
+     * 用户信息
      */
     200: {
         data: User;
@@ -314,7 +314,7 @@ export type RegisterData = {
 
 export type RegisterErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -323,7 +323,7 @@ export type RegisterError = RegisterErrors[keyof RegisterErrors];
 
 export type RegisterResponses = {
     /**
-     * User response
+     * 用户信息
      */
     201: {
         data: User;
@@ -341,7 +341,7 @@ export type LogoutData = {
 
 export type LogoutErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -350,7 +350,7 @@ export type LogoutError = LogoutErrors[keyof LogoutErrors];
 
 export type LogoutResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -366,7 +366,7 @@ export type CreatePasskeyLoginOptionsData = {
 
 export type CreatePasskeyLoginOptionsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -375,7 +375,7 @@ export type CreatePasskeyLoginOptionsError = CreatePasskeyLoginOptionsErrors[key
 
 export type CreatePasskeyLoginOptionsResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -393,7 +393,7 @@ export type VerifyPasskeyLoginData = {
 
 export type VerifyPasskeyLoginErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -402,7 +402,7 @@ export type VerifyPasskeyLoginError = VerifyPasskeyLoginErrors[keyof VerifyPassk
 
 export type VerifyPasskeyLoginResponses = {
     /**
-     * User response
+     * 用户信息
      */
     200: {
         data: User;
@@ -420,7 +420,7 @@ export type GetMeData = {
 
 export type GetMeErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -429,7 +429,7 @@ export type GetMeError = GetMeErrors[keyof GetMeErrors];
 
 export type GetMeResponses = {
     /**
-     * User response
+     * 用户信息
      */
     200: {
         data: User;
@@ -447,7 +447,7 @@ export type UpdateMeData = {
 
 export type UpdateMeErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -456,7 +456,7 @@ export type UpdateMeError = UpdateMeErrors[keyof UpdateMeErrors];
 
 export type UpdateMeResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -472,7 +472,7 @@ export type ListPasskeysData = {
 
 export type ListPasskeysErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -481,7 +481,7 @@ export type ListPasskeysError = ListPasskeysErrors[keyof ListPasskeysErrors];
 
 export type ListPasskeysResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -497,7 +497,7 @@ export type CreatePasskeyRegistrationOptionsData = {
 
 export type CreatePasskeyRegistrationOptionsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -506,7 +506,7 @@ export type CreatePasskeyRegistrationOptionsError = CreatePasskeyRegistrationOpt
 
 export type CreatePasskeyRegistrationOptionsResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -524,7 +524,7 @@ export type VerifyPasskeyRegistrationData = {
 
 export type VerifyPasskeyRegistrationErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -533,7 +533,7 @@ export type VerifyPasskeyRegistrationError = VerifyPasskeyRegistrationErrors[key
 
 export type VerifyPasskeyRegistrationResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     201: DataEnvelope;
 };
@@ -553,7 +553,7 @@ export type RenamePasskeyData = {
 
 export type RenamePasskeyErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -562,7 +562,7 @@ export type RenamePasskeyError = RenamePasskeyErrors[keyof RenamePasskeyErrors];
 
 export type RenamePasskeyResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -580,7 +580,7 @@ export type RevokePasskeyData = {
 
 export type RevokePasskeyErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -589,7 +589,7 @@ export type RevokePasskeyError = RevokePasskeyErrors[keyof RevokePasskeyErrors];
 
 export type RevokePasskeyResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -605,7 +605,7 @@ export type ListPersonalTokensData = {
 
 export type ListPersonalTokensErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -614,7 +614,7 @@ export type ListPersonalTokensError = ListPersonalTokensErrors[keyof ListPersona
 
 export type ListPersonalTokensResponses = {
     /**
-     * Personal token collection response
+     * 个人访问令牌列表
      */
     200: {
         data: Array<PersonalAccessToken>;
@@ -632,7 +632,7 @@ export type CreatePersonalTokenData = {
 
 export type CreatePersonalTokenErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -641,7 +641,7 @@ export type CreatePersonalTokenError = CreatePersonalTokenErrors[keyof CreatePer
 
 export type CreatePersonalTokenResponses = {
     /**
-     * Newly created token; the plaintext token is returned only once
+     * 新建的个人访问令牌，明文仅返回一次
      */
     201: {
         data: CreatedPersonalAccessToken;
@@ -661,7 +661,7 @@ export type RevokePersonalTokenData = {
 
 export type RevokePersonalTokenErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -670,7 +670,7 @@ export type RevokePersonalTokenError = RevokePersonalTokenErrors[keyof RevokePer
 
 export type RevokePersonalTokenResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -686,7 +686,7 @@ export type GetUploadOptionsData = {
 
 export type GetUploadOptionsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -695,7 +695,7 @@ export type GetUploadOptionsError = GetUploadOptionsErrors[keyof GetUploadOption
 
 export type GetUploadOptionsResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -713,7 +713,7 @@ export type ListImagesData = {
         q?: string;
         bucket_id?: number;
         /**
-         * Comma-separated positive IDs
+         * 以逗号分隔的正整数 ID
          */
         tag_ids?: string;
         untagged?: boolean;
@@ -724,7 +724,7 @@ export type ListImagesData = {
 
 export type ListImagesErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -733,7 +733,7 @@ export type ListImagesError = ListImagesErrors[keyof ListImagesErrors];
 
 export type ListImagesResponses = {
     /**
-     * Paginated image response
+     * 分页图片列表
      */
     200: {
         data: Array<Image>;
@@ -756,7 +756,7 @@ export type UploadImagesData = {
 
 export type UploadImagesErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -765,7 +765,7 @@ export type UploadImagesError = UploadImagesErrors[keyof UploadImagesErrors];
 
 export type UploadImagesResponses = {
     /**
-     * Per-file upload results
+     * 按文件返回的批量上传结果
      */
     200: {
         data: UploadBatch;
@@ -785,7 +785,7 @@ export type DeleteImageData = {
 
 export type DeleteImageErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -794,7 +794,7 @@ export type DeleteImageError = DeleteImageErrors[keyof DeleteImageErrors];
 
 export type DeleteImageResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -812,7 +812,7 @@ export type GetImageData = {
 
 export type GetImageErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -821,7 +821,7 @@ export type GetImageError = GetImageErrors[keyof GetImageErrors];
 
 export type GetImageResponses = {
     /**
-     * Image response
+     * 图片信息
      */
     200: {
         data: Image;
@@ -839,7 +839,7 @@ export type ImportImageData = {
 
 export type ImportImageErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -848,7 +848,7 @@ export type ImportImageError = ImportImageErrors[keyof ImportImageErrors];
 
 export type ImportImageResponses = {
     /**
-     * Image response
+     * 图片信息
      */
     201: {
         data: Image;
@@ -869,7 +869,7 @@ export type RemoveImageTagData = {
 
 export type RemoveImageTagErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -878,7 +878,7 @@ export type RemoveImageTagError = RemoveImageTagErrors[keyof RemoveImageTagError
 
 export type RemoveImageTagResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -897,7 +897,7 @@ export type AddImageTagData = {
 
 export type AddImageTagErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -906,7 +906,7 @@ export type AddImageTagError = AddImageTagErrors[keyof AddImageTagErrors];
 
 export type AddImageTagResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -922,7 +922,7 @@ export type UpdateImageTagsData = {
 
 export type UpdateImageTagsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -931,7 +931,7 @@ export type UpdateImageTagsError = UpdateImageTagsErrors[keyof UpdateImageTagsEr
 
 export type UpdateImageTagsResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -947,7 +947,7 @@ export type ListTagsData = {
 
 export type ListTagsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -956,7 +956,7 @@ export type ListTagsError = ListTagsErrors[keyof ListTagsErrors];
 
 export type ListTagsResponses = {
     /**
-     * Tag collection response
+     * 标签列表
      */
     200: {
         data: Array<Tag>;
@@ -974,7 +974,7 @@ export type CreateTagData = {
 
 export type CreateTagErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -983,7 +983,7 @@ export type CreateTagError = CreateTagErrors[keyof CreateTagErrors];
 
 export type CreateTagResponses = {
     /**
-     * Tag response
+     * 标签信息
      */
     201: {
         data: Tag;
@@ -1003,7 +1003,7 @@ export type DeleteTagData = {
 
 export type DeleteTagErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1012,7 +1012,7 @@ export type DeleteTagError = DeleteTagErrors[keyof DeleteTagErrors];
 
 export type DeleteTagResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -1030,7 +1030,7 @@ export type UpdateTagData = {
 
 export type UpdateTagErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1039,7 +1039,7 @@ export type UpdateTagError = UpdateTagErrors[keyof UpdateTagErrors];
 
 export type UpdateTagResponses = {
     /**
-     * Tag response
+     * 标签信息
      */
     200: {
         data: Tag;
@@ -1057,7 +1057,7 @@ export type ListStorageBucketsData = {
 
 export type ListStorageBucketsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1066,7 +1066,7 @@ export type ListStorageBucketsError = ListStorageBucketsErrors[keyof ListStorage
 
 export type ListStorageBucketsResponses = {
     /**
-     * Storage bucket collection response
+     * 存储桶列表
      */
     200: {
         data: Array<StorageBucket>;
@@ -1084,7 +1084,7 @@ export type CreateStorageBucketData = {
 
 export type CreateStorageBucketErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1093,7 +1093,7 @@ export type CreateStorageBucketError = CreateStorageBucketErrors[keyof CreateSto
 
 export type CreateStorageBucketResponses = {
     /**
-     * Storage bucket response
+     * 存储桶信息
      */
     201: {
         data: StorageBucket;
@@ -1113,7 +1113,7 @@ export type DeleteStorageBucketData = {
 
 export type DeleteStorageBucketErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1122,7 +1122,7 @@ export type DeleteStorageBucketError = DeleteStorageBucketErrors[keyof DeleteSto
 
 export type DeleteStorageBucketResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -1140,7 +1140,7 @@ export type GetStorageBucketData = {
 
 export type GetStorageBucketErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1149,7 +1149,7 @@ export type GetStorageBucketError = GetStorageBucketErrors[keyof GetStorageBucke
 
 export type GetStorageBucketResponses = {
     /**
-     * Storage bucket response
+     * 存储桶信息
      */
     200: {
         data: StorageBucket;
@@ -1169,7 +1169,7 @@ export type UpdateStorageBucketData = {
 
 export type UpdateStorageBucketErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1178,7 +1178,7 @@ export type UpdateStorageBucketError = UpdateStorageBucketErrors[keyof UpdateSto
 
 export type UpdateStorageBucketResponses = {
     /**
-     * Storage bucket response
+     * 存储桶信息
      */
     200: {
         data: StorageBucket;
@@ -1196,7 +1196,7 @@ export type TestStorageConnectionData = {
 
 export type TestStorageConnectionErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1205,7 +1205,7 @@ export type TestStorageConnectionError = TestStorageConnectionErrors[keyof TestS
 
 export type TestStorageConnectionResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -1221,7 +1221,7 @@ export type GetDashboardStatsData = {
 
 export type GetDashboardStatsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1230,7 +1230,7 @@ export type GetDashboardStatsError = GetDashboardStatsErrors[keyof GetDashboardS
 
 export type GetDashboardStatsResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -1248,7 +1248,7 @@ export type GetImageStatsData = {
 
 export type GetImageStatsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1257,7 +1257,7 @@ export type GetImageStatsError = GetImageStatsErrors[keyof GetImageStatsErrors];
 
 export type GetImageStatsResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -1281,7 +1281,7 @@ export type ListUsersData = {
 
 export type ListUsersErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1290,7 +1290,7 @@ export type ListUsersError = ListUsersErrors[keyof ListUsersErrors];
 
 export type ListUsersResponses = {
     /**
-     * Paginated user response
+     * 分页用户列表
      */
     200: {
         data: Array<ManagedUser>;
@@ -1309,7 +1309,7 @@ export type CreateUserData = {
 
 export type CreateUserErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1318,7 +1318,7 @@ export type CreateUserError = CreateUserErrors[keyof CreateUserErrors];
 
 export type CreateUserResponses = {
     /**
-     * User response
+     * 用户信息
      */
     201: {
         data: User;
@@ -1338,7 +1338,7 @@ export type DeleteUserData = {
 
 export type DeleteUserErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1347,7 +1347,7 @@ export type DeleteUserError = DeleteUserErrors[keyof DeleteUserErrors];
 
 export type DeleteUserResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -1368,7 +1368,7 @@ export type UpdateUserData = {
 
 export type UpdateUserErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1377,7 +1377,7 @@ export type UpdateUserError = UpdateUserErrors[keyof UpdateUserErrors];
 
 export type UpdateUserResponses = {
     /**
-     * User response
+     * 用户信息
      */
     200: {
         data: User;
@@ -1397,7 +1397,7 @@ export type UpdateUserPermissionsData = {
 
 export type UpdateUserPermissionsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1406,7 +1406,7 @@ export type UpdateUserPermissionsError = UpdateUserPermissionsErrors[keyof Updat
 
 export type UpdateUserPermissionsResponses = {
     /**
-     * User response
+     * 用户信息
      */
     200: {
         data: User;
@@ -1426,7 +1426,7 @@ export type ResetUserPasswordData = {
 
 export type ResetUserPasswordErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1435,7 +1435,7 @@ export type ResetUserPasswordError = ResetUserPasswordErrors[keyof ResetUserPass
 
 export type ResetUserPasswordResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -1453,7 +1453,7 @@ export type RevokeUserPasskeysData = {
 
 export type RevokeUserPasskeysErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1462,7 +1462,7 @@ export type RevokeUserPasskeysError = RevokeUserPasskeysErrors[keyof RevokeUserP
 
 export type RevokeUserPasskeysResponses = {
     /**
-     * Successful response with no content
+     * 请求成功，无响应内容
      */
     204: void;
 };
@@ -1474,7 +1474,7 @@ export type GetSettingsData = {
     path?: never;
     query?: {
         /**
-         * Comma-separated setting groups
+         * 以逗号分隔的设置分组
          */
         groups?: string;
     };
@@ -1483,7 +1483,7 @@ export type GetSettingsData = {
 
 export type GetSettingsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1492,7 +1492,7 @@ export type GetSettingsError = GetSettingsErrors[keyof GetSettingsErrors];
 
 export type GetSettingsResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };
@@ -1508,7 +1508,7 @@ export type UpdateSettingsData = {
 
 export type UpdateSettingsErrors = {
     /**
-     * RFC 9457 Problem Details
+     * RFC 9457 问题详情
      */
     default: Problem;
 };
@@ -1517,7 +1517,7 @@ export type UpdateSettingsError = UpdateSettingsErrors[keyof UpdateSettingsError
 
 export type UpdateSettingsResponses = {
     /**
-     * Successful response
+     * 请求成功
      */
     200: DataEnvelope;
 };

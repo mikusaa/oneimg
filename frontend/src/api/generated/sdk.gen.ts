@@ -18,13 +18,21 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
 
+/**
+ * 获取公开配置
+ */
 export const getPublicConfig = <ThrowOnError extends boolean = false>(options?: Options<GetPublicConfigData, ThrowOnError>): RequestResult<GetPublicConfigResponses, GetPublicConfigErrors, ThrowOnError> => (options?.client ?? client).get<GetPublicConfigResponses, GetPublicConfigErrors, ThrowOnError>({ url: '/public/config', ...options });
 
 /**
- * Reserved endpoint. It currently returns 501 random_images_not_implemented.
+ * 获取随机图片
+ *
+ * 预留接口，当前返回 501 random_images_not_implemented。
  */
 export const getRandomImage = <ThrowOnError extends boolean = false>(options?: Options<GetRandomImageData, ThrowOnError>): RequestResult<GetRandomImageResponses, GetRandomImageErrors, ThrowOnError> => (options?.client ?? client).get<GetRandomImageResponses, GetRandomImageErrors, ThrowOnError>({ url: '/public/images/random', ...options });
 
+/**
+ * 登录
+ */
 export const login = <ThrowOnError extends boolean = false>(options: Options<LoginData, ThrowOnError>): RequestResult<LoginResponses, LoginErrors, ThrowOnError> => (options.client ?? client).post<LoginResponses, LoginErrors, ThrowOnError>({
     url: '/auth/login',
     ...options,
@@ -34,6 +42,9 @@ export const login = <ThrowOnError extends boolean = false>(options: Options<Log
     }
 });
 
+/**
+ * 注册账户
+ */
 export const register = <ThrowOnError extends boolean = false>(options: Options<RegisterData, ThrowOnError>): RequestResult<RegisterResponses, RegisterErrors, ThrowOnError> => (options.client ?? client).post<RegisterResponses, RegisterErrors, ThrowOnError>({
     url: '/auth/register',
     ...options,
@@ -43,6 +54,9 @@ export const register = <ThrowOnError extends boolean = false>(options: Options<
     }
 });
 
+/**
+ * 退出登录
+ */
 export const logout = <ThrowOnError extends boolean = false>(options?: Options<LogoutData, ThrowOnError>): RequestResult<LogoutResponses, LogoutErrors, ThrowOnError> => (options?.client ?? client).post<LogoutResponses, LogoutErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -53,8 +67,14 @@ export const logout = <ThrowOnError extends boolean = false>(options?: Options<L
     ...options
 });
 
+/**
+ * 创建 Passkey 登录选项
+ */
 export const createPasskeyLoginOptions = <ThrowOnError extends boolean = false>(options?: Options<CreatePasskeyLoginOptionsData, ThrowOnError>): RequestResult<CreatePasskeyLoginOptionsResponses, CreatePasskeyLoginOptionsErrors, ThrowOnError> => (options?.client ?? client).post<CreatePasskeyLoginOptionsResponses, CreatePasskeyLoginOptionsErrors, ThrowOnError>({ url: '/auth/passkeys/login/options', ...options });
 
+/**
+ * 验证 Passkey 登录
+ */
 export const verifyPasskeyLogin = <ThrowOnError extends boolean = false>(options: Options<VerifyPasskeyLoginData, ThrowOnError>): RequestResult<VerifyPasskeyLoginResponses, VerifyPasskeyLoginErrors, ThrowOnError> => (options.client ?? client).post<VerifyPasskeyLoginResponses, VerifyPasskeyLoginErrors, ThrowOnError>({
     url: '/auth/passkeys/login/verify',
     ...options,
@@ -64,6 +84,9 @@ export const verifyPasskeyLogin = <ThrowOnError extends boolean = false>(options
     }
 });
 
+/**
+ * 获取当前账户
+ */
 export const getMe = <ThrowOnError extends boolean = false>(options?: Options<GetMeData, ThrowOnError>): RequestResult<GetMeResponses, GetMeErrors, ThrowOnError> => (options?.client ?? client).get<GetMeResponses, GetMeErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -74,6 +97,9 @@ export const getMe = <ThrowOnError extends boolean = false>(options?: Options<Ge
     ...options
 });
 
+/**
+ * 更新当前账户
+ */
 export const updateMe = <ThrowOnError extends boolean = false>(options: Options<UpdateMeData, ThrowOnError>): RequestResult<UpdateMeResponses, UpdateMeErrors, ThrowOnError> => (options.client ?? client).patch<UpdateMeResponses, UpdateMeErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -88,6 +114,9 @@ export const updateMe = <ThrowOnError extends boolean = false>(options: Options<
     }
 });
 
+/**
+ * 获取 Passkey 列表
+ */
 export const listPasskeys = <ThrowOnError extends boolean = false>(options?: Options<ListPasskeysData, ThrowOnError>): RequestResult<ListPasskeysResponses, ListPasskeysErrors, ThrowOnError> => (options?.client ?? client).get<ListPasskeysResponses, ListPasskeysErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -98,6 +127,9 @@ export const listPasskeys = <ThrowOnError extends boolean = false>(options?: Opt
     ...options
 });
 
+/**
+ * 创建 Passkey 注册选项
+ */
 export const createPasskeyRegistrationOptions = <ThrowOnError extends boolean = false>(options: Options<CreatePasskeyRegistrationOptionsData, ThrowOnError>): RequestResult<CreatePasskeyRegistrationOptionsResponses, CreatePasskeyRegistrationOptionsErrors, ThrowOnError> => (options.client ?? client).post<CreatePasskeyRegistrationOptionsResponses, CreatePasskeyRegistrationOptionsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -112,6 +144,9 @@ export const createPasskeyRegistrationOptions = <ThrowOnError extends boolean = 
     }
 });
 
+/**
+ * 验证 Passkey 注册
+ */
 export const verifyPasskeyRegistration = <ThrowOnError extends boolean = false>(options: Options<VerifyPasskeyRegistrationData, ThrowOnError>): RequestResult<VerifyPasskeyRegistrationResponses, VerifyPasskeyRegistrationErrors, ThrowOnError> => (options.client ?? client).post<VerifyPasskeyRegistrationResponses, VerifyPasskeyRegistrationErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -126,6 +161,9 @@ export const verifyPasskeyRegistration = <ThrowOnError extends boolean = false>(
     }
 });
 
+/**
+ * 重命名 Passkey
+ */
 export const renamePasskey = <ThrowOnError extends boolean = false>(options: Options<RenamePasskeyData, ThrowOnError>): RequestResult<RenamePasskeyResponses, RenamePasskeyErrors, ThrowOnError> => (options.client ?? client).patch<RenamePasskeyResponses, RenamePasskeyErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -140,6 +178,9 @@ export const renamePasskey = <ThrowOnError extends boolean = false>(options: Opt
     }
 });
 
+/**
+ * 撤销 Passkey
+ */
 export const revokePasskey = <ThrowOnError extends boolean = false>(options: Options<RevokePasskeyData, ThrowOnError>): RequestResult<RevokePasskeyResponses, RevokePasskeyErrors, ThrowOnError> => (options.client ?? client).post<RevokePasskeyResponses, RevokePasskeyErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -154,6 +195,9 @@ export const revokePasskey = <ThrowOnError extends boolean = false>(options: Opt
     }
 });
 
+/**
+ * 获取个人访问令牌列表
+ */
 export const listPersonalTokens = <ThrowOnError extends boolean = false>(options?: Options<ListPersonalTokensData, ThrowOnError>): RequestResult<ListPersonalTokensResponses, ListPersonalTokensErrors, ThrowOnError> => (options?.client ?? client).get<ListPersonalTokensResponses, ListPersonalTokensErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -164,6 +208,9 @@ export const listPersonalTokens = <ThrowOnError extends boolean = false>(options
     ...options
 });
 
+/**
+ * 创建个人访问令牌
+ */
 export const createPersonalToken = <ThrowOnError extends boolean = false>(options: Options<CreatePersonalTokenData, ThrowOnError>): RequestResult<CreatePersonalTokenResponses, CreatePersonalTokenErrors, ThrowOnError> => (options.client ?? client).post<CreatePersonalTokenResponses, CreatePersonalTokenErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -178,6 +225,9 @@ export const createPersonalToken = <ThrowOnError extends boolean = false>(option
     }
 });
 
+/**
+ * 撤销个人访问令牌
+ */
 export const revokePersonalToken = <ThrowOnError extends boolean = false>(options: Options<RevokePersonalTokenData, ThrowOnError>): RequestResult<RevokePersonalTokenResponses, RevokePersonalTokenErrors, ThrowOnError> => (options.client ?? client).post<RevokePersonalTokenResponses, RevokePersonalTokenErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -192,6 +242,9 @@ export const revokePersonalToken = <ThrowOnError extends boolean = false>(option
     }
 });
 
+/**
+ * 获取上传选项
+ */
 export const getUploadOptions = <ThrowOnError extends boolean = false>(options?: Options<GetUploadOptionsData, ThrowOnError>): RequestResult<GetUploadOptionsResponses, GetUploadOptionsErrors, ThrowOnError> => (options?.client ?? client).get<GetUploadOptionsResponses, GetUploadOptionsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -202,6 +255,9 @@ export const getUploadOptions = <ThrowOnError extends boolean = false>(options?:
     ...options
 });
 
+/**
+ * 获取图片列表
+ */
 export const listImages = <ThrowOnError extends boolean = false>(options?: Options<ListImagesData, ThrowOnError>): RequestResult<ListImagesResponses, ListImagesErrors, ThrowOnError> => (options?.client ?? client).get<ListImagesResponses, ListImagesErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -212,6 +268,9 @@ export const listImages = <ThrowOnError extends boolean = false>(options?: Optio
     ...options
 });
 
+/**
+ * 上传图片
+ */
 export const uploadImages = <ThrowOnError extends boolean = false>(options: Options<UploadImagesData, ThrowOnError>): RequestResult<UploadImagesResponses, UploadImagesErrors, ThrowOnError> => (options.client ?? client).post<UploadImagesResponses, UploadImagesErrors, ThrowOnError>({
     ...formDataBodySerializer,
     security: [{
@@ -227,6 +286,9 @@ export const uploadImages = <ThrowOnError extends boolean = false>(options: Opti
     }
 });
 
+/**
+ * 删除图片
+ */
 export const deleteImage = <ThrowOnError extends boolean = false>(options: Options<DeleteImageData, ThrowOnError>): RequestResult<DeleteImageResponses, DeleteImageErrors, ThrowOnError> => (options.client ?? client).delete<DeleteImageResponses, DeleteImageErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -237,6 +299,9 @@ export const deleteImage = <ThrowOnError extends boolean = false>(options: Optio
     ...options
 });
 
+/**
+ * 获取图片详情
+ */
 export const getImage = <ThrowOnError extends boolean = false>(options: Options<GetImageData, ThrowOnError>): RequestResult<GetImageResponses, GetImageErrors, ThrowOnError> => (options.client ?? client).get<GetImageResponses, GetImageErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -247,6 +312,9 @@ export const getImage = <ThrowOnError extends boolean = false>(options: Options<
     ...options
 });
 
+/**
+ * 导入远程图片
+ */
 export const importImage = <ThrowOnError extends boolean = false>(options: Options<ImportImageData, ThrowOnError>): RequestResult<ImportImageResponses, ImportImageErrors, ThrowOnError> => (options.client ?? client).post<ImportImageResponses, ImportImageErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -261,6 +329,9 @@ export const importImage = <ThrowOnError extends boolean = false>(options: Optio
     }
 });
 
+/**
+ * 移除图片标签
+ */
 export const removeImageTag = <ThrowOnError extends boolean = false>(options: Options<RemoveImageTagData, ThrowOnError>): RequestResult<RemoveImageTagResponses, RemoveImageTagErrors, ThrowOnError> => (options.client ?? client).delete<RemoveImageTagResponses, RemoveImageTagErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -271,6 +342,9 @@ export const removeImageTag = <ThrowOnError extends boolean = false>(options: Op
     ...options
 });
 
+/**
+ * 添加图片标签
+ */
 export const addImageTag = <ThrowOnError extends boolean = false>(options: Options<AddImageTagData, ThrowOnError>): RequestResult<AddImageTagResponses, AddImageTagErrors, ThrowOnError> => (options.client ?? client).put<AddImageTagResponses, AddImageTagErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -281,6 +355,9 @@ export const addImageTag = <ThrowOnError extends boolean = false>(options: Optio
     ...options
 });
 
+/**
+ * 批量更新图片标签
+ */
 export const updateImageTags = <ThrowOnError extends boolean = false>(options: Options<UpdateImageTagsData, ThrowOnError>): RequestResult<UpdateImageTagsResponses, UpdateImageTagsErrors, ThrowOnError> => (options.client ?? client).patch<UpdateImageTagsResponses, UpdateImageTagsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -295,6 +372,9 @@ export const updateImageTags = <ThrowOnError extends boolean = false>(options: O
     }
 });
 
+/**
+ * 获取标签列表
+ */
 export const listTags = <ThrowOnError extends boolean = false>(options?: Options<ListTagsData, ThrowOnError>): RequestResult<ListTagsResponses, ListTagsErrors, ThrowOnError> => (options?.client ?? client).get<ListTagsResponses, ListTagsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -305,6 +385,9 @@ export const listTags = <ThrowOnError extends boolean = false>(options?: Options
     ...options
 });
 
+/**
+ * 创建标签
+ */
 export const createTag = <ThrowOnError extends boolean = false>(options: Options<CreateTagData, ThrowOnError>): RequestResult<CreateTagResponses, CreateTagErrors, ThrowOnError> => (options.client ?? client).post<CreateTagResponses, CreateTagErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -319,6 +402,9 @@ export const createTag = <ThrowOnError extends boolean = false>(options: Options
     }
 });
 
+/**
+ * 删除标签
+ */
 export const deleteTag = <ThrowOnError extends boolean = false>(options: Options<DeleteTagData, ThrowOnError>): RequestResult<DeleteTagResponses, DeleteTagErrors, ThrowOnError> => (options.client ?? client).delete<DeleteTagResponses, DeleteTagErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -329,6 +415,9 @@ export const deleteTag = <ThrowOnError extends boolean = false>(options: Options
     ...options
 });
 
+/**
+ * 更新标签
+ */
 export const updateTag = <ThrowOnError extends boolean = false>(options: Options<UpdateTagData, ThrowOnError>): RequestResult<UpdateTagResponses, UpdateTagErrors, ThrowOnError> => (options.client ?? client).patch<UpdateTagResponses, UpdateTagErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -343,6 +432,9 @@ export const updateTag = <ThrowOnError extends boolean = false>(options: Options
     }
 });
 
+/**
+ * 获取存储桶列表
+ */
 export const listStorageBuckets = <ThrowOnError extends boolean = false>(options?: Options<ListStorageBucketsData, ThrowOnError>): RequestResult<ListStorageBucketsResponses, ListStorageBucketsErrors, ThrowOnError> => (options?.client ?? client).get<ListStorageBucketsResponses, ListStorageBucketsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -353,6 +445,9 @@ export const listStorageBuckets = <ThrowOnError extends boolean = false>(options
     ...options
 });
 
+/**
+ * 创建存储桶
+ */
 export const createStorageBucket = <ThrowOnError extends boolean = false>(options: Options<CreateStorageBucketData, ThrowOnError>): RequestResult<CreateStorageBucketResponses, CreateStorageBucketErrors, ThrowOnError> => (options.client ?? client).post<CreateStorageBucketResponses, CreateStorageBucketErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -367,6 +462,9 @@ export const createStorageBucket = <ThrowOnError extends boolean = false>(option
     }
 });
 
+/**
+ * 删除存储桶
+ */
 export const deleteStorageBucket = <ThrowOnError extends boolean = false>(options: Options<DeleteStorageBucketData, ThrowOnError>): RequestResult<DeleteStorageBucketResponses, DeleteStorageBucketErrors, ThrowOnError> => (options.client ?? client).delete<DeleteStorageBucketResponses, DeleteStorageBucketErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -377,6 +475,9 @@ export const deleteStorageBucket = <ThrowOnError extends boolean = false>(option
     ...options
 });
 
+/**
+ * 获取存储桶详情
+ */
 export const getStorageBucket = <ThrowOnError extends boolean = false>(options: Options<GetStorageBucketData, ThrowOnError>): RequestResult<GetStorageBucketResponses, GetStorageBucketErrors, ThrowOnError> => (options.client ?? client).get<GetStorageBucketResponses, GetStorageBucketErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -387,6 +488,9 @@ export const getStorageBucket = <ThrowOnError extends boolean = false>(options: 
     ...options
 });
 
+/**
+ * 更新存储桶
+ */
 export const updateStorageBucket = <ThrowOnError extends boolean = false>(options: Options<UpdateStorageBucketData, ThrowOnError>): RequestResult<UpdateStorageBucketResponses, UpdateStorageBucketErrors, ThrowOnError> => (options.client ?? client).patch<UpdateStorageBucketResponses, UpdateStorageBucketErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -401,6 +505,9 @@ export const updateStorageBucket = <ThrowOnError extends boolean = false>(option
     }
 });
 
+/**
+ * 测试存储连接
+ */
 export const testStorageConnection = <ThrowOnError extends boolean = false>(options: Options<TestStorageConnectionData, ThrowOnError>): RequestResult<TestStorageConnectionResponses, TestStorageConnectionErrors, ThrowOnError> => (options.client ?? client).post<TestStorageConnectionResponses, TestStorageConnectionErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -415,6 +522,9 @@ export const testStorageConnection = <ThrowOnError extends boolean = false>(opti
     }
 });
 
+/**
+ * 获取仪表盘统计
+ */
 export const getDashboardStats = <ThrowOnError extends boolean = false>(options?: Options<GetDashboardStatsData, ThrowOnError>): RequestResult<GetDashboardStatsResponses, GetDashboardStatsErrors, ThrowOnError> => (options?.client ?? client).get<GetDashboardStatsResponses, GetDashboardStatsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -425,6 +535,9 @@ export const getDashboardStats = <ThrowOnError extends boolean = false>(options?
     ...options
 });
 
+/**
+ * 获取图片统计
+ */
 export const getImageStats = <ThrowOnError extends boolean = false>(options?: Options<GetImageStatsData, ThrowOnError>): RequestResult<GetImageStatsResponses, GetImageStatsErrors, ThrowOnError> => (options?.client ?? client).get<GetImageStatsResponses, GetImageStatsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -435,6 +548,9 @@ export const getImageStats = <ThrowOnError extends boolean = false>(options?: Op
     ...options
 });
 
+/**
+ * 获取用户列表
+ */
 export const listUsers = <ThrowOnError extends boolean = false>(options?: Options<ListUsersData, ThrowOnError>): RequestResult<ListUsersResponses, ListUsersErrors, ThrowOnError> => (options?.client ?? client).get<ListUsersResponses, ListUsersErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -445,6 +561,9 @@ export const listUsers = <ThrowOnError extends boolean = false>(options?: Option
     ...options
 });
 
+/**
+ * 创建用户
+ */
 export const createUser = <ThrowOnError extends boolean = false>(options: Options<CreateUserData, ThrowOnError>): RequestResult<CreateUserResponses, CreateUserErrors, ThrowOnError> => (options.client ?? client).post<CreateUserResponses, CreateUserErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -459,6 +578,9 @@ export const createUser = <ThrowOnError extends boolean = false>(options: Option
     }
 });
 
+/**
+ * 删除用户
+ */
 export const deleteUser = <ThrowOnError extends boolean = false>(options: Options<DeleteUserData, ThrowOnError>): RequestResult<DeleteUserResponses, DeleteUserErrors, ThrowOnError> => (options.client ?? client).delete<DeleteUserResponses, DeleteUserErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -469,6 +591,9 @@ export const deleteUser = <ThrowOnError extends boolean = false>(options: Option
     ...options
 });
 
+/**
+ * 更新用户
+ */
 export const updateUser = <ThrowOnError extends boolean = false>(options: Options<UpdateUserData, ThrowOnError>): RequestResult<UpdateUserResponses, UpdateUserErrors, ThrowOnError> => (options.client ?? client).patch<UpdateUserResponses, UpdateUserErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -483,6 +608,9 @@ export const updateUser = <ThrowOnError extends boolean = false>(options: Option
     }
 });
 
+/**
+ * 更新用户权限
+ */
 export const updateUserPermissions = <ThrowOnError extends boolean = false>(options: Options<UpdateUserPermissionsData, ThrowOnError>): RequestResult<UpdateUserPermissionsResponses, UpdateUserPermissionsErrors, ThrowOnError> => (options.client ?? client).put<UpdateUserPermissionsResponses, UpdateUserPermissionsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -497,6 +625,9 @@ export const updateUserPermissions = <ThrowOnError extends boolean = false>(opti
     }
 });
 
+/**
+ * 重置用户密码
+ */
 export const resetUserPassword = <ThrowOnError extends boolean = false>(options: Options<ResetUserPasswordData, ThrowOnError>): RequestResult<ResetUserPasswordResponses, ResetUserPasswordErrors, ThrowOnError> => (options.client ?? client).post<ResetUserPasswordResponses, ResetUserPasswordErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -507,6 +638,9 @@ export const resetUserPassword = <ThrowOnError extends boolean = false>(options:
     ...options
 });
 
+/**
+ * 撤销用户的 Passkey
+ */
 export const revokeUserPasskeys = <ThrowOnError extends boolean = false>(options: Options<RevokeUserPasskeysData, ThrowOnError>): RequestResult<RevokeUserPasskeysResponses, RevokeUserPasskeysErrors, ThrowOnError> => (options.client ?? client).post<RevokeUserPasskeysResponses, RevokeUserPasskeysErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -517,6 +651,9 @@ export const revokeUserPasskeys = <ThrowOnError extends boolean = false>(options
     ...options
 });
 
+/**
+ * 获取系统设置
+ */
 export const getSettings = <ThrowOnError extends boolean = false>(options?: Options<GetSettingsData, ThrowOnError>): RequestResult<GetSettingsResponses, GetSettingsErrors, ThrowOnError> => (options?.client ?? client).get<GetSettingsResponses, GetSettingsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',
@@ -527,6 +664,9 @@ export const getSettings = <ThrowOnError extends boolean = false>(options?: Opti
     ...options
 });
 
+/**
+ * 更新系统设置
+ */
 export const updateSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateSettingsData, ThrowOnError>): RequestResult<UpdateSettingsResponses, UpdateSettingsErrors, ThrowOnError> => (options.client ?? client).patch<UpdateSettingsResponses, UpdateSettingsErrors, ThrowOnError>({
     security: [{
             in: 'cookie',

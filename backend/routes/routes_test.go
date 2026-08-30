@@ -43,6 +43,50 @@ func setupTestRouter(t *testing.T, cfg *config.Config) (*gin.Engine, *app.System
 	return SetupRoutes(testFrontend, system), system
 }
 
+func TestOpenAPIDocuments(t *testing.T) {
+	cfg := &config.Config{
+		SqlitePath:    filepath.Join(t.TempDir(), "oneimg.db"),
+		SessionSecret: "test-session-secret",
+		ConfigSecret:  "test-config-secret-with-enough-bytes",
+	}
+	router, _ := setupTestRouter(t, cfg)
+
+	for _, test := range []struct {
+		path        string
+		contentType string
+	}{
+		{path: "/api/openapi.yaml", contentType: "application/yaml"},
+		{path: "/api/openapi.json", contentType: "application/json"},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, test.path, nil))
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+			}
+			if !strings.HasPrefix(recorder.Header().Get("Content-Type"), test.contentType) {
+				t.Fatalf("content type = %q", recorder.Header().Get("Content-Type"))
+			}
+		})
+	}
+
+	jsonDocument := httptest.NewRecorder()
+	router.ServeHTTP(jsonDocument, httptest.NewRequest(http.MethodGet, "/api/openapi.json", nil))
+	var document map[string]any
+	if err := json.Unmarshal(jsonDocument.Body.Bytes(), &document); err != nil {
+		t.Fatal(err)
+	}
+	if document["openapi"] != "3.1.0" {
+		t.Fatalf("openapi version = %#v", document["openapi"])
+	}
+
+	docs := httptest.NewRecorder()
+	router.ServeHTTP(docs, httptest.NewRequest(http.MethodGet, "/api/docs", nil))
+	if docs.Code != http.StatusOK || !strings.Contains(docs.Body.String(), "/api/openapi.yaml") {
+		t.Fatalf("docs status = %d, body = %s", docs.Code, docs.Body.String())
+	}
+}
+
 func TestExternalAuthenticationRoutesAreRemoved(t *testing.T) {
 	cfg := &config.Config{
 		SqlitePath:    filepath.Join(t.TempDir(), "oneimg.db"),
