@@ -498,6 +498,17 @@ func readWebPDimensions(data []byte) (int, int) {
 	return 0, 0
 }
 
+func decodeAutoOrientedJPEG(reader *bytes.Reader) (image.Image, error) {
+	// imaging.Decode auto-detects formats, so confirm JPEG first to preserve format reporting.
+	if _, err := jpeg.DecodeConfig(reader); err != nil {
+		return nil, err
+	}
+	if _, err := reader.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("reset jpeg reader: %w", err)
+	}
+	return imaging.Decode(reader, imaging.AutoOrientation(true))
+}
+
 // decodeImage 解码图片，支持webp/gif/png/jpeg/SVG等格式
 // 优化点：增加SVG处理，避免解码失败
 func (s *ImageService) decodeImage(reader io.Reader, mimeType string) (image.Image, string, error) {
@@ -526,7 +537,7 @@ func (s *ImageService) decodeImage(reader io.Reader, mimeType string) (image.Ima
 		{func(r *bytes.Reader) (image.Image, error) { return webp.Decode(r) }, "webp"},
 		{func(r *bytes.Reader) (image.Image, error) { return gif.Decode(r) }, "gif"},
 		{func(r *bytes.Reader) (image.Image, error) { return png.Decode(r) }, "png"},
-		{func(r *bytes.Reader) (image.Image, error) { return jpeg.Decode(r) }, "jpeg"},
+		{decodeAutoOrientedJPEG, "jpeg"},
 	}
 
 	for _, df := range decodeFuncs {
