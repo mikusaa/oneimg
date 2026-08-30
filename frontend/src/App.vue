@@ -23,7 +23,15 @@
             <a href="/" class="font-medium text-slate-700 transition hover:text-primary dark:text-slate-200 dark:hover:text-primary">
               {{ seoSetting.seo_title || '初春图床' }}
             </a>
-            <span class="whitespace-nowrap"> · OneImg v{{ appVersion }}</span>
+            <span> · </span>
+            <a
+              :href="releaseUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="whitespace-nowrap font-medium text-slate-600 transition hover:text-primary dark:text-slate-300 dark:hover:text-primary"
+            >
+              OneImg v{{ appVersion }}
+            </a>
           </div>
           <div class="flex flex-wrap items-center justify-center gap-2 md:justify-end md:gap-2.5">
             <a
@@ -73,6 +81,7 @@ const seoSetting = ref({
 
 const year = new Date().getFullYear()
 const appVersion = packageInfo.version
+const releaseUrl = `https://github.com/mikusaa/oneimg/releases/tag/v${appVersion}`
 
 const handleSeoUpdate = (data) => {
   if (!data || typeof data !== 'object') return
