@@ -154,6 +154,7 @@ export function configSchema(ctx: PicGoContext): PicGoPluginConfig[] {
       name: 'deleteRemote', type: 'confirm', required: false,
       default: current.deleteRemote === true, alias: '同步删除远端图片',
       message: '删除 PicGo 历史记录时删除 OneImg 原图',
+      confirmText: '开启', cancelText: '关闭',
     },
     {
       name: 'timeoutSeconds', type: 'input', required: false,

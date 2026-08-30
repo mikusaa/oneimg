@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   apiBaseForServerUrl,
+  configSchema,
   normalizeConfig,
   normalizeServerUrl,
   parseTagIds,
   resolveImageUrl,
 } from '../src/config'
+import type { PicGoContext } from '../src/types'
 
 describe('OneImg configuration', () => {
   it('normalizes root and API URLs', () => {
@@ -51,5 +53,20 @@ describe('OneImg configuration', () => {
     expect(resolveImageUrl('/uploads/a.webp', 'https://img.example.com')).toBe('https://img.example.com/uploads/a.webp')
     expect(resolveImageUrl('uploads/a.webp', 'https://img.example.com')).toBe('https://img.example.com/uploads/a.webp')
     expect(resolveImageUrl('https://cdn.example.com/a.webp', 'https://img.example.com')).toBe('https://cdn.example.com/a.webp')
+  })
+
+  it('provides localized remote deletion switch states', () => {
+    const schema = (deleteRemote?: boolean) => configSchema({
+      getConfig: () => deleteRemote === undefined ? undefined : { deleteRemote },
+    } as unknown as PicGoContext)
+    const remoteDeletion = (deleteRemote?: boolean) => schema(deleteRemote).find((item) => item.name === 'deleteRemote')
+
+    expect(remoteDeletion()).toMatchObject({
+      type: 'confirm',
+      default: false,
+      confirmText: '开启',
+      cancelText: '关闭',
+    })
+    expect(remoteDeletion(true)?.default).toBe(true)
   })
 })

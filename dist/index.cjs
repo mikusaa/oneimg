@@ -10472,7 +10472,9 @@ function configSchema(ctx) {
       required: false,
       default: current.deleteRemote === true,
       alias: "\u540C\u6B65\u5220\u9664\u8FDC\u7AEF\u56FE\u7247",
-      message: "\u5220\u9664 PicGo \u5386\u53F2\u8BB0\u5F55\u65F6\u5220\u9664 OneImg \u539F\u56FE"
+      message: "\u5220\u9664 PicGo \u5386\u53F2\u8BB0\u5F55\u65F6\u5220\u9664 OneImg \u539F\u56FE",
+      confirmText: "\u5F00\u542F",
+      cancelText: "\u5173\u95ED"
     },
     {
       name: "timeoutSeconds",
