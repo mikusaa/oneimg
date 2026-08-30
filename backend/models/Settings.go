@@ -8,9 +8,9 @@ type Settings struct {
 	SaveWebp         bool   `gorm:"column:save_webp;default:true" json:"save_webp"`                    // 是否保存webp格式（默认保存）
 	Thumbnail        bool   `gorm:"column:thumbnail;default:true" json:"thumbnail"`                    // 是否生成缩略图（默认生成）
 	StartRegister    bool   `gorm:"column:start_register;default:false" json:"start_register"`         // 是否开放普通用户注册
-	StartAPI         bool   `gorm:"column:start_api;default:false" json:"start_api"`                   // 是否启用API（默认关闭）
-	APIToken         string `gorm:"column:api_token;default:''" json:"api_token"`                      // 兼容旧字段
-	APITokenHash     string `gorm:"column:api_token_hash;default:''" json:"-"`                         // API Token哈希
+	StartAPI         bool   `gorm:"column:start_api;default:false" json:"-"`                           // 仅保留用于破坏性升级清理
+	APIToken         string `gorm:"column:api_token;default:''" json:"-"`                              // 仅保留用于破坏性升级清理
+	APITokenHash     string `gorm:"column:api_token_hash;default:''" json:"-"`                         // 仅保留用于破坏性升级清理
 	SaveOriginalName bool   `gorm:"column:save_original_name;default:false" json:"save_original_name"` // 是否保存原文件名（默认不保存）
 
 	// 默认存储

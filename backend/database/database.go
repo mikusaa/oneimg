@@ -67,6 +67,7 @@ func InitDB(cfg *config.Config) {
 		&models.Tags{},
 		&models.User{},
 		&models.PasskeyCredential{},
+		&models.PersonalAccessToken{},
 		&models.Image{},
 		&models.Settings{},
 		&models.ImageToTags{},

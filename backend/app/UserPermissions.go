@@ -72,3 +72,37 @@ func MigrateLegacyUserPermissions(db *gorm.DB) error {
 	}
 	return nil
 }
+
+// InvalidateLegacyAPIAccess performs the destructive v1 cutover. Legacy
+// global tokens and their permission code are intentionally not recoverable.
+func InvalidateLegacyAPIAccess(db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Settings{}).Where("1 = 1").Updates(map[string]any{
+			"start_api": false, "api_token": "", "api_token_hash": "",
+		}).Error; err != nil {
+			return err
+		}
+		var users []models.User
+		if err := tx.Find(&users).Error; err != nil {
+			return err
+		}
+		for _, user := range users {
+			filtered := make([]string, 0, len(user.Permission.Codes))
+			changed := false
+			for _, code := range user.Permission.Codes {
+				if code == "setting:api" {
+					changed = true
+					continue
+				}
+				filtered = append(filtered, code)
+			}
+			if changed {
+				user.Permission.Codes = filtered
+				if err := tx.Model(&user).Update("permission", user.Permission).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}

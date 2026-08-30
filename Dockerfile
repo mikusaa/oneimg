@@ -4,9 +4,13 @@ WORKDIR /app/frontend
 
 # 安装pnpm并构建前端
 RUN npm install -g pnpm@10
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
+COPY api/ /app/api/
+RUN cp -R src/api/generated /tmp/generated-sdk \
+    && pnpm run openapi:generate \
+    && diff -ru /tmp/generated-sdk src/api/generated
 RUN pnpm run build
 
 
@@ -25,6 +29,7 @@ RUN go mod download
 
 # 复制后端源代码
 COPY backend/ ./backend/
+COPY api/ ./api/
 COPY main.go ./
 
 # 复制前端构建结果到后端可访问的路径

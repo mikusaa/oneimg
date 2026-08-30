@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "openapi:generate": "openapi-ts -i ../api/openapi.yaml -o src/api/generated -c @hey-api/client-fetch",
+    "openapi:check": "pnpm run openapi:generate && git diff --exit-code -- src/api/generated",
+    "build": "vue-tsc --noEmit && vite build",
+    "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview"
   },
   "keywords": [],
@@ -13,6 +16,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@hey-api/client-fetch": "0.13.1",
     "@simplewebauthn/browser": "13.3.0",
     "@vitejs/plugin-vue": "^6.0.7",
     "tailwindcss": "3.4.17",
@@ -21,17 +25,10 @@
     "vue-router": "^4.6.3"
   },
   "devDependencies": {
+    "@hey-api/openapi-ts": "^0.99.0",
     "autoprefixer": "^10.5.2",
-    "remixicon": "^4.9.1"
-  },
-  "pnpm": {
-    "overrides": {
-      "form-data": "4.0.6",
-      "picomatch@<2.3.2": "2.3.2",
-      "picomatch@>=4.0.0 <4.0.4": "4.0.5",
-      "postcss": "8.5.10",
-      "rollup": "4.59.0",
-      "yaml": "2.8.3"
-    }
+    "remixicon": "^4.9.1",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.3.11"
   }
 }

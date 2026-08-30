@@ -214,11 +214,11 @@
             </div>
             <img 
               :src="getFullUrl(image.thumbnail || image.url)"
-              :alt="image.filename || '图片预览'" 
+              :alt="image.file_name || '图片预览'"
               class="recent-image h-full w-full object-cover opacity-0"
               loading="lazy"
               @load="handleImageLoad"
-              @error="(e) => handleImageError(e, image)"
+              @error="handleImageError"
               @click.stop="previewImage(image)"
             />
             </div>
@@ -226,7 +226,7 @@
             <div class="min-w-0 flex-1 space-y-2">
               <div class="flex flex-col gap-2 sm:gap-2.5 lg:flex-row lg:items-start lg:justify-between">
                 <div class="min-w-0">
-                  <p class="truncate text-sm font-medium text-slate-900 dark:text-white">{{ image.filename }}</p>
+                  <p class="truncate text-sm font-medium text-slate-900 dark:text-white">{{ image.file_name }}</p>
                   <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <span class="result-meta-pill">{{ formatFileSize(image.file_size) }}</span>
                     <span class="result-meta-pill">{{ image.width }}×{{ image.height }}</span>
@@ -344,16 +344,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch, api } from "@/api/client.ts"
 import errorImg from '@/assets/images/error.webp';
 import { computed, ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import AppDialog from '@/components/AppDialog.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TagSelector from '@/components/TagSelector.vue'
-import Loading from '@/utils/loading.js'
-import Message from '@/utils/message.js'
-import PopupModal from '@/utils/popupModal.js'
+import Loading from '@/utils/loading.ts'
+import Message from '@/utils/message.ts'
+import PopupModal from '@/utils/popupModal.ts'
 
 // ====================== 常量定义 ======================
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -398,7 +399,7 @@ let currentPreviewImage = null;
 let previewModalInstance = null;
 let queueSequence = 0;
 
-const uploadTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.name, label: tag.name })));
+const uploadTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.id, label: tag.name })));
 const urlTagOptions = computed(() => [
   { value: 0, label: '不添加标签' },
   ...presetTags.value.map(tag => ({ value: tag.id, label: tag.name }))
@@ -468,11 +469,11 @@ const getTypeText = (type) => {
   return typeMap[type] || '';
 };
 
-const getImageAltText = (image) => image?.original_filename || image?.filename || '图片';
+const getImageAltText = (image) => image?.original_file_name || image?.file_name || '图片';
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
 })[character]);
-const getPreviewFileName = image => image?.original_filename || image?.filename || '图片预览';
+const getPreviewFileName = image => image?.original_file_name || image?.file_name || '图片预览';
 const getImageSizeSummary = image => {
   const originalSize = Number(image?.original_file_size || 0);
   const savedSize = Number(image?.file_size || 0);
@@ -523,36 +524,37 @@ const getMarkdownCode = (image) => {
  */
 const getUploadConfig = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/uploadConfig`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/upload-options`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
     });
     
     const result = await response.json();
-    if (response.ok && result.code === 200) {
-      presetTags.value = result.data?.tags || [];
-      presetBuckets.value = result.data?.buckets || [];
+    if (response.ok && result.data) {
+      const options = result.data;
+      const tagsResponse = await apiFetch(`${API_BASE_URL}/api/v1/tags`);
+      const tagsPayload = await tagsResponse.json();
+      presetTags.value = tagsResponse.ok && Array.isArray(tagsPayload.data) ? tagsPayload.data : [];
+      presetBuckets.value = options.storage_buckets || [];
       const bucketId = localStorage.getItem('currentBucket');
       if (bucketId != null){
         const num = parseInt(bucketId);
         selectedBucket.value = Number.isNaN(num) ? '1' : bucketId;
       } else {
-        selectedBucket.value = result.data?.default_bucket || '1';
+        selectedBucket.value = String(options.default_storage || presetBuckets.value[0]?.id || '1');
       }
-      const configuredTypes = String(result.data?.allowed_types || '')
-        .split(',')
-        .map(type => type.trim())
-        .filter(Boolean);
+      const configuredTypes = Array.isArray(options.allowed_types)
+        ? options.allowed_types.map(type => String(type).trim()).filter(Boolean)
+        : String(options.allowed_types || '').split(',').map(type => type.trim()).filter(Boolean);
       allowedFileTypes.value = configuredTypes.length > 0 ? configuredTypes : [...ALLOWED_FILE_TYPES];
-      const configuredMaxSize = Number(result.data?.max_file_size);
+      const configuredMaxSize = Number(options.max_file_size);
       maxFileSize.value = Number.isFinite(configuredMaxSize) && configuredMaxSize > 0
         ? configuredMaxSize
         : DEFAULT_MAX_FILE_SIZE;
     } else {
-      throw new Error(result.message || '获取上传配置失败');
+      throw new Error(result.detail || '获取上传配置失败');
     }
   } catch (error) {
     console.error('获取上传配置失败:', error);
@@ -565,19 +567,18 @@ const getUploadConfig = async () => {
  */
 const loadRecentImages = async () => {
   try {
-    const params = new URLSearchParams({ limit: '12' });
+    const params = new URLSearchParams({ page: '1', page_size: '12', sort: 'created_at', order: 'desc' });
     if (isAdmin()) {
-      params.set('role', 'admin');
+      params.set('uploader_role', '1');
     }
-    const response = await fetch(`${API_BASE_URL}/api/images?${params}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/images?${params}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
     });
     
     if (response.ok) {
       const result = await response.json();
-      recentImages.value = Array.isArray(result.data?.images) ? result.data.images : [];
+      recentImages.value = Array.isArray(result.data) ? result.data : [];
     }
   } catch (error) {
     console.error('加载图片失败:', error);
@@ -593,11 +594,11 @@ const loadRecentImages = async () => {
 const loadDashboardStats = async () => {
   statsLoading.value = true;
   try {
-    const response = await fetch(`${API_BASE_URL}/api/stats/dashboard`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/stats/dashboard`, {
+      headers: {}
     });
     const result = await response.json();
-    if (!response.ok || result.code !== 200) throw new Error(result.message || '获取统计数据失败');
+    if (!response.ok || !result.data) throw new Error(result.detail || '获取统计数据失败');
     dashboardStats.value = { ...dashboardStats.value, ...(result.data || {}) };
   } catch (error) {
     console.error('获取统计数据失败:', error);
@@ -618,10 +619,9 @@ const deleteAsync = async (imageId) => {
       mask: true
     });
     
-    const response = await fetch(`${API_BASE_URL}/api/images/${imageId}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/images/${imageId}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'Content-Type': 'application/json'
       }
     });
@@ -644,7 +644,7 @@ const deleteAsync = async (imageId) => {
       await Promise.all([loadRecentImages(), loadDashboardStats()]);
     } else {
       const result = await response.json();
-      throw new Error(result.message || '删除失败');
+      throw new Error(result.detail || '删除失败');
     }
   } catch (error) {
     console.error('删除图片错误:', error);
@@ -663,20 +663,19 @@ const deleteAsync = async (imageId) => {
  */
 const addTagToServer = async (tag) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/tags`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/tags`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       },
       body: JSON.stringify({ name: tag })
     });
     
     const result = await response.json();
-    if (response.ok && result.code === 200) {
+    if (response.ok && result.data) {
       return result.data;
     } else {
-      throw new Error(result.message || '添加标签失败');
+      throw new Error(result.detail || '添加标签失败');
     }
   } catch (error) {
     console.error('添加标签失败:', error);
@@ -863,35 +862,12 @@ const showUploadResultMessage = (files = []) => {
 /**
  * 文件上传
  */
-const sendQueuedUpload = formData => new Promise((resolve, reject) => {
-  const request = new XMLHttpRequest();
-  request.open('POST', `${API_BASE_URL}/api/upload/images`);
-  request.setRequestHeader('Authorization', `Bearer ${localStorage.getItem('authToken')}`);
-  request.upload.onprogress = event => {
-    if (!event.lengthComputable) return;
-    uploadProgress.value = Math.min(90, (event.loaded / event.total) * 90);
-  };
-  request.upload.onload = () => {
+const sendQueuedUpload = formData => api.uploadImages(formData, value => {
+  uploadProgress.value = Math.min(90, value * 0.9);
+  if (value >= 100) {
     uploadPhase.value = 'processing';
-    uploadProgress.value = Math.max(uploadProgress.value, 95);
-  };
-  request.onerror = () => reject(new Error('网络连接失败'));
-  request.onabort = () => reject(new Error('上传已取消'));
-  request.onload = () => {
-    let result;
-    try {
-      result = JSON.parse(request.responseText || '{}');
-    } catch {
-      reject(new Error('服务器返回了无法解析的结果'));
-      return;
-    }
-    if (request.status < 200 || request.status >= 300) {
-      reject(new Error(result.message || `请求失败（HTTP ${request.status}）`));
-      return;
-    }
-    resolve(result);
-  };
-  request.send(formData);
+    uploadProgress.value = 95;
+  }
 });
 
 const uploadQueuedFiles = async () => {
@@ -910,12 +886,12 @@ const uploadQueuedFiles = async () => {
   try {
     const formData = new FormData();
     queuedItems.forEach(item => {
-      formData.append('images[]', item.file);
+      formData.append('images', item.file);
     });
     
     // 携带标签数据
     if (selectedTags.value.length > 0) {
-      formData.append('tags', JSON.stringify(selectedTags.value));
+      selectedTags.value.forEach(tagID => formData.append('tag_ids', String(tagID)));
     }
     // 携带存储桶信息
     formData.append('bucket_id', selectedBucket.value || '1')
@@ -923,7 +899,7 @@ const uploadQueuedFiles = async () => {
     const result = await sendQueuedUpload(formData);
     uploadProgress.value = 100;
 
-    const uploadResults = Array.isArray(result.data?.files) ? result.data.files : [];
+    const uploadResults = Array.isArray(result?.files) ? result.files : [];
     const completedIDs = new Set();
     let uploadedCount = 0;
     let duplicateCount = 0;
@@ -939,7 +915,7 @@ const uploadQueuedFiles = async () => {
       }
 
       item.status = 'failed';
-      item.error = fileResult?.message || result.message || '上传失败';
+      item.error = fileResult?.error?.detail || '上传失败';
       failedCount += 1;
     });
 
@@ -1117,7 +1093,7 @@ const downloadImage = (image) => {
   const fullUrl = getFullUrl(image.url);
   const link = document.createElement('a');
   link.href = fullUrl;
-  link.download = image.filename || `image-${Date.now()}.png`;
+  link.download = image.file_name || `image-${Date.now()}.png`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -1145,7 +1121,7 @@ const previewImage = (image) => {
   
   currentPreviewImage = image;
   const previewFileName = escapeHtml(getPreviewFileName(image));
-  const originalFileName = escapeHtml(image.original_filename || image.filename || '未知');
+  const originalFileName = escapeHtml(image.original_file_name || image.file_name || '未知');
   const sizeSummary = escapeHtml(getImageSizeSummary(image));
   const spotlightDescription = escapeHtml(getSpotlightDescription(image));
 
@@ -1273,14 +1249,14 @@ const previewImage = (image) => {
   window.downloadPreviewImage = () => downloadImage(currentPreviewImage);
   window.toggleHomePreviewTags = button => {
     const container = button.closest('.image-preview-popup');
-    const extraTags = container?.querySelectorAll('.home-preview-extra-tag') || [];
-    const shouldExpand = Array.from(extraTags).some(tag => tag.classList.contains('hidden'));
+    const extraTags = Array.from(container?.querySelectorAll('.home-preview-extra-tag') ?? []) as HTMLElement[];
+    const shouldExpand = extraTags.some(tag => tag.classList.contains('hidden'));
     extraTags.forEach(tag => tag.classList.toggle('hidden', !shouldExpand));
     button.textContent = shouldExpand ? '收起' : `+${button.dataset.count}`;
   };
   window.deletePreviewImage = () => {
     deleteImage(currentPreviewImage.id);
-    closePreviewModal();
+    window.closePreviewModal?.();
   };
   window.closePreviewModal = () => {
     if (previewModalInstance) {
@@ -1332,8 +1308,8 @@ const submitUrlUpload = async () => {
   try {
     const succeeded = await postuploadbyurl({
       url: urlUploadUrl.value,
-      tag_id: urlUploadTag.value || 0,
-      bucket_id: urlUploadBucket.value || '1'
+      bucket_id: Number(urlUploadBucket.value || '1'),
+      tag_ids: urlUploadTag.value ? [Number(urlUploadTag.value)] : []
     });
     if (succeeded) urlUploadOpen.value = false;
   } finally {
@@ -1343,21 +1319,20 @@ const submitUrlUpload = async () => {
 
 const postuploadbyurl = async (formData) => {
   try {
-    const res = await fetch(`/api/images/url`, {
+    const res = await apiFetch(`/api/v1/image-imports`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       },
       body: JSON.stringify(formData)
     });
     const result = await res.json();
-    if (res.ok && result.code === 200) {
+    if (res.ok && result.data) {
       await Promise.all([loadRecentImages(), loadDashboardStats()]);
-      showUploadResultMessage(result.data?.file ? [result.data.file] : []);
+      showUploadResultMessage([result.data]);
       return true;
     } else {
-      throw new Error(result.message || '上传失败');
+      throw new Error(result.detail || '上传失败');
     }
   } catch (err) {
     console.error(err);

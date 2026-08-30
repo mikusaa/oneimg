@@ -29,6 +29,31 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 配置 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 校验 OpenAPI 与前端
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run openapi:check
+          pnpm run build
+
+      - name: 配置 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: 后端测试
+        run: go test ./...
+
       - name: 配置 QEMU
         uses: docker/setup-qemu-action@v3
 

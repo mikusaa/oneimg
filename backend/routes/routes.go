@@ -3,11 +3,13 @@ package routes
 import (
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
-	"oneimg/backend/config"
-	"oneimg/backend/controllers"
+	apiV1 "oneimg/backend/api/v1"
+	"oneimg/backend/app"
+	"oneimg/backend/media"
 	"oneimg/backend/middlewares"
 
 	"github.com/gin-contrib/cors"
@@ -15,32 +17,29 @@ import (
 )
 
 // 设置路由
-func SetupRoutes(frontendFS fs.FS) *gin.Engine {
-	cfg := config.App
+func SetupRoutes(frontendFS fs.FS, system *app.System) *gin.Engine {
+	cfg := system.Config
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	r.HandleMethodNotAllowed = true
+	v1Server := apiV1.NewServer(system.Services)
 
 	// 基础中间件
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 	r.Use(middlewares.SessionMiddleware(cfg))
+	r.Use(apiV1.RequestIDMiddleware())
+	r.Use(v1Server.OriginProtection())
 
 	// 跨域配置
 	r.Use(cors.New(cors.Config{
 		AllowOriginFunc: func(origin string) bool {
-			if strings.TrimSpace(origin) == "" {
-				return true
-			}
-			appURL := strings.TrimSpace(cfg.AppURL)
-			if appURL != "" && strings.EqualFold(origin, appURL) {
-				return true
-			}
-			return strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")
+			return allowedBrowserOrigin(origin, cfg.AppURL)
 		},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
-		ExposeHeaders:    []string{"Content-Length"},
+		AllowMethods:     []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With", "X-OneImg-CSRF", "X-Request-ID"},
+		ExposeHeaders:    []string{"Content-Length", "Location", "Retry-After", "X-Request-ID"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
@@ -55,97 +54,30 @@ func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 	// 静态资源
 	r.StaticFile("/favicon.ico", "./frontend/dist/favicon.ico")
 
-	// API路由分组
-	api := r.Group("/api")
-	{
-		// 公开接口（无需认证）
-		api.POST("/login", controllers.Login)
-		api.POST("/passkeys/login/begin", controllers.BeginPasskeyLogin)
-		api.POST("/passkeys/login/finish", controllers.FinishPasskeyLogin)
-		api.POST("/register", controllers.Register)
-		api.POST("/logout", controllers.Logout)
-		api.GET("/logout", controllers.Logout)
-		// 返回登录设置
-		api.GET("/settings/login", controllers.GetLoginSettings)
-		// 返回SEO设置
-		api.GET("/settings/seo", controllers.GetSEOSettings)
-		// 随机图片
-		api.GET("/images/random", controllers.GetRandomImages)
-		// 需要认证的接口分组（应用AuthMiddleware）
-		auth := api.Group("")
-		auth.Use(middlewares.AuthMiddleware())
-		{
-			// 用户信息接口
-			auth.GET("/user/status", controllers.CheckLoginStatus)
-			auth.POST("/passkeys/register/begin", controllers.BeginPasskeyRegistration)
-			auth.POST("/passkeys/register/finish", controllers.FinishPasskeyRegistration)
-			auth.GET("/passkeys", controllers.GetPasskeys)
-			auth.PUT("/passkeys/:id", controllers.RenamePasskey)
-			auth.DELETE("/passkeys/:id", controllers.DeletePasskey)
-
-			// 获取上传配置
-			auth.GET("/uploadConfig", controllers.GetUploadConfig)
-
-			// 标签管理接口
-			auth.GET("/tags", controllers.GetTags)
-			auth.POST("/tags", middlewares.RequirePermission("tag:create"), controllers.AddTag)
-			auth.PUT("/tags/:id", middlewares.RequirePermission("tag:update"), controllers.UpdateTag)
-			auth.DELETE("/tags/:id", middlewares.RequirePermission("tag:delete"), controllers.DeleteTag)
-
-			// 存储桶列表
-			auth.GET("/buckets/list", controllers.GetBucketsList)
-
-			// 统计数据
-			auth.GET("/stats/dashboard", controllers.GetDashboardStats)
-			auth.GET("/stats/images", controllers.GetImageStats)
-
-			// 图片相关接口
-			auth.POST("/upload/images", controllers.UploadImages)
-			auth.DELETE("/images/:id", controllers.DeleteImage)
-			auth.GET("/images", controllers.GetImageList)
-			auth.GET("/images/:id", controllers.GetImageDetail)
-			auth.POST("/images/tag", controllers.AddImageTag)
-			auth.DELETE("/images/tag", controllers.DeleteImageTag)
-			auth.DELETE("/images/tags", controllers.DeleteImageTags) // 批量删除图片标签
-			auth.POST("/images/tags", controllers.AddImageTags)
-
-			// 通过URL上传图片
-			auth.POST("/images/url", controllers.UploadImagesByURL)
-			auth.POST("/account/change", controllers.ChangeAccountInfo)
-
-			// 存储管理接口
-			auth.GET("/buckets", middlewares.RequireAnyPermission("storage:create", "storage:update", "storage:delete"), controllers.GetBuckets)
-			auth.POST("/buckets", middlewares.RequirePermission("storage:create"), controllers.AddBuckets)
-			auth.POST("/buckets/test", middlewares.RequireAnyPermission("storage:create", "storage:update"), controllers.TestBucketConnection)
-			auth.POST("/buckets/update/:id", middlewares.RequirePermission("storage:update"), controllers.UpdateBuckets)
-			auth.PUT("/buckets/default/cdn", middlewares.RequirePermission("storage:update"), controllers.UpdateDefaultStorageCDN)
-			auth.DELETE("/buckets/:id", middlewares.RequirePermission("storage:delete"), controllers.DeleteBuckets)
-
-			// 用户管理接口
-			auth.GET("/users", middlewares.RequirePermission("user:list"), controllers.GetUsers)
-			auth.POST("/users/Add", middlewares.RequirePermission("user:create"), controllers.CreateUser)
-			auth.DELETE("/users/:id", middlewares.RequirePermission("user:delete"), controllers.DeleteUser)
-			auth.POST("/users/updateRole", middlewares.RequirePermission("user:role:update"), controllers.UpdateUserRole)
-			auth.POST("/users/resetPassword/:id", middlewares.RequirePermission("user:password:reset"), controllers.ResetPassword)
-			auth.POST("/users/updatePermission/:id", middlewares.RequirePermission("user:permission:update"), controllers.UpdateUserPermission)
-			auth.DELETE("/users/:id/passkeys", middlewares.RequirePermission("user:passkey:reset"), controllers.RevokeUserPasskeys)
-
-			// 系统设置接口，控制器按字段分组再次校验权限。
-			auth.Any("/settings/get", controllers.GetSettings)
-			auth.POST("/settings/update", controllers.UpdateSettings)
+	v1Server.Register(r)
+	r.GET("/api/openapi.yaml", func(c *gin.Context) {
+		content, err := fs.ReadFile(frontendFS, "api/openapi.yaml")
+		if err != nil {
+			v1Server.NotFound(c)
+			return
 		}
-	}
+		c.Data(http.StatusOK, "application/yaml; charset=utf-8", content)
+	})
+	r.GET("/api/docs", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<!doctype html><html><head><meta charset="utf-8"><title>OneImg API</title><link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script><script>SwaggerUIBundle({url:'/api/openapi.yaml',dom_id:'#swagger-ui',deepLinking:true,persistAuthorization:true})</script></body></html>`))
+	})
+	r.NoMethod(v1Server.MethodNotAllowed)
 
 	// 前端SPA路由与图片代理逻辑集成
 	r.NoRoute(func(c *gin.Context) {
 		// 1. API路径返回404
 		if strings.HasPrefix(c.Request.URL.Path, "/api") {
-			c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "API Not Found"})
+			v1Server.NotFound(c)
 			return
 		}
 
 		// 2. 尝试通过图片代理识别图片路径
-		if controllers.ImageProxy(c) {
+		if media.ImageProxy(c) {
 			return
 		}
 
@@ -162,4 +94,21 @@ func SetupRoutes(frontendFS fs.FS) *gin.Engine {
 	})
 
 	return r
+}
+
+func allowedBrowserOrigin(origin, appURL string) bool {
+	if strings.TrimSpace(origin) == "" {
+		return true
+	}
+	parsedOrigin, originErr := url.Parse(strings.TrimSpace(origin))
+	parsedApp, appErr := url.Parse(strings.TrimSpace(appURL))
+	if originErr == nil && appErr == nil && strings.EqualFold(parsedOrigin.Scheme, parsedApp.Scheme) && strings.EqualFold(parsedOrigin.Host, parsedApp.Host) {
+		return true
+	}
+	return originErr == nil && isLoopbackHTTPOrigin(parsedOrigin) && isLoopbackHTTPOrigin(parsedApp)
+}
+
+func isLoopbackHTTPOrigin(parsed *url.URL) bool {
+	host := strings.ToLower(parsed.Hostname())
+	return (parsed.Scheme == "http" || parsed.Scheme == "https") && (host == "localhost" || host == "127.0.0.1" || host == "::1")
 }

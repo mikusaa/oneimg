@@ -16,7 +16,7 @@ import (
 
 // 导入静态资源
 //
-//go:embed frontend/dist/**
+//go:embed frontend/dist/** api/openapi.yaml
 var fs embed.FS
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 		os.Exit(localimport.RunCLI(os.Args[2:], system.Database.DB))
 	}
 
-	r := routes.SetupRoutes(fs)
+	r := routes.SetupRoutes(fs, system)
 	log.Println("应用初始化完成")
 
 	port := system.Config.Port

@@ -308,13 +308,13 @@
           type="button"
           class="pressable flex h-10 min-w-10 items-center justify-center rounded-lg border px-2 text-sm font-medium"
           :aria-label="`第 ${p} 页`"
-          :aria-current="page === p ? 'page' : undefined"
+          :aria-current="page === Number(p) ? 'page' : undefined"
           :class="
-            page === p
+            page === Number(p)
               ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm'
               : 'border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
           "
-          @click="goToPage(p)"
+          @click="goToPage(Number(p))"
         >
           {{ p }}
         </button>
@@ -332,12 +332,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch } from "@/api/client.ts"
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
-import PopupModal from '@/utils/popupModal.js'
-import message from '@/utils/message.js'
-import { getStoredUser, hasPermission } from '@/utils/permissions.js'
+import PopupModal from '@/utils/popupModal.ts'
+import message from '@/utils/message.ts'
+import { getStoredUser, hasPermission } from '@/utils/permissions.ts'
 
 const SuperAdminID = 1
 const RoleAdmin = 1
@@ -372,7 +373,7 @@ const PERMISSION_GROUPS = [
   { title: '系统设置', items: [
     { code: 'setting:upload', name: '存储与上传' }, { code: 'setting:image', name: '图片处理' },
     { code: 'setting:security', name: '访问安全' },
-    { code: 'setting:api', name: '上传 API' }, { code: 'setting:seo', name: '站点信息' }
+    { code: 'setting:seo', name: '站点信息' }
   ]}
 ]
 
@@ -417,7 +418,7 @@ function formatDate(dateStr) {
 }
 
 function getUserBucketCount(user) {
-  return (user.permission?.buckets || []).length
+  return (user.permission?.bucket_ids || []).length
 }
 
 function getUserCodeCount(user) {
@@ -428,7 +429,7 @@ const pageNumbers = computed(() => {
   const total = totalPages.value
   const current = page.value
   if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1)
-  const pages = [1]
+  const pages: Array<number | '...'> = [1]
   if (current > 3) pages.push('...')
   for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
     pages.push(i)
@@ -455,7 +456,7 @@ async function toggleDropdown(userId) {
   activeDropdown.value = opening ? userId : null
   if (opening) {
     await nextTick()
-    document.querySelector(`[data-user-menu="${userId}"] [role="menuitem"]`)?.focus()
+    document.querySelector<HTMLElement>(`[data-user-menu="${userId}"] [role="menuitem"]`)?.focus()
   }
 }
 
@@ -467,7 +468,10 @@ function handleDropdownKeydown(event) {
   if (event.key !== 'Escape' || !activeDropdown.value) return
   const userId = activeDropdown.value
   closeDropdown()
-  nextTick(() => dropdownRefs.value.get(userId)?.querySelector('button')?.focus())
+  nextTick(() => {
+    const button = dropdownRefs.value.get(userId)?.querySelector('button') as HTMLButtonElement | null
+    button?.focus()
+  })
 }
 
 // 优化外部点击关闭：仅点击空白区域关闭，不干扰下拉内部
@@ -506,22 +510,22 @@ async function fetchUsers() {
   try {
     const params = new URLSearchParams({
       page: String(page.value),
-      limit: String(PAGE_LIMIT),
+      page_size: String(PAGE_LIMIT),
     })
     if (debouncedSearch.value) params.set('username', debouncedSearch.value)
     if (roleFilter.value !== 'all') params.set('role', roleFilter.value)
 
-    const res = await fetch(`/api/users?${params}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+    const res = await apiFetch(`/api/v1/users?${params}`, {
+      headers: {}
     })
     const result = await res.json()
 
-    if (res.ok && result.code === 200) {
-      users.value = result.data.list || []
-      total.value = result.data.total || 0
-      totalPages.value = Math.ceil(total.value / PAGE_LIMIT) || 1
+    if (res.ok && Array.isArray(result.data)) {
+      users.value = result.data
+      total.value = result.meta?.pagination?.total || 0
+      totalPages.value = result.meta?.pagination?.total_pages || 1
     } else {
-      message.error(result.message || '获取用户列表失败')
+      message.error(result.detail || '获取用户列表失败')
     }
   } catch (err) {
     console.error('获取用户列表失败:', err)
@@ -580,11 +584,10 @@ function openCreateModal() {
       }
 
       try {
-        const res = await fetch('/api/users/Add', {
+        const res = await apiFetch('/api/v1/users', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           },
           body: JSON.stringify({
             username: formData.username,
@@ -594,12 +597,12 @@ function openCreateModal() {
         })
         const result = await res.json()
 
-        if (res.ok && result.code === 200) {
+        if (res.ok && result.data) {
           message.success('用户创建成功')
           modal.close()
           fetchUsers()
         } else {
-          message.error(result.message || '创建失败')
+          message.error(result.detail || '创建失败')
         }
       } catch (err) {
         console.error('创建用户失败:', err)
@@ -658,19 +661,18 @@ function openDeleteModal(user) {
         callback: async (modal) => {
           modal.close()
           try {
-            const res = await fetch(`/api/users/${user.id}`, {
+            const res = await apiFetch(`/api/v1/users/${user.id}`, {
               method: 'DELETE',
               headers: {
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               },
             })
-            const result = await res.json()
+            const result = res.status === 204 ? null : await res.json()
 
-            if (res.ok && result.code === 200) {
+            if (res.ok) {
               message.success('用户已删除')
               fetchUsers()
             } else {
-              message.error(result.message || '删除失败')
+              message.error(result?.detail || '删除失败')
             }
           } catch (err) {
             console.error('删除用户失败:', err)
@@ -710,14 +712,14 @@ function openRevokePasskeysModal(user) {
         type: 'danger',
         callback: async currentModal => {
           try {
-            const response = await fetch(`/api/users/${user.id}/passkeys`, {
-              method: 'DELETE',
-              headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+            const response = await apiFetch(`/api/v1/users/${user.id}/passkeys/revoke`, {
+              method: 'POST',
+              headers: {}
             })
-            const data = await response.json()
-            if (!response.ok || data.code !== 200) throw new Error(data.message || '撤销失败')
+            const data = response.status === 204 ? null : await response.json()
+            if (!response.ok) throw new Error(data?.detail || '撤销失败')
             currentModal.close()
-            message.success(`已撤销 ${data.data?.count || 0} 个 Passkey`)
+            message.success('Passkey 已撤销')
             fetchUsers()
           } catch (error) {
             message.error(error.message || '撤销失败')
@@ -731,7 +733,7 @@ function openRevokePasskeysModal(user) {
 
 function openProfileModal(user) {
   const bucketOptions = buckets.value
-  const selectedIds = [...(user.permission?.buckets || [])].filter(id => bucketOptions.some(item => item.id === id))
+  const selectedIds = [...(user.permission?.bucket_ids || [])].filter(id => bucketOptions.some(item => item.id === id))
   const selectedCodes = [...(user.permission?.codes || [])]
 
   const renderBucketCards = () => bucketOptions.length === 0
@@ -761,15 +763,14 @@ function openProfileModal(user) {
       { text: '取消', type: 'default', callback: () => modal.close() },
       { text: '确认保存', type: 'primary', callback: async () => {
         try {
-          const response = await fetch(`/api/users/updatePermission/${user.id}`, {
-            method: 'POST', headers: {
+          const response = await apiFetch(`/api/v1/users/${user.id}/permissions`, {
+            method: 'PUT', headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             },
-            body: JSON.stringify({ permission: selectedIds, codes: user.role === RoleAdmin ? selectedCodes : [] })
+            body: JSON.stringify({ bucket_ids: selectedIds, codes: user.role === RoleAdmin ? selectedCodes : [] })
           })
           const data = await response.json()
-          if (!response.ok || data.code !== 200) throw new Error(data.message || '更新失败')
+          if (!response.ok || !data.data) throw new Error(data.detail || '更新失败')
           modal.close()
           message.success('权限更新成功')
           fetchUsers()
@@ -781,7 +782,7 @@ function openProfileModal(user) {
 
   const bindInteractions = () => {
     const bucketWrap = document.getElementById('bucketCardWrap')
-    bucketWrap?.querySelectorAll('.bucket-card').forEach(card => {
+    bucketWrap?.querySelectorAll<HTMLElement>('.bucket-card').forEach(card => {
       card.onclick = () => {
         const id = Number(card.dataset.bucketId)
         const index = selectedIds.indexOf(id)
@@ -790,10 +791,12 @@ function openProfileModal(user) {
       }
     })
     const codeWrap = document.getElementById('codeCardWrap')
-    codeWrap?.querySelectorAll('.code-card').forEach(card => {
+    codeWrap?.querySelectorAll<HTMLElement>('.code-card').forEach(card => {
       card.onclick = () => {
-        const index = selectedCodes.indexOf(card.dataset.code)
-        if (index >= 0) selectedCodes.splice(index, 1); else selectedCodes.push(card.dataset.code)
+        const code = card.dataset.code
+        if (!code) return
+        const index = selectedCodes.indexOf(code)
+        if (index >= 0) selectedCodes.splice(index, 1); else selectedCodes.push(code)
         codeWrap.innerHTML = renderCodeCards(); bindInteractions()
       }
     })
@@ -845,22 +848,21 @@ function openRoleModal(user) {
           const newRole = parseInt(newRoleSelect?.value || '3')
 
           try {
-            const res = await fetch('/api/users/updateRole', {
-              method: 'POST',
+            const res = await apiFetch(`/api/v1/users/${user.id}`, {
+              method: 'PATCH',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               },
               body: JSON.stringify({ id: user.id, role: newRole }),
             })
             const result = await res.json()
 
-            if (res.ok && result.code === 200) {
+            if (res.ok && result.data) {
               message.success('角色更新成功')
               modal.close()
               fetchUsers()
             } else {
-              message.error(result.message || '更新失败')
+              message.error(result.detail || '更新失败')
             }
           } catch (err) {
             console.error('更新角色失败:', err)
@@ -912,15 +914,14 @@ async function handleResetPassword(user) {
 const resetPassword = async (user) => { 
   closeDropdown()
   try {
-    const res = await fetch(`/api/users/resetPassword/${user.id}`, {
+    const res = await apiFetch(`/api/v1/users/${user.id}/password-reset`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
       },
     })
     const result = await res.json()
 
-    if (res.ok && result.code === 200 && result.data?.new_password) {
+    if (res.ok && result.data?.new_password) {
       const newPassword = result.data.new_password
       const modal = new PopupModal({
         title: '密码重置成功',
@@ -975,7 +976,7 @@ const resetPassword = async (user) => {
 
       fetchUsers()
     } else {
-      message.error(result.message || '重置失败')
+      message.error(result.detail || '重置失败')
     }
   } catch (err) {
     console.error('重置密码失败:', err)
@@ -985,18 +986,17 @@ const resetPassword = async (user) => {
 // 获取存储列表
 const GetBuckets = async () => {
   try {
-    const response = await fetch('/api/buckets/list', {
+    const response = await apiFetch('/api/v1/storage-buckets', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
     });
     const result = await response.json();
-    if (response.ok && result.code === 200) {
+    if (response.ok && Array.isArray(result.data)) {
       buckets.value = result.data;
     } else {
-      message.error(result.message || '获取存储列表失败');
+      message.error(result.detail || '获取存储列表失败');
     }
   } catch (error) {
     console.error('获取存储列表失败:', error);

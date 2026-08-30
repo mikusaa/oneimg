@@ -15,9 +15,6 @@ import (
 	"strings"
 
 	"oneimg/backend/config"
-	"oneimg/backend/models"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 const encryptedPrefix = "enc:v1:"
@@ -31,10 +28,6 @@ var bucketSensitiveKeys = map[string]struct{}{
 	"ftp_pass":      {},
 	"webdav_user":   {},
 	"webdav_pass":   {},
-}
-
-var settingsSensitiveKeys = map[string]struct{}{
-	"api_token": {},
 }
 
 func EncryptBucketConfigValues(configMap map[string]any) (map[string]any, error) {
@@ -52,104 +45,6 @@ func MaskBucketConfigValues(configMap map[string]any) map[string]any {
 func IsBucketSensitiveKey(key string) bool {
 	_, ok := bucketSensitiveKeys[key]
 	return ok
-}
-
-func IsSettingsSensitiveKey(key string) bool {
-	_, ok := settingsSensitiveKeys[key]
-	return ok
-}
-
-const ConfiguredStatus = ""
-
-func SanitizeSettingsForResponse(setting models.Settings) map[string]any {
-	apiTokenStatus := ""
-	if strings.TrimSpace(setting.APITokenHash) != "" {
-		apiTokenStatus = ConfiguredStatus
-	}
-	return map[string]any{
-		"id":                    setting.ID,
-		"original_image":        setting.OriginalImage,
-		"save_webp":             setting.SaveWebp,
-		"thumbnail":             setting.Thumbnail,
-		"start_register":        setting.StartRegister,
-		"start_api":             setting.StartAPI,
-		"api_token":             apiTokenStatus,
-		"api_token_configured":  strings.TrimSpace(setting.APITokenHash) != "",
-		"save_original_name":    setting.SaveOriginalName,
-		"default_storage":       setting.DefaultStorage,
-		"max_file_size":         setting.MaxFileSize,
-		"allowed_types":         setting.AllowedTypes,
-		"main_image_quality":    setting.MainImageQuality,
-		"skip_compress_formats": setting.SkipCompressFormat,
-		"public_image_domain":   setting.PublicImageDomain,
-		"cdn_domain":            setting.CDNDomain,
-		"referer_white_enable":  setting.RefererWhiteEnable,
-		"referer_white_list":    setting.RefererWhiteList,
-		"seo_title":             setting.SEOTitle,
-		"seo_description":       setting.SEODescription,
-		"seo_keywords":          setting.SEOKeywords,
-		"seo_icp":               setting.SEOICP,
-		"public_security":       setting.PublicSecurity,
-		"seo_icon":              setting.SEOicon,
-		"default_path":          setting.DefaultPath,
-		"file_name":             setting.FileName,
-	}
-}
-
-func NormalizeSettingValue(key string, value any) (any, error) {
-	if _, ok := settingsSensitiveKeys[key]; !ok {
-		return value, nil
-	}
-
-	strValue := strings.TrimSpace(toString(value))
-	if strValue == "" || strValue == ConfiguredStatus {
-		return nil, nil
-	}
-
-	if key == "api_token" {
-		hash, err := bcrypt.GenerateFromPassword([]byte(strValue), bcrypt.DefaultCost)
-		if err != nil {
-			return nil, err
-		}
-		return string(hash), nil
-	}
-
-	return encryptString(strValue)
-}
-
-func CompareSecretHash(hashValue, rawValue string) bool {
-	if strings.TrimSpace(hashValue) == "" || strings.TrimSpace(rawValue) == "" {
-		return false
-	}
-	err := bcrypt.CompareHashAndPassword([]byte(hashValue), []byte(rawValue))
-	return err == nil
-}
-
-func TryMigrateSettingsSecrets(setting *models.Settings) (bool, error) {
-	changed := false
-
-	if strings.TrimSpace(setting.APIToken) != "" && strings.TrimSpace(setting.APITokenHash) == "" {
-		hash, err := bcrypt.GenerateFromPassword([]byte(setting.APIToken), bcrypt.DefaultCost)
-		if err != nil {
-			return false, err
-		}
-		setting.APITokenHash = string(hash)
-		setting.APIToken = ""
-		changed = true
-	}
-
-	return changed, nil
-}
-
-func DecryptSettingValue(key, value string) (string, error) {
-	if !IsSettingsSensitiveKey(key) {
-		return value, nil
-	}
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" || !IsEncryptedValue(trimmed) {
-		return value, nil
-	}
-	return decryptString(trimmed)
 }
 
 func IsEncryptedValue(value string) bool {
@@ -262,7 +157,7 @@ func maskMapValues(configMap map[string]any, sensitiveKeys map[string]struct{}) 
 		if _, ok := sensitiveKeys[key]; ok {
 			strVal := strings.TrimSpace(toString(value))
 			if strVal != "" {
-				result[key] = ConfiguredStatus
+				result[key] = ""
 				result[key+"_configured"] = true
 			} else {
 				result[key] = ""

@@ -1,0 +1,703 @@
+openapi: 3.1.0
+info:
+  title: OneImg API
+  version: 1.0.0
+  description: Breaking v1 API for OneImg. Legacy /api routes are not supported.
+servers:
+  - url: /api/v1
+tags:
+  - name: Public
+  - name: Authentication
+  - name: Account
+  - name: Images
+  - name: Tags
+  - name: Storage
+  - name: Statistics
+  - name: Users
+  - name: Settings
+paths:
+  /public/config:
+    get:
+      operationId: getPublicConfig
+      tags: [Public]
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /public/images/random:
+    get:
+      operationId: getRandomImage
+      tags: [Public]
+      security: []
+      description: Reserved endpoint. It currently returns 501 random_images_not_implemented.
+      responses:
+        '501': { $ref: '#/components/responses/ProblemResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /auth/login:
+    post:
+      operationId: login
+      tags: [Authentication]
+      security: []
+      requestBody: { $ref: '#/components/requestBodies/Login' }
+      responses:
+        '200': { $ref: '#/components/responses/UserResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /auth/register:
+    post:
+      operationId: register
+      tags: [Authentication]
+      security: []
+      requestBody: { $ref: '#/components/requestBodies/Login' }
+      responses:
+        '201': { $ref: '#/components/responses/UserResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [Authentication]
+      security: [{ cookieAuth: [] }]
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /auth/passkeys/login/options:
+    post:
+      operationId: createPasskeyLoginOptions
+      tags: [Authentication]
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /auth/passkeys/login/verify:
+    post:
+      operationId: verifyPasskeyLogin
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { $ref: '#/components/responses/UserResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /me:
+    get:
+      operationId: getMe
+      tags: [Account]
+      responses:
+        '200': { $ref: '#/components/responses/UserResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    patch:
+      operationId: updateMe
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UpdateMeRequest' } } }
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /me/passkeys:
+    get:
+      operationId: listPasskeys
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /me/passkeys/registration/options:
+    post:
+      operationId: createPasskeyRegistrationOptions
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      requestBody: { $ref: '#/components/requestBodies/PasskeyManagement' }
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /me/passkeys/registration/verify:
+    post:
+      operationId: verifyPasskeyRegistration
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '201': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /me/passkeys/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    patch:
+      operationId: renamePasskey
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /me/passkeys/{id}/revoke:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: revokePasskey
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      requestBody: { $ref: '#/components/requestBodies/PasswordConfirmation' }
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /me/tokens:
+    get:
+      operationId: listPersonalTokens
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/TokenCollectionResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    post:
+      operationId: createPersonalToken
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateTokenRequest' } } }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedTokenResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /me/tokens/{id}/revoke:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: revokePersonalToken
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      requestBody: { $ref: '#/components/requestBodies/PasswordConfirmation' }
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /upload-options:
+    get:
+      operationId: getUploadOptions
+      tags: [Images]
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /images:
+    get:
+      operationId: listImages
+      tags: [Images]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Sort' }
+        - { $ref: '#/components/parameters/Order' }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: bucket_id, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: tag_ids, in: query, description: Comma-separated positive IDs, schema: { type: string } }
+        - { name: untagged, in: query, schema: { type: boolean } }
+        - { name: uploader_role, in: query, schema: { type: integer, enum: [1, 3] } }
+      responses:
+        '200': { $ref: '#/components/responses/ImageCollectionResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    post:
+      operationId: uploadImages
+      tags: [Images]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [images]
+              properties:
+                images: { type: array, minItems: 1, maxItems: 10, items: { type: string, format: binary } }
+                tag_ids: { type: array, items: { type: integer, minimum: 1 } }
+                bucket_id: { type: integer, minimum: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/UploadBatchResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /images/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: getImage
+      tags: [Images]
+      responses:
+        '200': { $ref: '#/components/responses/ImageResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    delete:
+      operationId: deleteImage
+      tags: [Images]
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /image-imports:
+    post:
+      operationId: importImage
+      tags: [Images]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ImageImportRequest' } } }
+      responses:
+        '201': { $ref: '#/components/responses/ImageResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /images/{image_id}/tags/{tag_id}:
+    parameters:
+      - { $ref: '#/components/parameters/ImageID' }
+      - { $ref: '#/components/parameters/TagID' }
+    put:
+      operationId: addImageTag
+      tags: [Images]
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    delete:
+      operationId: removeImageTag
+      tags: [Images]
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /images/tags:
+    patch:
+      operationId: updateImageTags
+      tags: [Images]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BatchImageTagsRequest' } } }
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /tags:
+    get:
+      operationId: listTags
+      tags: [Tags]
+      responses:
+        '200': { $ref: '#/components/responses/TagCollectionResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    post:
+      operationId: createTag
+      tags: [Tags]
+      requestBody: { $ref: '#/components/requestBodies/Tag' }
+      responses:
+        '201': { $ref: '#/components/responses/TagResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /tags/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    patch:
+      operationId: updateTag
+      tags: [Tags]
+      requestBody: { $ref: '#/components/requestBodies/Tag' }
+      responses:
+        '200': { $ref: '#/components/responses/TagResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    delete:
+      operationId: deleteTag
+      tags: [Tags]
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /storage-buckets:
+    get:
+      operationId: listStorageBuckets
+      tags: [Storage]
+      responses:
+        '200': { $ref: '#/components/responses/StorageBucketCollectionResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    post:
+      operationId: createStorageBucket
+      tags: [Storage]
+      requestBody: { $ref: '#/components/requestBodies/Storage' }
+      responses:
+        '201': { $ref: '#/components/responses/StorageBucketResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /storage-buckets/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: getStorageBucket
+      tags: [Storage]
+      responses:
+        '200': { $ref: '#/components/responses/StorageBucketResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    patch:
+      operationId: updateStorageBucket
+      tags: [Storage]
+      requestBody: { $ref: '#/components/requestBodies/Storage' }
+      responses:
+        '200': { $ref: '#/components/responses/StorageBucketResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    delete:
+      operationId: deleteStorageBucket
+      tags: [Storage]
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /storage-connection-tests:
+    post:
+      operationId: testStorageConnection
+      tags: [Storage]
+      requestBody: { $ref: '#/components/requestBodies/Storage' }
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /stats/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [Statistics]
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /stats/images:
+    get:
+      operationId: getImageStats
+      tags: [Statistics]
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [day, week, month, year], default: month } }
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /users:
+    get:
+      operationId: listUsers
+      tags: [Users]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Sort' }
+        - { $ref: '#/components/parameters/Order' }
+        - { name: id, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: username, in: query, schema: { type: string } }
+        - { name: role, in: query, schema: { type: integer, enum: [1, 3] } }
+      responses:
+        '200': { $ref: '#/components/responses/UserCollectionResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    post:
+      operationId: createUser
+      tags: [Users]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateUserRequest' } } }
+      responses:
+        '201': { $ref: '#/components/responses/UserResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /users/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    patch:
+      operationId: updateUser
+      tags: [Users]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { username: { type: string }, role: { type: integer, enum: [1, 3] } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/UserResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    delete:
+      operationId: deleteUser
+      tags: [Users]
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /users/{id}/permissions:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    put:
+      operationId: updateUserPermissions
+      tags: [Users]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Permission' } } }
+      responses:
+        '200': { $ref: '#/components/responses/UserResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /users/{id}/password-reset:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: resetUserPassword
+      tags: [Users]
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /users/{id}/passkeys/revoke:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: revokeUserPasskeys
+      tags: [Users]
+      responses:
+        '204': { $ref: '#/components/responses/NoContentResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [Settings]
+      parameters:
+        - { name: groups, in: query, description: Comma-separated setting groups, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    patch:
+      operationId: updateSettings
+      tags: [Settings]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SettingsPatch' } } }
+      responses:
+        '200': { $ref: '#/components/responses/DataResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: oneimg-session }
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    ID: { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    ImageID: { name: image_id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    TagID: { name: tag_id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    Sort: { name: sort, in: query, schema: { type: string } }
+    Order: { name: order, in: query, schema: { type: string, enum: [asc, desc] } }
+  requestBodies:
+    Login:
+      required: true
+      content: { application/json: { schema: { type: object, required: [username, password], properties: { username: { type: string }, password: { type: string, format: password } } } } }
+    PasswordConfirmation:
+      required: true
+      content: { application/json: { schema: { type: object, required: [current_password], properties: { current_password: { type: string, format: password } } } } }
+    PasskeyManagement:
+      required: true
+      content: { application/json: { schema: { type: object, required: [name, current_password], properties: { name: { type: string }, current_password: { type: string, format: password } } } } }
+    Tag:
+      required: true
+      content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, minLength: 1, maxLength: 10 } } } } }
+    Storage:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/StorageRequest' } } }
+  responses:
+    ProblemResponse:
+      description: RFC 9457 Problem Details
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    DataResponse:
+      description: Successful response
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } }
+    NoContentResponse:
+      description: Successful response with no content
+      headers: { X-Request-ID: { schema: { type: string } } }
+    UserResponse:
+      description: User response
+      headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/User' } } } } }
+    UserCollectionResponse:
+      description: Paginated user response
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/ManagedUser' } }, meta: { $ref: '#/components/schemas/Meta' } } } } }
+    ImageResponse:
+      description: Image response
+      headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/Image' } } } } }
+    ImageCollectionResponse:
+      description: Paginated image response
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/Image' } }, meta: { $ref: '#/components/schemas/Meta' } } } } }
+    TagResponse:
+      description: Tag response
+      headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/Tag' } } } } }
+    TagCollectionResponse:
+      description: Tag collection response
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/Tag' } } } } } }
+    StorageBucketResponse:
+      description: Storage bucket response
+      headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/StorageBucket' } } } } }
+    StorageBucketCollectionResponse:
+      description: Storage bucket collection response
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/StorageBucket' } } } } } }
+    UploadBatchResponse:
+      description: Per-file upload results
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/UploadBatch' } } } } }
+    TokenCollectionResponse:
+      description: Personal token collection response
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/PersonalAccessToken' } } } } } }
+    CreatedTokenResponse:
+      description: Newly created token; the plaintext token is returned only once
+      headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/CreatedPersonalAccessToken' } } } } }
+  schemas:
+    DataEnvelope:
+      type: object
+      required: [data]
+      properties: { data: {}, meta: { $ref: '#/components/schemas/Meta' } }
+    Meta:
+      type: object
+      properties:
+        pagination:
+          type: object
+          required: [page, page_size, total, total_pages]
+          properties: { page: { type: integer }, page_size: { type: integer }, total: { type: integer, format: int64 }, total_pages: { type: integer, format: int64 } }
+    FieldProblem:
+      type: object
+      required: [field, code, message]
+      properties: { field: { type: string }, code: { type: string }, message: { type: string } }
+    Problem:
+      type: object
+      required: [type, title, status, detail, code, instance, request_id]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string }
+        instance: { type: string }
+        request_id: { type: string }
+        errors: { type: array, items: { $ref: '#/components/schemas/FieldProblem' } }
+    Permission:
+      type: object
+      required: [codes, bucket_ids]
+      properties: { codes: { type: array, items: { type: string } }, bucket_ids: { type: array, items: { type: integer, minimum: 1 } } }
+    User:
+      type: object
+      required: [id, username, role, permission, created_at, updated_at]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        role: { type: integer, enum: [1, 3] }
+        permission: { $ref: '#/components/schemas/Permission' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ManagedUser:
+      allOf:
+        - { $ref: '#/components/schemas/User' }
+        - { type: object, required: [passkey_count], properties: { passkey_count: { type: integer, format: int64, minimum: 0 } } }
+    Tag:
+      type: object
+      required: [id, name]
+      properties: { id: { type: integer }, name: { type: string } }
+    Image:
+      type: object
+      required: [id, url, thumbnail, file_name, original_file_name, original_file_size, file_size, mime_type, width, height, storage, bucket_id, user_id, uploader_role, tags, created_at]
+      properties:
+        id: { type: integer }
+        url: { type: string }
+        thumbnail: { type: string }
+        file_name: { type: string }
+        original_file_name: { type: string }
+        original_file_size: { type: integer, format: int64 }
+        file_size: { type: integer, format: int64 }
+        mime_type: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+        storage: { type: string }
+        bucket_id: { type: integer }
+        user_id: { type: integer }
+        uploader_role: { type: integer }
+        tags: { type: array, items: { $ref: '#/components/schemas/Tag' } }
+        created_at: { type: string, format: date-time }
+    StorageBucket:
+      type: object
+      required: [id, name, type, capacity_bytes, usage_bytes]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string, enum: [default, s3, r2, ftp, webdav] }
+        capacity_bytes: { type: integer, format: int64, minimum: 0 }
+        usage_bytes: { type: integer, format: int64, minimum: 0 }
+        config: { type: object, additionalProperties: true }
+    PersonalAccessToken:
+      type: object
+      required: [id, name, prefix, scopes, expires_at, last_used_at, revoked_at, created_at]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        prefix: { type: string }
+        scopes: { type: array, items: { type: string } }
+        expires_at: { type: [string, 'null'], format: date-time }
+        last_used_at: { type: [string, 'null'], format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+    CreatedPersonalAccessToken:
+      type: object
+      required: [token, record]
+      properties:
+        token: { type: string, pattern: '^oneimg_pat_[A-Za-z0-9_-]+_[A-Za-z0-9_-]+$' }
+        record: { $ref: '#/components/schemas/PersonalAccessToken' }
+    UploadFileResult:
+      type: object
+      required: [file_name, success]
+      properties:
+        file_name: { type: string }
+        success: { type: boolean }
+        duplicate: { type: boolean }
+        image: { $ref: '#/components/schemas/Image' }
+        error:
+          type: object
+          required: [code, detail]
+          properties: { code: { type: string }, detail: { type: string } }
+    UploadBatch:
+      type: object
+      required: [files, summary]
+      properties:
+        files: { type: array, items: { $ref: '#/components/schemas/UploadFileResult' } }
+        summary:
+          type: object
+          required: [total, succeeded, failed]
+          properties:
+            total: { type: integer }
+            succeeded: { type: integer }
+            failed: { type: integer }
+    UpdateMeRequest:
+      type: object
+      required: [current_password]
+      properties: { current_password: { type: string, format: password }, username: { type: string }, password: { type: string, format: password } }
+    CreateTokenRequest:
+      type: object
+      required: [name, scopes, current_password]
+      properties:
+        name: { type: string, maxLength: 50 }
+        scopes: { type: array, minItems: 1, items: { type: string, enum: ['images:read', 'images:write', 'images:delete', 'tags:read', 'tags:write', 'storage:read', 'storage:write', 'users:read', 'users:write', 'settings:read', 'settings:write', 'stats:read'] } }
+        expiration_days: { type: [integer, 'null'], enum: [0, 30, 90, 365, null], default: 90 }
+        current_password: { type: string, format: password }
+    ImageImportRequest:
+      type: object
+      required: [url]
+      properties: { url: { type: string, format: uri }, bucket_id: { type: integer, minimum: 1 }, tag_ids: { type: array, items: { type: integer, minimum: 1 } } }
+    BatchImageTagsRequest:
+      type: object
+      required: [image_ids]
+      properties: { image_ids: { type: array, minItems: 1, items: { type: integer, minimum: 1 } }, add_tag_ids: { type: array, items: { type: integer, minimum: 1 } }, remove_tag_ids: { type: array, items: { type: integer, minimum: 1 } } }
+    StorageRequest:
+      type: object
+      required: [name, type, capacity_bytes, config]
+      properties: { id: { type: integer, minimum: 1 }, name: { type: string }, type: { type: string, enum: [default, s3, r2, ftp, webdav] }, capacity_bytes: { type: integer, minimum: 0 }, config: { type: object, additionalProperties: true } }
+    CreateUserRequest:
+      type: object
+      required: [username, password, role]
+      properties: { username: { type: string, minLength: 3, maxLength: 50 }, password: { type: string, minLength: 6, maxLength: 100 }, role: { type: integer, enum: [1, 3] } }
+    SettingsPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        original_image: { type: boolean }
+        save_webp: { type: boolean }
+        thumbnail: { type: boolean }
+        registration_enabled: { type: boolean }
+        save_original_name: { type: boolean }
+        default_storage: { type: integer }
+        max_file_size: { type: integer }
+        allowed_types: { type: string }
+        main_image_quality: { type: integer }
+        skip_compress_formats: { type: string }
+        default_path: { type: string }
+        file_name: { type: string }
+        public_image_domain: { type: string }
+        cdn_domain: { type: string }
+        referer_white_enable: { type: boolean }
+        referer_white_list: { type: string }
+        seo_title: { type: string }
+        seo_description: { type: string }
+        seo_keywords: { type: string }
+        seo_icp: { type: string }
+        public_security: { type: string }
+        seo_icon: { type: string }
+security:
+  - cookieAuth: []
+  - bearerAuth: []

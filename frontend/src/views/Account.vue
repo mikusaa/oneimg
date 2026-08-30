@@ -1,9 +1,9 @@
 <template>
   <div class="page-shell text-slate-800 dark:text-slate-200">
-    <PageHeader title="账户设置" description="管理账户资料、密码和 Passkey" />
+    <PageHeader title="账户设置" description="管理账户资料、密码、Passkey 和 API 令牌" />
 
     <div class="grid grid-cols-1 gap-6 pb-16 xl:grid-cols-2">
-      <section class="section-card overflow-hidden">
+      <section class="section-card !p-0 overflow-hidden xl:col-start-1 xl:row-start-1">
         <div class="panel-content p-6 md:p-8">
           <div class="mb-6 flex items-center gap-3">
             <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -75,7 +75,51 @@
         </div>
       </section>
 
-      <section class="section-card overflow-hidden">
+      <section class="section-card !p-0 overflow-hidden xl:col-span-2 xl:col-start-1 xl:row-start-2">
+        <div class="panel-content p-6 md:p-8">
+          <div class="mb-6 flex items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-3">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                <i class="ri-key-2-line text-lg" aria-hidden="true"></i>
+              </div>
+              <div class="min-w-0">
+                <h2 class="font-semibold text-slate-900 dark:text-white">API 令牌</h2>
+                <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">管理用于接口调用的个人访问令牌</p>
+              </div>
+            </div>
+            <button type="button" class="primary-button shrink-0 px-4 py-2" :disabled="tokenBusy" @click="showTokenForm = !showTokenForm">{{ showTokenForm ? '取消' : '创建令牌' }}</button>
+          </div>
+          <form v-if="showTokenForm" class="mb-6 grid gap-3 border-b border-slate-200 pb-6 dark:border-white/10 md:grid-cols-3" @submit.prevent="createPersonalToken">
+            <input v-model="tokenForm.name" class="input-modern" placeholder="令牌名称" maxlength="50" required />
+            <input v-model="tokenForm.currentPassword" class="input-modern" type="password" placeholder="当前密码" autocomplete="current-password" required />
+            <select v-model.number="tokenForm.expirationDays" class="input-modern"><option :value="30">30 天</option><option :value="90">90 天</option><option :value="365">365 天</option><option :value="0">永不过期</option></select>
+            <fieldset class="md:col-span-3">
+              <legend class="field-label mb-2">权限范围</legend>
+              <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <label v-for="scope in tokenScopes" :key="scope.value" class="flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-white/10">
+                  <input v-model="tokenForm.scopes" type="checkbox" :value="scope.value" class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                  <span>{{ scope.label }}</span>
+                  <code class="ml-auto text-[11px] text-slate-400">{{ scope.value }}</code>
+                </label>
+              </div>
+            </fieldset>
+            <button type="submit" class="primary-button md:col-span-3" :disabled="tokenBusy">{{ tokenBusy ? '创建中...' : '确认创建' }}</button>
+          </form>
+          <div v-if="newToken" class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+            <code class="min-w-0 flex-1 break-all">{{ newToken }}</code>
+            <button type="button" class="icon-button shrink-0" title="复制令牌" aria-label="复制令牌" @click="copyNewToken"><i class="ri-file-copy-line"></i></button>
+          </div>
+          <div v-if="tokens.length === 0" class="text-sm text-slate-500">尚未创建令牌</div>
+          <div v-else class="divide-y divide-slate-100 dark:divide-white/5">
+            <div v-for="token in tokens" :key="token.id" class="flex items-center justify-between gap-3 py-3">
+              <div class="min-w-0"><p class="text-sm font-medium">{{ token.name }}</p><p class="text-xs text-slate-500">{{ token.prefix }} · {{ token.revoked_at ? '已撤销' : (token.expires_at ? `到期 ${formatDate(token.expires_at)}` : '永不过期') }}</p><p class="mt-1 break-words text-[11px] text-slate-400">{{ token.scopes.join(' · ') }}</p></div>
+              <button v-if="!token.revoked_at" type="button" class="danger-button px-3 py-1.5" :disabled="tokenBusy" @click="revokePersonalToken(token)">撤销</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card !p-0 overflow-hidden xl:col-start-2 xl:row-start-1">
         <div class="panel-content p-6 md:p-8">
           <div class="mb-6 flex items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-3">
@@ -188,13 +232,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch } from "@/api/client.ts"
 import { computed, onMounted, reactive, ref } from 'vue'
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
-import message from '@/utils/message.js'
-import { getStoredUser, ROLE_ADMIN } from '@/utils/permissions.js'
+import message from '@/utils/message.ts'
+import { getStoredUser, ROLE_ADMIN } from '@/utils/permissions.ts'
+import type { CreateTokenRequest } from '@/api/generated/types.gen'
+
+type TokenScope = CreateTokenRequest['scopes'][number]
 
 const router = useRouter()
 const isAdmin = Number(getStoredUser()?.role) === ROLE_ADMIN
@@ -213,15 +261,35 @@ const editingPasskeyName = ref('')
 const deletingPasskeyID = ref(null)
 const deletePassword = ref('')
 const passkeyForm = reactive({ name: '', currentPassword: '' })
+const tokens = ref([])
+const tokenBusy = ref(false)
+const showTokenForm = ref(false)
+const newToken = ref('')
+const tokenScopes: Array<{ value: TokenScope; label: string }> = [
+  { value: 'images:read', label: '读取图片' },
+  { value: 'images:write', label: '上传和修改图片' },
+  { value: 'images:delete', label: '删除图片' },
+  { value: 'tags:read', label: '读取标签' },
+  { value: 'tags:write', label: '管理标签' },
+  { value: 'storage:read', label: '读取存储配置' },
+  { value: 'storage:write', label: '管理存储配置' },
+  { value: 'users:read', label: '读取用户' },
+  { value: 'users:write', label: '管理用户' },
+  { value: 'settings:read', label: '读取系统设置' },
+  { value: 'settings:write', label: '修改系统设置' },
+  { value: 'stats:read', label: '读取统计数据' },
+]
+const tokenForm = reactive<{ name: string; currentPassword: string; expirationDays: 0 | 30 | 90 | 365; scopes: TokenScope[] }>({
+  name: '', currentPassword: '', expirationDays: 90, scopes: ['images:read'],
+})
 
 const authHeaders = (json = false) => ({
-  ...(json ? { 'Content-Type': 'application/json' } : {}),
-  'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+  ...(json ? { 'Content-Type': 'application/json' } : {})
 })
 
 const readJSON = async (response) => {
   const data = await response.json()
-  if (!response.ok || data.code !== 200) throw new Error(data.message || '请求失败')
+  if (!response.ok || !Object.prototype.hasOwnProperty.call(data, 'data')) throw new Error(data.detail || '请求失败')
   return data
 }
 
@@ -238,7 +306,7 @@ const formatDate = (value) => {
 
 const loadPasskeyAvailability = async () => {
   try {
-    const response = await fetch('/api/settings/login')
+    const response = await apiFetch('/api/v1/public/config')
     const data = await readJSON(response)
     serverSupportsPasskeys.value = Boolean(data.data?.passkey_available)
   } catch {
@@ -249,13 +317,53 @@ const loadPasskeyAvailability = async () => {
 const loadPasskeys = async () => {
   loadingPasskeys.value = true
   try {
-    const data = await readJSON(await fetch('/api/passkeys', { headers: authHeaders() }))
-    passkeys.value = data.data?.passkeys || []
+    const data = await readJSON(await apiFetch('/api/v1/me/passkeys', { headers: authHeaders() }))
+    passkeys.value = data.data || []
   } catch (error) {
     message.error(error.message || '获取 Passkey 失败')
   } finally {
     loadingPasskeys.value = false
   }
+}
+
+const loadTokens = async () => {
+  try {
+    const response = await apiFetch('/api/v1/me/tokens')
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.detail || '获取令牌失败')
+    tokens.value = data.data || []
+  } catch (error) { message.error(error.message || '获取令牌失败') }
+}
+
+const createPersonalToken = async () => {
+  if (tokenForm.scopes.length === 0) return message.warning('请至少选择一个权限范围')
+  tokenBusy.value = true; newToken.value = ''
+  try {
+    const response = await apiFetch('/api/v1/me/tokens', { method: 'POST', headers: authHeaders(true), body: JSON.stringify({ name: tokenForm.name, current_password: tokenForm.currentPassword, expiration_days: tokenForm.expirationDays, scopes: tokenForm.scopes }) })
+    const data = await response.json(); if (!response.ok) throw new Error(data.detail || '创建令牌失败')
+    newToken.value = data.data.token; tokens.value.unshift(data.data.record); tokenForm.name = ''; tokenForm.currentPassword = ''; showTokenForm.value = false
+  } catch (error) { message.error(error.message || '创建令牌失败') } finally { tokenBusy.value = false }
+}
+
+const copyNewToken = async () => {
+  if (!newToken.value) return
+  try {
+    await navigator.clipboard.writeText(newToken.value)
+    message.success('令牌已复制')
+  } catch {
+    message.error('复制失败')
+  }
+}
+
+const revokePersonalToken = async (token) => {
+  const password = window.prompt('请输入当前密码以撤销令牌')
+  if (!password) return
+  tokenBusy.value = true
+  try {
+    const response = await apiFetch(`/api/v1/me/tokens/${token.id}/revoke`, { method: 'POST', headers: authHeaders(true), body: JSON.stringify({ current_password: password }) })
+    if (!response.ok) { const data = await response.json(); throw new Error(data.detail || '撤销令牌失败') }
+    token.revoked_at = new Date().toISOString()
+  } catch (error) { message.error(error.message || '撤销令牌失败') } finally { tokenBusy.value = false }
 }
 
 const addPasskey = async () => {
@@ -264,13 +372,13 @@ const addPasskey = async () => {
   if (!passkeyForm.currentPassword) return message.warning('请输入当前密码')
   isAddingPasskey.value = true
   try {
-    const begin = await readJSON(await fetch('/api/passkeys/register/begin', {
+    const begin = await readJSON(await apiFetch('/api/v1/me/passkeys/registration/options', {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({ name, current_password: passkeyForm.currentPassword })
     }))
     const registration = await startRegistration({ optionsJSON: begin.data.options })
-    await readJSON(await fetch('/api/passkeys/register/finish', {
+    await readJSON(await apiFetch('/api/v1/me/passkeys/registration/verify', {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(registration)
@@ -303,8 +411,8 @@ const renamePasskey = async (item) => {
   if (!name) return message.warning('设备名称不能为空')
   passkeyActionID.value = item.id
   try {
-    await readJSON(await fetch(`/api/passkeys/${item.id}`, {
-      method: 'PUT',
+    await readJSON(await apiFetch(`/api/v1/me/passkeys/${item.id}`, {
+      method: 'PATCH',
       headers: authHeaders(true),
       body: JSON.stringify({ name })
     }))
@@ -333,11 +441,15 @@ const deletePasskey = async (item) => {
   if (!deletePassword.value) return message.warning('请输入当前密码')
   passkeyActionID.value = item.id
   try {
-    await readJSON(await fetch(`/api/passkeys/${item.id}`, {
-      method: 'DELETE',
+    const revokeResponse = await apiFetch(`/api/v1/me/passkeys/${item.id}/revoke`, {
+      method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({ current_password: deletePassword.value })
-    }))
+    })
+    if (!revokeResponse.ok && revokeResponse.status !== 204) {
+      const revokeError = await revokeResponse.json()
+      throw new Error(revokeError.detail || '撤销 Passkey 失败')
+    }
     passkeys.value = passkeys.value.filter(passkey => passkey.id !== item.id)
     cancelDelete()
     message.success('Passkey 已删除')
@@ -353,21 +465,20 @@ const updateAccount = async () => {
   const hasUsernameChange = isAdmin && newUsername.trim() !== ''
   const hasPasswordChange = newPassword.trim() !== ''
   if (!hasUsernameChange && !hasPasswordChange) return message.error('请输入要修改的用户名或密码')
-  if (hasUsernameChange && (newUsername.length < 3 || newUsername.length > 64)) return message.error('用户名长度必须在 3-64 位之间')
+  if (hasUsernameChange && (newUsername.length < 3 || newUsername.length > 50)) return message.error('用户名长度必须在 3-50 位之间')
   if (hasPasswordChange && newPassword.length < 6) return message.error('新密码长度至少为 6 位')
   if (hasPasswordChange && newPassword !== confirmPassword) return message.error('两次输入的新密码不一致')
   if (!currentPassword) return message.error('请输入当前密码以确认修改')
 
   isUpdatingAccount.value = true
   try {
-    await readJSON(await fetch('/api/account/change', {
-      method: 'POST',
+    await readJSON(await apiFetch('/api/v1/me', {
+      method: 'PATCH',
       headers: authHeaders(true),
-      body: JSON.stringify({ new_username: newUsername, current_password: currentPassword, new_password: newPassword })
+      body: JSON.stringify({ username: hasUsernameChange ? newUsername : undefined, current_password: currentPassword, password: hasPasswordChange ? newPassword : undefined })
     }))
     message.success('修改成功，请重新登录')
     localStorage.removeItem('userInfo')
-    localStorage.removeItem('authToken')
     setTimeout(() => router.replace('/login'), 800)
   } catch (error) {
     message.error(error.message || '更新失败')
@@ -379,5 +490,6 @@ const updateAccount = async () => {
 onMounted(async () => {
   browserSupportsPasskeys.value = browserSupportsWebAuthn()
   await Promise.all([loadPasskeyAvailability(), loadPasskeys()])
+  await loadTokens()
 })
 </script>

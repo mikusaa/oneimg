@@ -6,6 +6,7 @@ import (
 	"oneimg/backend/config"
 	"oneimg/backend/database"
 	"oneimg/backend/models"
+	"oneimg/backend/services"
 	"oneimg/backend/utils/images"
 	"oneimg/backend/utils/passkeys"
 
@@ -15,6 +16,7 @@ import (
 type System struct {
 	Config   *config.Config
 	Database *database.Database
+	Services *services.Services
 }
 
 func Init() *System {
@@ -42,6 +44,9 @@ func Init() *System {
 
 	// 初始化系统设置
 	InitSettings(db)
+	if err := InvalidateLegacyAPIAccess(db.DB); err != nil {
+		log.Printf("旧 API Token 清理失败: %v", err)
+	}
 
 	// 初始化默认存储配置
 	InitDefaultStorage(db)
@@ -53,6 +58,7 @@ func Init() *System {
 	r := &System{
 		Config:   cfg,
 		Database: db,
+		Services: services.New(db, cfg),
 	}
 
 	return r

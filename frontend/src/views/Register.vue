@@ -37,10 +37,11 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch } from "@/api/client.ts"
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import message from '@/utils/message.js'
+import message from '@/utils/message.ts'
 
 const router = useRouter()
 const form = reactive({ username: '', password: '', confirmPassword: '' })
@@ -58,14 +59,14 @@ const validate = () => {
 const submitRegistration = async () => {
   loading.value = true
   try {
-    const response = await fetch('/api/register', {
+    const response = await apiFetch('/api/v1/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: form.username, password: form.password })
     })
     const result = await response.json()
-    if (!response.ok || result.code !== 200) throw new Error(result.message || '注册失败')
-    message.success(result.message || '注册成功，请登录')
+    if (!response.ok || !result.data) throw new Error(result.detail || '注册失败')
+    message.success('注册成功，请登录')
     await router.replace('/login')
   } catch (error) {
     message.error(error.message || '注册失败')
@@ -82,10 +83,10 @@ const handleSubmit = () => {
 
 onMounted(async () => {
   try {
-    const response = await fetch('/api/settings/login')
+    const response = await apiFetch('/api/v1/public/config')
     const result = await response.json()
-    if (!response.ok || result.code !== 200) throw new Error(result.message || '读取注册设置失败')
-    Object.assign(config, result.data)
+    if (!response.ok || !result.data) throw new Error(result.detail || '读取注册设置失败')
+    Object.assign(config, { start_register: result.data.registration_enabled })
     if (!config.start_register) {
       message.warning('暂未开放注册')
       return router.replace('/login')

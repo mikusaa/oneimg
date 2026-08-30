@@ -109,7 +109,7 @@
           type="button"
           class="pressable inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white lg:hidden"
           aria-label="关闭导航"
-          @click="closeSidebar"
+          @click="closeSidebar()"
         >
           <i class="ri-close-line"></i>
         </button>
@@ -138,16 +138,17 @@
   </aside>
 
   <transition name="fade">
-    <div v-if="showSidebar && sidebarOpen" class="app-scrim fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-[2px] lg:hidden" @click="closeSidebar"></div>
+    <div v-if="showSidebar && sidebarOpen" class="app-scrim fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-[2px] lg:hidden" @click="closeSidebar()"></div>
   </transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch } from "@/api/client.ts"
 import { computed, nextTick, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import Message from '@/utils/message.js'
-import { getStoredUser, hasAnyPermission, hasPermission, ROLE_ADMIN } from '@/utils/permissions.js'
-import { lockBodyScroll, unlockBodyScroll } from '@/utils/scrollLock.js'
+import Message from '@/utils/message.ts'
+import { getStoredUser, hasAnyPermission, hasPermission, ROLE_ADMIN } from '@/utils/permissions.ts'
+import { lockBodyScroll, unlockBodyScroll } from '@/utils/scrollLock.ts'
 
 const router = useRouter()
 const route = useRoute()
@@ -199,7 +200,7 @@ const refreshNavItems = () => {
     if (hasPermission('user:list', userInfo)) {
       navItems.value.push({ path: '/users', icon: 'user-line', name: '用户管理' })
     }
-    if (hasAnyPermission(['setting:upload', 'setting:image', 'setting:security', 'setting:api', 'setting:seo'], userInfo)) {
+    if (hasAnyPermission(['setting:upload', 'setting:image', 'setting:security', 'setting:seo'], userInfo)) {
       navItems.value.push({ path: '/settings', icon: 'settings-4-line', name: '系统设置' })
     }
   }
@@ -311,10 +312,9 @@ const handleNavClick = () => {
 }
 
 const handleLogout = async () => {
-  localStorage.removeItem('token')
   localStorage.removeItem('userInfo')
   try {
-    await fetch('/api/logout', { method: 'POST' })
+    await apiFetch('/api/v1/auth/logout', { method: 'POST' })
     Message.success('登出成功')
     refreshNavItems()
     router.push('/login').catch(() => {})

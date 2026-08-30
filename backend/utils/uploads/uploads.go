@@ -54,7 +54,7 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
-	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
 
@@ -149,7 +149,7 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
-	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
 
@@ -244,7 +244,7 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
-	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
 
@@ -335,7 +335,7 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
-	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
 
@@ -428,7 +428,7 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 	if err != nil {
 		return nil, fmt.Errorf("图片处理失败: %v", err)
 	}
-	if duplicate := findDuplicateUploadResult(bucket, processedImage.ContentHash); duplicate != nil {
+	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
 
@@ -534,7 +534,7 @@ func localThumbnailFilePath(thumbnailPath string) string {
 	return filepath.Join(".", "data", strings.TrimPrefix(thumbnailPath, "/"))
 }
 
-func findDuplicateUploadResult(bucket *models.Buckets, contentHash string) *interfaces.ImageUploadResult {
+func findDuplicateUploadResult(c *gin.Context, bucket *models.Buckets, contentHash string) *interfaces.ImageUploadResult {
 	if strings.TrimSpace(contentHash) == "" || bucket == nil {
 		return nil
 	}
@@ -546,7 +546,7 @@ func findDuplicateUploadResult(bucket *models.Buckets, contentHash string) *inte
 
 	var imageModel models.Image
 	result := db.DB.
-		Where("content_hash = ? AND storage = ? AND bucket_id = ?", contentHash, bucket.Type, bucket.Id).
+		Where("content_hash = ? AND storage = ? AND bucket_id = ? AND user_id = ?", contentHash, bucket.Type, bucket.Id, c.GetInt("user_id")).
 		Order("id ASC").
 		Limit(1).
 		Find(&imageModel)

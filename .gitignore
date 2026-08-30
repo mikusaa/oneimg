@@ -4,5 +4,6 @@
 /uploads/
 docker-compose.yml
 frontend/.pnpm-store/
+/.pnpm-store/
 frontend/dist/
 frontend/node_modules/

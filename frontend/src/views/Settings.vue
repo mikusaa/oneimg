@@ -361,50 +361,6 @@
                         </section>
                     </template>
 
-                    <template v-else-if="activeSettingTab === 'integrations'">
-                        <section v-if="hasSettingPermission('setting:api')" class="settings-section">
-                            <div class="settings-section-heading settings-section-heading-inline">
-                                <div>
-                                    <h3>上传 API</h3>
-                                    <p>通过 API Token 调用图片上传接口。</p>
-                                </div>
-                                <label class="settings-switch" title="上传 API">
-                                    <input
-                                        v-model="systemSettings.start_api"
-                                        :data-save-state="saveStates.start_api"
-                                        type="checkbox"
-                                        class="sr-only peer"
-                                        @change="handleSwitchChange('start_api', systemSettings.start_api)"
-                                    >
-                                    <span class="switch-track"></span>
-                                    <span class="switch-thumb"></span>
-                                </label>
-                            </div>
-
-                            <div class="setting-group mt-5">
-                                <label class="field-label" for="api_token">API Token</label>
-                                <div class="settings-token-row">
-                                    <input
-                                        id="api_token"
-                                        v-model="systemSettings.api_token"
-                                        :data-save-state="saveStates.api_token"
-                                        type="text"
-                                        class="input-modern min-w-0"
-                                        :placeholder="systemSettings.api_token_configured ? '已配置，输入新 Token 可替换' : '请输入或生成 API Token'"
-                                        @blur="handleFieldBlur('api_token', systemSettings.api_token)"
-                                    >
-                                    <button type="button" class="soft-button shrink-0" @click="generateApiToken">
-                                        <i class="ri-refresh-line"></i>
-                                        生成
-                                    </button>
-                                </div>
-                                <p class="field-hint">
-                                    请求头使用 <code>Authorization: oneimg_token=&lt;API Token&gt;</code>。新 Token 仅在本次页面中显示。
-                                </p>
-                            </div>
-                        </section>
-                    </template>
-
                     <template v-else-if="activeSettingTab === 'site'">
                         <section class="settings-section">
                             <div class="settings-section-heading">
@@ -501,11 +457,12 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch } from "@/api/client.ts"
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
-import message from '@/utils/message.js'
+import message from '@/utils/message.ts'
 
 const route = useRoute()
 const router = useRouter()
@@ -528,9 +485,6 @@ const systemSettings = reactive({
     seo_icp: '',
     public_security: '',
     seo_icon: '',
-    api_token: '',
-    api_token_configured: false,
-    start_api: false,
     save_original_name: false,
     default_storage: 1,
     max_file_size: 10485760,
@@ -547,17 +501,16 @@ const SETTING_TABS = [
     { key: 'upload', permissions: ['setting:upload'], label: '上传规则', icon: 'ri-upload-cloud-2-line' },
     { key: 'image', permissions: ['setting:image'], label: '图片处理', icon: 'ri-image-edit-line' },
     { key: 'security', permissions: ['setting:security'], label: '访问安全', icon: 'ri-shield-keyhole-line' },
-    { key: 'integrations', permissions: ['setting:api'], label: '集成服务', icon: 'ri-plug-line' },
     { key: 'site', permissions: ['setting:seo'], label: '站点信息', icon: 'ri-global-line' },
 ]
 
 const settingPermissions = ref([])
 const activeSettingTab = ref('')
-const updateSetting = reactive({})
-const saveStates = reactive({})
-const saveTimers = new Map()
-const saveQueues = new Map()
-const saveStateTimers = new Map()
+const updateSetting = reactive<Record<string, any>>({})
+const saveStates = reactive<Record<string, string>>({})
+const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const saveQueues = new Map<string, Promise<void>>()
+const saveStateTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const latestSaveMessage = ref('')
 const tabElements = new Map()
 
@@ -628,7 +581,6 @@ const normalizeDomain = (value) => {
 
 const getRequestHeaders = () => ({
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
 })
 
 const valuesMatch = (left, right) => String(left) === String(right)
@@ -640,23 +592,18 @@ const persistSetting = async (key, value) => {
     const existingStateTimer = saveStateTimers.get(key)
     if (existingStateTimer) clearTimeout(existingStateTimer)
     try {
-        const response = await fetch('/api/settings/update', {
-            method: 'POST',
+        const response = await apiFetch('/api/v1/settings', {
+            method: 'PATCH',
             headers: getRequestHeaders(),
-            body: JSON.stringify({ key, value }),
+            body: JSON.stringify({ [key === 'start_register' ? 'registration_enabled' : key]: value }),
         })
         const result = await response.json()
 
-        if (!response.ok || result.code !== 200) {
-            throw new Error(result.message || '未知错误')
+        if (!response.ok || !result.data) {
+            throw new Error(result.detail || '未知错误')
         }
 
-        if (key === 'api_token') {
-            systemSettings.api_token_configured = value !== '' || systemSettings.api_token_configured
-            updateSetting.api_token_configured = systemSettings.api_token_configured
-        } else {
-            updateSetting[key] = value
-        }
+        updateSetting[key] = value
         saveStates[key] = 'success'
         latestSaveMessage.value = '设置已保存'
         saveStateTimers.set(key, setTimeout(() => {
@@ -686,7 +633,7 @@ const enqueueSettingSave = (key, value) => {
 }
 
 const saveSetting = (key, value) => {
-    if (valuesMatch(updateSetting[key], value) && key !== 'api_token') return
+    if (valuesMatch(updateSetting[key], value)) return
 
     const existingTimer = saveTimers.get(key)
     if (existingTimer) clearTimeout(existingTimer)
@@ -698,29 +645,19 @@ const saveSetting = (key, value) => {
 
 const getBucketsList = async () => {
     try {
-        const response = await fetch('/api/buckets/list', {
+        const response = await apiFetch('/api/v1/upload-options', {
             method: 'GET',
             headers: getRequestHeaders(),
         })
         const result = await response.json()
-        if (!response.ok || result.code !== 200) {
-            throw new Error(result.message || '获取存储列表失败')
+        if (!response.ok || !result.data) {
+            throw new Error(result.detail || '获取存储列表失败')
         }
-        presetBuckets.value = result.data || []
+        presetBuckets.value = result.data.storage_buckets || []
     } catch (error) {
         console.error('获取存储列表失败:', error)
         message.error(error.message || '获取存储列表失败')
     }
-}
-
-const generateApiToken = () => {
-    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-    let token = ''
-    for (let i = 0; i < 32; i += 1) {
-        token += chars[Math.floor(Math.random() * chars.length)]
-    }
-    systemSettings.api_token = token
-    saveSetting('api_token', token)
 }
 
 const handleSwitchChange = (key, value) => {
@@ -728,14 +665,6 @@ const handleSwitchChange = (key, value) => {
         message.warning('已配置图片直链域名，该设置不会生效')
         systemSettings[key] = updateSetting[key]
         return
-    }
-
-    if (key === 'start_api' && value) {
-        if (systemSettings.api_token === '' && !systemSettings.api_token_configured) {
-            message.warning('请先配置 API Token')
-            systemSettings.start_api = false
-            return
-        }
     }
 
     saveSetting(key, value)
@@ -790,10 +719,6 @@ const handleFieldBlur = (key, rawValue) => {
     }
     if (valuesMatch(value, updateSetting[key])) return
 
-    if (key === 'api_token' && value === '' && systemSettings.start_api && !systemSettings.api_token_configured) {
-        systemSettings.start_api = false
-        saveSetting('start_api', false)
-    }
     saveSetting(key, value)
 }
 
@@ -836,22 +761,23 @@ const selectSettingTab = (tab) => {
 
 const getSettings = async () => {
     try {
-        const response = await fetch('/api/settings/get', {
+        const response = await apiFetch('/api/v1/settings', {
             method: 'GET',
             headers: getRequestHeaders(),
         })
         if (!response.ok) throw new Error(`请求失败：${response.status}`)
 
         const result = await response.json()
-        if (result.code !== 200 || !result.data) {
-            throw new Error(result.message || '获取设置失败：无数据')
+        if (!result.data) {
+            throw new Error(result.detail || '获取设置失败：无数据')
         }
 
-        settingPermissions.value = Array.isArray(result.data.setting_permissions)
-            ? result.data.setting_permissions
+        settingPermissions.value = Array.isArray(result.data.groups)
+            ? result.data.groups.map(group => `setting:${group}`)
             : []
-        Object.assign(systemSettings, result.data)
-        Object.assign(updateSetting, result.data)
+        const settings = { ...result.data, start_register: result.data.registration_enabled }
+        Object.assign(systemSettings, settings)
+        Object.assign(updateSetting, settings)
         syncActiveTab()
     } catch (error) {
         console.error('获取设置失败:', error)

@@ -55,7 +55,7 @@
 
         <div v-if="storage.type === 'default'" class="border-t border-slate-200/80 pt-4 dark:border-white/10">
           <label class="field-label" :for="`default-cdn-${storage.id}`">CDN 域名</label>
-          <div v-if="canUpdateStorage" class="settings-token-row">
+          <div v-if="canUpdateCDN" class="settings-token-row">
             <input
               :id="`default-cdn-${storage.id}`"
               v-model="cdnDomains[storage.id]"
@@ -102,17 +102,19 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch } from "@/api/client.ts"
 import { onMounted, reactive, ref } from 'vue';
 import PageHeader from '@/components/PageHeader.vue';
-import message from '@/utils/message.js';
-import PopupModal from '@/utils/popupModal.js';
-import { getStoredUser, hasPermission } from '@/utils/permissions.js';
+import message from '@/utils/message.ts';
+import PopupModal from '@/utils/popupModal.ts';
+import { getStoredUser, hasPermission } from '@/utils/permissions.ts';
 
 const currentUser = getStoredUser();
 const canCreateStorage = hasPermission('storage:create', currentUser);
 const canUpdateStorage = hasPermission('storage:update', currentUser);
 const canDeleteStorage = hasPermission('storage:delete', currentUser);
+const canUpdateCDN = hasPermission('setting:upload', currentUser);
 const buckets = ref([]);
 const cdnDomains = reactive({});
 const savedCDNDomains = reactive({});
@@ -149,6 +151,18 @@ const typeSpecificFields = {
 };
 
 const sensitiveFields = ['s3_access_key', 's3_secret_key', 'r2_access_key', 'r2_secret_key', 'ftp_user', 'ftp_pass', 'webdav_user', 'webdav_pass'];
+
+const storagePayload = (formData) => {
+  const { name, type, capacity, ...config } = formData
+  return { name, type, capacity_bytes: Math.max(0, Number(capacity || 0)) * 1024 * 1024 * 1024, config }
+}
+
+const decorateBucket = (bucket) => {
+  const capacity = Number(bucket.capacity_bytes || 0)
+  const usage = Number(bucket.usage_bytes || 0)
+  const readable = value => value ? `${(value / 1024 / 1024 / 1024).toFixed(2)} GB` : '0 B'
+  return { ...bucket, key: bucket.id, total_readable: readable(capacity), usage_readable: readable(usage), usage_free: readable(Math.max(0, capacity - usage)), usage_percent: capacity ? Math.min(100, Math.round(usage / capacity * 100)) : 0 }
+}
 
 // 添加存储弹窗
 const AddBucketModal = () => {
@@ -189,21 +203,20 @@ const AddBucketModal = () => {
           message.warning('请填写存储名称和选择存储类型');
           return;
         }
-        const response = await fetch('/api/buckets', {
+        const response = await apiFetch('/api/v1/storage-buckets', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
           },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(storagePayload(formData))
         });
         const result = await response.json();
-        if (response.ok && result.code === 200) {
+        if (response.ok && result.data) {
           message.success('存储添加成功');
           modal.close();
           GetBuckets();
         } else {
-          message.error(result.message || '添加存储失败');
+          message.error(result.detail || '添加存储失败');
         }
       } catch (error) {
         console.error('添加存储失败:', error);
@@ -269,21 +282,20 @@ const UpdateBucketModal = (bucket) => {
           message.warning('请填写存储名称和选择存储类型');
           return;
         }
-        const response = await fetch(`/api/buckets/update/${bucket.id}`, {
-          method: 'POST',
+        const response = await apiFetch(`/api/v1/storage-buckets/${bucket.id}`, {
+          method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
           },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(storagePayload(formData))
         });
         const result = await response.json();
-        if (response.ok && result.code === 200) {
+        if (response.ok && result.data) {
           message.success('存储更新成功');
           modal.close();
           GetBuckets();
         } else {
-          message.error(result.message || '更新存储失败');
+          message.error(result.detail || '更新存储失败');
         }
       } catch (error) {
         console.error('更新存储失败:', error);
@@ -323,19 +335,18 @@ const testBucketConnection = async (formData) => {
       message.warning('请先选择存储类型');
       return;
     }
-    const response = await fetch('/api/buckets/test', {
+    const response = await apiFetch('/api/v1/storage-connection-tests', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       },
-      body: JSON.stringify(formData)
+      body: JSON.stringify(storagePayload(formData))
     });
     const result = await response.json();
-    if (response.ok && result.code === 200) {
+    if (response.ok && result.data) {
       message.success(result.data?.detail || '连接测试成功');
     } else {
-      message.error(result.message || '连接测试失败');
+      message.error(result.detail || '连接测试失败');
     }
   } catch (error) {
     console.error('连接测试失败:', error);
@@ -364,20 +375,19 @@ const DeleteBucketModal = (id) => {
         callback: async (modal) => {
           modal.close();
           try {
-            const response = await fetch(`/api/buckets/${id}`, {
+            const response = await apiFetch(`/api/v1/storage-buckets/${id}`, {
               method: 'DELETE',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
               }
             });
-            const result = await response.json();
-            if (response.ok && result.code === 200) {
+            const result = response.status === 204 ? null : await response.json();
+            if (response.ok) {
               message.success('存储删除成功');
               modal.close();
               GetBuckets();
             } else {
-              message.error(result.message || '删除存储失败');
+              message.error(result?.detail || '删除存储失败');
             }
           } catch (error) {
             console.error('删除存储失败:', error);
@@ -393,24 +403,30 @@ const DeleteBucketModal = (id) => {
 // 获取存储列表
 const GetBuckets = async () => {
   try {
-    const response = await fetch('/api/buckets', {
+    const response = await apiFetch('/api/v1/storage-buckets', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
     });
     const result = await response.json();
-    if (response.ok && result.code === 200) {
-      buckets.value = result.data;
+    if (response.ok && Array.isArray(result.data)) {
+      buckets.value = result.data.map(decorateBucket);
+      let cdnDomain = '';
+      if (canUpdateCDN) {
+        const settingsResponse = await apiFetch('/api/v1/settings?groups=upload');
+        const settingsResult = await settingsResponse.json();
+        if (settingsResponse.ok && settingsResult.data) cdnDomain = settingsResult.data.cdn_domain || '';
+      }
       for (const storage of buckets.value) {
         if (storage.type !== 'default') continue;
-        const domain = storage.cdn_domain || '';
+        const domain = cdnDomain;
+        storage.cdn_domain = domain;
         cdnDomains[storage.id] = domain;
         savedCDNDomains[storage.id] = domain;
       }
     } else {
-      message.error(result.message || '获取存储列表失败');
+      message.error(result.detail || '获取存储列表失败');
     }
   } catch (error) {
     console.error('获取存储列表失败:', error);
@@ -423,21 +439,20 @@ const cdnDomainChanged = (storage) => {
 };
 
 const saveDefaultStorageCDN = async (storage) => {
-  if (!canUpdateStorage || !cdnDomainChanged(storage) || savingCDN.value === storage.id) return;
+  if (!canUpdateCDN || !cdnDomainChanged(storage) || savingCDN.value === storage.id) return;
 
   savingCDN.value = storage.id;
   try {
-    const response = await fetch('/api/buckets/default/cdn', {
-      method: 'PUT',
+    const response = await apiFetch('/api/v1/settings', {
+      method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       },
       body: JSON.stringify({ cdn_domain: String(cdnDomains[storage.id] || '').trim() })
     });
     const result = await response.json();
-    if (!response.ok || result.code !== 200) {
-      throw new Error(result.message || '更新 CDN 域名失败');
+    if (!response.ok || !result.data) {
+      throw new Error(result.detail || '更新 CDN 域名失败');
     }
 
     const domain = result.data?.cdn_domain || '';

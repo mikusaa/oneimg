@@ -42,9 +42,9 @@
   </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
-import { lockBodyScroll, unlockBodyScroll } from '@/utils/scrollLock.js'
+import { lockBodyScroll, unlockBodyScroll } from '@/utils/scrollLock.ts'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

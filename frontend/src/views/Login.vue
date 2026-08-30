@@ -81,10 +81,11 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch } from "@/api/client.ts"
 import { ref, onMounted, reactive } from 'vue';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
-import message from '@/utils/message.js';
+import message from '@/utils/message.ts';
 
 // 响应式数据
 const username = ref('');
@@ -135,7 +136,7 @@ const putLogin = async () => {
             password: password.value
         };
 
-        const response = await fetch('/api/login', {
+        const response = await apiFetch('/api/v1/auth/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -145,11 +146,11 @@ const putLogin = async () => {
         
         const result = await response.json();
         
-        if (response.ok && result.code === 200) {
-            saveLogin(result.data?.user);
+        if (response.ok && result.data) {
+            saveLogin(result.data);
         } else {
             isLoading.value = false;
-            message.error('登录失败: ' + (result.message || '未知错误'));
+            message.error('登录失败: ' + (result.detail || '未知错误'));
         }
     } catch (error) {
         isLoading.value = false;
@@ -167,25 +168,25 @@ const loginWithPasskey = async () => {
     isLoading.value = true;
     isPasskeyLoading.value = true;
     try {
-        const beginResponse = await fetch('/api/passkeys/login/begin', { method: 'POST' });
+        const beginResponse = await apiFetch('/api/v1/auth/passkeys/login/options', { method: 'POST' });
         const beginResult = await beginResponse.json();
-        if (!beginResponse.ok || beginResult.code !== 200) {
+        if (!beginResponse.ok || !beginResult.data) {
             throw new Error(beginResult.message || '无法开始 Passkey 登录');
         }
 
         const authentication = await startAuthentication({
             optionsJSON: beginResult.data.options
         });
-        const finishResponse = await fetch('/api/passkeys/login/finish', {
+        const finishResponse = await apiFetch('/api/v1/auth/passkeys/login/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(authentication)
         });
         const finishResult = await finishResponse.json();
-        if (!finishResponse.ok || finishResult.code !== 200) {
+        if (!finishResponse.ok || !finishResult.data) {
             throw new Error(finishResult.message || 'Passkey 登录失败');
         }
-        saveLogin(finishResult.data?.user);
+        saveLogin(finishResult.data);
     } catch (error) {
         if (!isPasskeyCancellation(error)) {
             message.error(error.message || 'Passkey 登录失败');
@@ -198,15 +199,15 @@ const loginWithPasskey = async () => {
 
 const getLoginSettings = async () => { 
     try {
-        const response = await fetch('/api/settings/login', {
+        const response = await apiFetch('/api/v1/public/config', {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json'
             }
         });
         const result = await response.json();
-        if (response.ok && result.code === 200) {
-            Object.assign(loginConfig, result.data);
+        if (response.ok && result.data) {
+            Object.assign(loginConfig, { start_register: result.data.registration_enabled, passkey_available: result.data.passkey_available });
         } else {
             message.error('获取登录配置失败');
         }

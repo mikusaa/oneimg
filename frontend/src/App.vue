@@ -50,7 +50,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import Navbar from '@/components/NavBar.vue'
@@ -96,7 +96,7 @@ const handleSeoUpdate = (data) => {
 onMounted(() => {
   window.seoBus?.onUpdate(handleSeoUpdate)
   if (window.seoStting) {
-    seoSetting.value = window.seoStting
+    Object.assign(seoSetting.value, window.seoStting)
   }
 })
 

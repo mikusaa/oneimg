@@ -71,12 +71,13 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch } from "@/api/client.ts"
 import { computed, onMounted, ref } from 'vue'
 import AppDialog from '@/components/AppDialog.vue'
-import message from '@/utils/message.js'
-import PopupModal from '@/utils/popupModal.js'
-import { hasPermission } from '@/utils/permissions.js'
+import message from '@/utils/message.ts'
+import PopupModal from '@/utils/popupModal.ts'
+import { hasPermission } from '@/utils/permissions.ts'
 
 const emit = defineEmits(['changed'])
 const tags = ref([])
@@ -98,10 +99,10 @@ const visibleTagCount = computed(() => filteredTags.value.length + (showDefaultT
 
 const loadTags = async () => {
   try {
-    const response = await fetch('/api/tags')
+    const response = await apiFetch('/api/v1/tags')
     const result = await response.json()
-    if (!response.ok || result.code !== 200) throw new Error(result.message || '获取标签失败')
-    tags.value = result.data?.list || []
+    if (!response.ok || !Array.isArray(result.data)) throw new Error(result.detail || '获取标签失败')
+    tags.value = result.data
   } catch (error) {
     message.error(error.message || '获取标签失败')
   }
@@ -112,9 +113,9 @@ const createTag = async () => {
   if (!name) return message.error('标签名称不能为空')
   saving.value = true
   try {
-    const response = await fetch('/api/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
+    const response = await apiFetch('/api/v1/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
     const result = await response.json()
-    if (!response.ok || result.code !== 200) throw new Error(result.message || '添加标签失败')
+    if (!response.ok || !result.data) throw new Error(result.detail || '添加标签失败')
     newTag.value = ''
     message.success('标签已添加')
     await loadTags()
@@ -136,9 +137,9 @@ const updateTag = async () => {
   if (!name) return message.error('标签名称不能为空')
   saving.value = true
   try {
-    const response = await fetch(`/api/tags/${editingTag.value.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
+    const response = await apiFetch(`/api/v1/tags/${editingTag.value.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
     const result = await response.json()
-    if (!response.ok || result.code !== 200) throw new Error(result.message || '更新标签失败')
+    if (!response.ok || !result.data) throw new Error(result.detail || '更新标签失败')
     editingTag.value = null
     message.success('标签已更新')
     await loadTags()
@@ -159,9 +160,9 @@ const deleteTag = tag => {
       { text: '删除', type: 'danger', callback: async current => {
         current.close()
         try {
-          const response = await fetch(`/api/tags/${tag.id}`, { method: 'DELETE' })
-          const result = await response.json()
-          if (!response.ok || result.code !== 200) throw new Error(result.message || '删除标签失败')
+          const response = await apiFetch(`/api/v1/tags/${tag.id}`, { method: 'DELETE' })
+          const result = response.status === 204 ? null : await response.json()
+          if (!response.ok) throw new Error(result.detail || '删除标签失败')
           message.success('标签已删除')
           await loadTags()
           emit('changed')

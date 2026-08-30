@@ -145,13 +145,20 @@
   </div>
 </template>
 
-<script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { lockBodyScroll, unlockBodyScroll } from '@/utils/scrollLock.js'
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from 'vue'
+import { lockBodyScroll, unlockBodyScroll } from '@/utils/scrollLock.ts'
+
+type TagValue = string | number
+interface TagOption {
+  value: TagValue
+  label: string
+  disabled?: boolean
+}
 
 const props = defineProps({
   modelValue: { type: [Array, String, Number], default: null },
-  options: { type: Array, default: () => [] },
+  options: { type: Array as PropType<TagOption[]>, default: () => [] },
   multiple: { type: Boolean, default: false },
   confirm: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },

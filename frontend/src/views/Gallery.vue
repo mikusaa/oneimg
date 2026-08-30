@@ -188,7 +188,7 @@
                   :id="`image-${image.id}`"
                   class="h-4 w-4 rounded border-gray-300 bg-white text-primary focus:ring-primary dark:bg-gray-800"
                   :checked="isImageSelected(image.id)"
-                  @change="(e) => handleImageSelection(image.id, e.target.checked)"
+                  @change="handleImageSelectionChange(image.id, $event)"
                   @click.stop
                 >
               </label>
@@ -210,9 +210,9 @@
               />
             </div>
             <div class="image-info gallery-image-info-compact p-3">
-              <p class="image-filename overflow-hidden truncate whitespace-nowrap text-sm font-medium">{{ image.filename }}</p>
-              <p v-if="image.original_filename && image.original_filename !== image.filename" class="gallery-image-card-meta truncate">
-                原始：{{ image.original_filename }}
+              <p class="image-filename overflow-hidden truncate whitespace-nowrap text-sm font-medium">{{ image.file_name }}</p>
+              <p v-if="image.original_file_name && image.original_file_name !== image.file_name" class="gallery-image-card-meta truncate">
+                原始：{{ image.original_file_name }}
               </p>
               <p class="gallery-image-card-meta gallery-image-card-meta-inline">
                 {{ formatFileSize(image.file_size) }} • 
@@ -296,7 +296,7 @@
         <div v-if="tagDialogMode === 'batch'" class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-950">
           <p class="text-sm font-medium text-slate-700 dark:text-slate-200">已选择 {{ batchEditableImages.length }} 张图片</p>
           <p class="mt-1.5 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
-            {{ batchEditableImages.map(image => image.filename).join('、') }}
+            {{ batchEditableImages.map(image => image.file_name).join('、') }}
           </p>
         </div>
       </div>
@@ -327,7 +327,8 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { apiFetch } from "@/api/client.ts"
 import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppDialog from '@/components/AppDialog.vue'
@@ -335,10 +336,10 @@ import PageHeader from '@/components/PageHeader.vue'
 import TagManager from '@/components/TagManager.vue'
 import TagSelector from '@/components/TagSelector.vue'
 import errorImg from '@/assets/images/error.webp';
-import Loading from '@/utils/loading.js'
-import Message from '@/utils/message.js'
-import PopupModal from '@/utils/popupModal.js'
-import { getStoredUser, hasPermission, isSuperAdmin, ROLE_ADMIN } from '@/utils/permissions.js';
+import Loading from '@/utils/loading.ts'
+import Message from '@/utils/message.ts'
+import PopupModal from '@/utils/popupModal.ts'
+import { getStoredUser, hasPermission, isSuperAdmin, ROLE_ADMIN } from '@/utils/permissions.ts';
 
 // ====================== 常量定义 ======================
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -471,9 +472,9 @@ const visiblePages = computed(() => {
   return pages;
 });
 
-const getImageAltText = (image) => image?.original_filename || image?.filename || '图片';
+const getImageAltText = (image) => image?.original_file_name || image?.file_name || '图片';
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
-const getPreviewFileName = image => image?.original_filename || image?.filename || '图片预览';
+const getPreviewFileName = image => image?.original_file_name || image?.file_name || '图片预览';
 const getImageSizeSummary = image => {
   const originalSize = Number(image?.original_file_size || 0);
   const savedSize = Number(image?.file_size || 0);
@@ -509,10 +510,7 @@ const canManageImage = (image, permission) => {
 };
 
 const selectedImageRecords = computed(() => images.value.filter(image => selectedImages.value.includes(image.id)));
-const galleryTagOptions = computed(() => [
-  { value: 0, label: '默认' },
-  ...presetTags.value.map(tag => ({ value: tag.id, label: tag.name }))
-]);
+const galleryTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.id, label: tag.name })));
 const actionTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.id, label: tag.name })));
 const batchEditableImages = computed(() => images.value.filter(image => (
   selectedImages.value.includes(image.id)
@@ -541,19 +539,18 @@ watch(
  */
 const getTagsList = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/tags`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/tags`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
     });
     
     const result = await response.json();
-    if (response.ok && result.code === 200) {
-      presetTags.value = result.data?.list || [];
+    if (response.ok && Array.isArray(result.data)) {
+      presetTags.value = result.data;
     } else {
-      throw new Error(result.message || '获取标签列表失败');
+      throw new Error(result.detail || '获取标签列表失败');
     }
   } catch (error) {
     console.error('获取标签失败:', error);
@@ -566,19 +563,18 @@ const getTagsList = async () => {
  */
 const getBucketsList = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/buckets/list`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/upload-options`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
     });
     
     const result = await response.json();
-    if (response.ok && result.code === 200) {
-      presetBuckets.value = result.data || [];
+    if (response.ok && result.data) {
+      presetBuckets.value = result.data.storage_buckets || [];
     } else {
-      throw new Error(result.message || '获取存储列表失败');
+      throw new Error(result.detail || '获取存储列表失败');
     }
   } catch (error) {
     console.error('获取存储列表失败:', error);
@@ -595,34 +591,32 @@ const loadImages = async () => {
   
   try {
     const params = new URLSearchParams({
-      page: currentPage.value,
-      limit: PAGE_SIZE,
-      sort_by: 'created_at',
-      sort_order: 'desc',
-      tags: selectedTags.value,
-      bucket: selectedBucket.value
+      page: String(currentPage.value),
+      page_size: String(PAGE_SIZE),
+      sort: 'created_at',
+      order: 'desc'
     });
+    if (selectedTags.value.length) params.set('tag_ids', selectedTags.value.join(','));
+    if (selectedBucket.value && selectedBucket.value !== 'null') params.set('bucket_id', String(selectedBucket.value));
     if (isAdmin.value && roleImage.value !== 'all') {
-      params.set('role', roleImage.value);
+      params.set('uploader_role', roleImage.value === 'admin' ? '1' : '3');
     }
     if (searchKeyword.value) {
-      params.set('search', searchKeyword.value);
+      params.set('q', searchKeyword.value);
     }
     
-    const response = await fetch(`${API_BASE_URL}/api/images?${params}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/images?${params}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
     });
     
     if (response.ok) {
       const result = await response.json();
-      images.value = result.data.images || [];
-      totalPages.value = result.data.total_pages || 1;
+      images.value = Array.isArray(result.data) ? result.data : [];
+      totalPages.value = result.meta?.pagination?.total_pages || 1;
       selectedImages.value = []; // 重置选择状态
     } else {
       if (response.status === 401) {
-        localStorage.removeItem('authToken');
         router.push('/login');
         Message.error('登录已过期，请重新登录');
         return;
@@ -662,10 +656,9 @@ const deleteAsync = async (id) => {
   });
   
   try {
-    const response = await fetch(`${API_BASE_URL}/api/images/${id}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/images/${id}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       }
     });
     
@@ -677,7 +670,7 @@ const deleteAsync = async (id) => {
       return true;
     } else {
       const result = await response.json();
-      throw new Error(result.message || '删除失败');
+      throw new Error(result.detail || '删除失败');
     }
   } catch (error) {
     console.error('删除图片错误:', error);
@@ -695,28 +688,24 @@ const deleteAsync = async (id) => {
  */
 const pustImageTag = async (imageId, values) => {
   const { tag } = values;
-  if (tag === '0') {
+  if (tag == null || tag === '') {
     Message.warning('请选择标签');
     return;
   }
   
   try {
-    const response = await fetch(`${API_BASE_URL}/api/images/tag`, {
-      method: 'POST',
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/images/${imageId}/tags/${tag}`, {
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
       },
-      body: JSON.stringify({ id: imageId, tag })
     });
 
     const result = await response.json();
-    if (response.ok && result.code === 200) {
+    if (response.ok) {
       // 更新本地数据
       const image = images.value.find(item => item.id === imageId);
       if (image) {
-        // 移除默认标签
-        image.tags = image.tags.filter(item => item.id !== 0);
         // 添加新标签
         const newTag = presetTags.value.find(item => item.id === Number(tag));
         if (newTag) image.tags.push(newTag);
@@ -724,9 +713,9 @@ const pustImageTag = async (imageId, values) => {
         currentPreviewImage.value = image;
         if (image) openPreview(image);
       }
-      Message.success(result.message || '添加成功');
+      Message.success('添加成功');
     } else {
-      Message.error(result.message || '添加失败');
+      Message.error(result.detail || '添加失败');
       openPreview(currentPreviewImage.value);
     }
   } catch (err) {
@@ -738,33 +727,24 @@ const pustImageTag = async (imageId, values) => {
 // 删除图片标签
 const deleteImageTagAsync = async (imageId, tagId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/images/tag`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/images/${imageId}/tags/${tagId}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-      },
-      body: JSON.stringify({ id: imageId, tag: tagId })
     });
 
     const result = await response.json();
-    if (response.ok && result.code === 200) {
+    if (response.ok) {
       // 更新本地数据
       const image = images.value.find(item => item.id === imageId);
       if (image) {
         // 移除标签
         image.tags = image.tags.filter(item => item.id !== tagId);
-        // 如果全部移除则添加默认标签
-        if(image.tags.length === 0){
-            image.tags.push({ id: 0, name: '默认' });
-        }
         // 更新预览图片
         currentPreviewImage.value = image;
       }
-      Message.success(result.message || '删除成功');
+      Message.success('删除成功');
       return true;
     } else {
-      Message.error(result.message || '删除失败');
+      Message.error(result.detail || '删除失败');
       return false;
     }
   } catch (err) {
@@ -847,6 +827,10 @@ const handleImageSelection = (imageId, isChecked) => {
     selectedImages.value = selectedImages.value.filter(id => id !== imageId);
   }
 };
+
+const handleImageSelectionChange = (imageId, event: Event) => {
+  handleImageSelection(imageId, (event.target as HTMLInputElement).checked)
+}
 
 /**
  * 处理全选
@@ -1020,26 +1004,25 @@ const batchDeleteTag = async (tagId) => {
         return false;
     }
     try {
-        const response = await fetch(`${API_BASE_URL}/api/images/tags`, {
-        method: 'DELETE',
+        const response = await apiFetch(`${API_BASE_URL}/api/v1/images/tags`, {
+        method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
             },
             body: JSON.stringify({
                 image_ids: imageIds,
-                tag_id: tagId
+                remove_tag_ids: [Number(tagId)],
             })
         });
         
         const result = await response.json();
-        if (response.ok && result.code === 200) {
+        if (response.ok) {
             Message.success('删除标签成功');
             // 刷新列表
             await loadImages();
             return true;
         } else {
-            throw new Error(result.message || '删除标签失败');
+            throw new Error(result.detail || '删除标签失败');
         }
     } catch (error) {
         console.error('删除标签失败:', error);
@@ -1059,26 +1042,25 @@ const batchAddTag = async (tagId) => {
         return false;
     }
     try {
-        const response = await fetch(`${API_BASE_URL}/api/images/tags`, {
-        method: 'POST',
+        const response = await apiFetch(`${API_BASE_URL}/api/v1/images/tags`, {
+        method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
             },
             body: JSON.stringify({
                 image_ids: imageIds,
-                tag_id: tagId
+                add_tag_ids: [Number(tagId)],
             })
         });
         
         const result = await response.json();
-        if (response.ok && result.code === 200) {
+        if (response.ok) {
             Message.success('添加标签成功');
             // 刷新列表
             await loadImages();
             return true;
         } else {
-            throw new Error(result.message || '添加标签失败');
+            throw new Error(result.detail || '添加标签失败');
         }
     } catch (error) {
         console.error('添加标签失败:', error);
@@ -1316,7 +1298,7 @@ const generatePreviewContent = (image) => {
         </div>
         <div class="flex items-center gap-1.5">
           <i class="ri-file-text-line w-3.5 text-center"></i>
-          原始文件名: ${escapeHtml(image.original_filename || image.filename || '未知')}
+          原始文件名: ${escapeHtml(image.original_file_name || image.file_name || '未知')}
         </div>
         <div class="flex items-center gap-1.5">
           <i class="ri-image-line w-3.5 text-center"></i>
@@ -1376,7 +1358,7 @@ const registerPreviewGlobalFunctions = modal => {
     const image = currentPreviewImage.value;
     const link = document.createElement('a');
     link.href = getFullUrl(image.url);
-    link.download = image.filename;
+    link.download = image.file_name;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1397,18 +1379,14 @@ const registerPreviewGlobalFunctions = modal => {
 
   window.togglePreviewTags = button => {
     const container = button.closest('.image-preview-popup');
-    const extraTags = container?.querySelectorAll('.preview-extra-tag') || [];
-    const shouldExpand = Array.from(extraTags).some(tag => tag.classList.contains('hidden'));
+    const extraTags = Array.from(container?.querySelectorAll('.preview-extra-tag') ?? []) as HTMLElement[];
+    const shouldExpand = extraTags.some(tag => tag.classList.contains('hidden'));
     extraTags.forEach(tag => tag.classList.toggle('hidden', !shouldExpand));
     button.textContent = shouldExpand ? '收起' : `+${button.dataset.count}`;
   };
 
   // 删除标签
   window.deleteImageTag = async (event, imgId, tagId) => {
-    if (tagId == 0) {
-      Message.warning("无法删除默认标签");
-      return;
-    }
     event.preventDefault();
     if (await deleteImageTagAsync(imgId, tagId)) {
       modal.close();

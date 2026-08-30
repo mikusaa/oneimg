@@ -144,6 +144,56 @@ openssl rand -base64 32
 docker compose up -d
 ```
 
+## API v1
+
+OneImg 现在只提供 `/api/v1/*`，旧 `/api/*` 路径会返回 RFC 9457 Problem Details 404。完整契约公开在 `/api/openapi.yaml`，Swagger UI 位于 `/api/docs`。
+
+浏览器请求使用 Session Cookie 和 `X-OneImg-CSRF`；外部调用请在“账户设置”创建个人 Bearer Token。Token 明文只在创建成功的 `201` 响应中显示一次，可选择 30、90、365 天或永不过期，并通过 scope 限制访问范围。Token 管理、密码修改和 Passkey 管理始终要求浏览器会话及当前密码。
+
+可用 scope 为：`images:read`、`images:write`、`images:delete`、`tags:read`、`tags:write`、`storage:read`、`storage:write`、`users:read`、`users:write`、`settings:read`、`settings:write`、`stats:read`。Token 的实际权限始终受所属用户当前角色、功能权限和资源所有权约束；用户降权或删除后立即生效。
+
+成功响应统一为 `{"data": ...}`，集合响应增加 `meta.pagination`；错误响应使用 `application/problem+json`，包含 `type`、`title`、`status`、`detail`、`code`、`instance` 和 `request_id`。上传使用重复的 `images` 和 `tag_ids` multipart 字段，每批最多 10 个文件，响应包含逐文件结果和汇总。
+
+示例：
+
+```bash
+# 登录并保存 Session/CSRF Cookie
+curl -c oneimg-cookies.txt -X POST https://oneimg.example.com/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"your-password"}'
+
+# 从 Cookie jar 读取 CSRF 值，通过浏览器会话创建个人 Token
+ONEIMG_CSRF=$(awk '$6 == "oneimg-csrf" { print $7 }' oneimg-cookies.txt)
+curl -b oneimg-cookies.txt -X POST https://oneimg.example.com/api/v1/me/tokens \
+  -H 'Content-Type: application/json' \
+  -H "X-OneImg-CSRF: ${ONEIMG_CSRF}" \
+  -d '{"name":"backup","scopes":["images:read"],"expiration_days":90,"current_password":"your-password"}'
+
+curl -X GET https://oneimg.example.com/api/v1/images \
+  -H 'Authorization: Bearer oneimg_pat_<prefix>_<secret>'
+
+curl -X POST https://oneimg.example.com/api/v1/images \
+  -H 'Authorization: Bearer oneimg_pat_<prefix>_<secret>' \
+  -F images=@photo.jpg -F tag_ids=2
+```
+
+错误响应示例：
+
+```json
+{
+  "type": "urn:oneimg:problem:validation_error",
+  "title": "Unprocessable Entity",
+  "status": 422,
+  "detail": "请求字段无效",
+  "code": "validation_error",
+  "instance": "/api/v1/images",
+  "request_id": "c71e5fb1-9f16-4bb7-9881-20704ff03f1d",
+  "errors": [{ "field": "tag_ids", "code": "invalid", "message": "只能包含正整数 ID" }]
+}
+```
+
+这是一次破坏性升级。启动迁移会清空旧全局 API Token、关闭 `start_api` 并移除 `setting:api` 权限码；部署前请备份 `data` 和 `uploads`。
+
 ### Passkey 登录
 
 Passkey 登录使用以下环境变量：

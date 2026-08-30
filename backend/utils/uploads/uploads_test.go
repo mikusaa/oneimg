@@ -51,8 +51,7 @@ func TestLocalThumbnailFilePathUsesDataDirectory(t *testing.T) {
 }
 
 func TestGetStorageUploaderRejectsRemovedTelegramStorage(t *testing.T) {
-	uploadContext := &UploadContext{}
-	_, err := uploadContext.GetStorageUploader(&models.Settings{}, &models.Buckets{Type: "telegram"})
+	_, err := GetStorageUploader(&models.Buckets{Type: "telegram"})
 	if err == nil {
 		t.Fatal("GetStorageUploader() should reject removed Telegram storage")
 	}
