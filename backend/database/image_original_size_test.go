@@ -42,11 +42,17 @@ func TestInitDBAddsOriginalFileSizeWithoutGuessingLegacyValue(t *testing.T) {
 	if !db.DB.Migrator().HasColumn(&models.Image{}, "original_file_size") {
 		t.Fatal("original_file_size column was not added")
 	}
+	if !db.DB.Migrator().HasColumn(&models.Image{}, "storage_bytes") {
+		t.Fatal("storage_bytes column was not added")
+	}
 	var image models.Image
 	if err := db.DB.First(&image).Error; err != nil {
 		t.Fatal(err)
 	}
 	if image.OriginalFileSize != 0 {
 		t.Fatalf("legacy original file size = %d, want unknown value 0", image.OriginalFileSize)
+	}
+	if image.StorageBytes != nil {
+		t.Fatalf("legacy storage_bytes = %v, want unknown value", image.StorageBytes)
 	}
 }

@@ -258,7 +258,26 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 		ContentHash:      images.HashBytes(fileBytes),
 		CreatedAt:        createdAt,
 	}
-	if err := i.db.Create(&imageModel).Error; err != nil {
+	storageBytes := int64(len(fileBytes))
+	if len(info.ThumbnailBytes) > 0 {
+		storageBytes += int64(len(info.ThumbnailBytes))
+	}
+	imageModel.StorageBytes = &storageBytes
+	if err := i.db.Transaction(func(tx *gorm.DB) error {
+		updated := tx.Model(&models.Buckets{}).
+			Where("id = ? AND (capacity = 0 OR usage + ? <= capacity)", i.options.BucketID, storageBytes).
+			UpdateColumn("usage", gorm.Expr("usage + ?", storageBytes))
+		if updated.Error != nil {
+			return updated.Error
+		}
+		if updated.RowsAffected == 0 {
+			return fmt.Errorf("storage bucket does not exist or capacity exceeded")
+		}
+		return tx.Create(&imageModel).Error
+	}); err != nil {
+		if thumbnailURL != "" {
+			_ = os.Remove(filepath.Join(i.options.DataRoot, strings.TrimPrefix(thumbnailURL, "/")))
+		}
 		return fmt.Errorf("create image record: %w", err)
 	}
 

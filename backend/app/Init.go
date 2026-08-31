@@ -50,6 +50,9 @@ func Init() *System {
 
 	// 初始化默认存储配置
 	InitDefaultStorage(db)
+	if err := services.MigrateStorageAccounting(db.DB, "uploads", "data"); err != nil {
+		log.Printf("存储计量迁移失败: %v", err)
+	}
 
 	if err := ResetRemovedStorageDefaults(db.DB); err != nil {
 		log.Printf("已移除存储的默认配置修复失败: %v", err)

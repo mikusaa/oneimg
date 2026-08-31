@@ -95,6 +95,9 @@ export type SizeStats = {
 
 export type DashboardStats = {
     total_images: number;
+    /**
+     * 主图文件大小合计，不包含缩略图
+     */
     total_size: number;
     today_uploads: number;
     month_uploads: number;
@@ -108,11 +111,31 @@ export type StorageBucket = {
     id: number;
     name: string;
     type: 'default' | 's3' | 'r2' | 'ftp' | 'webdav';
+    /**
+     * OneImg 配置的逻辑配额，0 表示无限制
+     */
     capacity_bytes: number;
+    /**
+     * OneImg 管理的主图和已成功保存的缩略图占用
+     */
     usage_bytes: number;
+    /**
+     * false 表示 usage_bytes 包含历史数据的保守估算
+     */
+    usage_exact: boolean;
+    filesystem?: StorageFilesystem;
     config?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * 默认本地存储 uploads 所在文件系统的容量信息
+ */
+export type StorageFilesystem = {
+    total_bytes: number;
+    used_bytes: number;
+    available_bytes: number;
 };
 
 export type PersonalAccessToken = {
@@ -185,6 +208,9 @@ export type StorageRequest = {
     id?: number;
     name: string;
     type: 'default' | 's3' | 'r2' | 'ftp' | 'webdav';
+    /**
+     * OneImg 配置的逻辑配额，0 表示无限制
+     */
     capacity_bytes: number;
     config: {
         [key: string]: unknown;

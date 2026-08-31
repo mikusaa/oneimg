@@ -11,6 +11,7 @@ type Image struct {
 	OriginalFileName string    `json:"original_filename" gorm:"column:original_filename;default:''"`
 	OriginalFileSize int64     `json:"original_file_size" gorm:"column:original_file_size;default:0"`
 	FileSize         int64     `json:"file_size" gorm:"not null"`
+	StorageBytes     *int64    `json:"storage_bytes,omitempty" gorm:"column:storage_bytes"` // 主图与成功保存的缩略图总字节数；nil 表示历史计量未知
 	MimeType         string    `json:"mimeType"`
 	Width            int       `json:"width"`
 	Height           int       `json:"height"`

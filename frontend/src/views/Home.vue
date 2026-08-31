@@ -406,7 +406,7 @@ const urlTagOptions = computed(() => [
 ]);
 const dashboardSummaryItems = computed(() => [
   { label: '图片总数', value: formatNumber(dashboardStats.value.total_images), icon: 'ri-image-line' },
-  { label: '已用存储', value: formatFileSize(dashboardStats.value.total_size), icon: 'ri-hard-drive-2-line' },
+  { label: '图片体积', value: formatFileSize(dashboardStats.value.total_size), icon: 'ri-hard-drive-2-line' },
   { label: '今日上传', value: formatNumber(dashboardStats.value.today_uploads), icon: 'ri-calendar-check-line' },
   { label: '本月上传', value: formatNumber(dashboardStats.value.month_uploads), icon: 'ri-calendar-line' },
 ]);

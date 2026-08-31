@@ -93,6 +93,7 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	}
 
 	thumbnailURL := ""
+	var thumbnailSize int64
 	// 检查是否上传缩略图
 	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
 		_, err = client.PutObject(context.TODO(), &awss3.PutObjectInput{
@@ -103,6 +104,7 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 		})
 		if err == nil {
 			thumbnailURL = ensureLeadingSlash(thumbnailPath)
+			thumbnailSize = int64(len(processedImage.ThumbnailBytes))
 		}
 	}
 
@@ -115,7 +117,7 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 		OriginalFileName: fileHeader.Filename,
 		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
 		FileSize:         int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		ThumbnailSize:    thumbnailSize,
 		MimeType:         contentType,
 		URL:              url,
 		ThumbnailURL:     thumbnailURL,
@@ -188,6 +190,7 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	}
 
 	thumbnailURL := ""
+	var thumbnailSize int64
 	// 检查是否上传缩略图
 	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
 		_, err = client.PutObject(context.TODO(), &awss3.PutObjectInput{
@@ -198,6 +201,7 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 		})
 		if err == nil {
 			thumbnailURL = ensureLeadingSlash(thumbnailPath)
+			thumbnailSize = int64(len(processedImage.ThumbnailBytes))
 		}
 	}
 
@@ -210,7 +214,7 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 		OriginalFileName: fileHeader.Filename,
 		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
 		FileSize:         int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		ThumbnailSize:    thumbnailSize,
 		MimeType:         contentType,
 		URL:              url,
 		ThumbnailURL:     thumbnailURL,
@@ -284,10 +288,12 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 
 	// 检查是否上传缩略图
 	thumbnailURL := ""
+	var thumbnailSize int64
 	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
 		err = client.WebDAVUpload(context.TODO(), thumbnailPath, bytes.NewReader(processedImage.ThumbnailBytes))
 		if err == nil {
 			thumbnailURL = thumbnailPath
+			thumbnailSize = int64(len(processedImage.ThumbnailBytes))
 		}
 	}
 
@@ -301,7 +307,7 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 		OriginalFileName: fileHeader.Filename,
 		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
 		FileSize:         int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		ThumbnailSize:    thumbnailSize,
 		MimeType:         processedImage.MimeType,
 		URL:              url,
 		ThumbnailURL:     thumbnailURL,
@@ -374,6 +380,7 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 
 	// 检查是否上传缩略图
 	thumbnailURL := ""
+	var thumbnailSize int64
 	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
 		err := ftpUtil.UploadImage(
 			thumbnailPath,
@@ -382,6 +389,7 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 		)
 		if err == nil {
 			thumbnailURL = thumbnailPath
+			thumbnailSize = int64(len(processedImage.ThumbnailBytes))
 		}
 	}
 
@@ -394,7 +402,7 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 		OriginalFileName: fileHeader.Filename,
 		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
 		FileSize:         int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		ThumbnailSize:    thumbnailSize,
 		MimeType:         processedImage.MimeType,
 		URL:              url,
 		ThumbnailURL:     thumbnailURL,
@@ -458,6 +466,7 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 		return nil, fmt.Errorf("保存文件失败：%v", err)
 	}
 	thumbnailURL := ""
+	var thumbnailSize int64
 	// 检查是否上传缩略图
 	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
 		thumbFilePath := localThumbnailFilePath(thumbnailPath)
@@ -465,9 +474,11 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 			// 保存缩略图文件
 			if err := saveFile(thumbFilePath, processedImage.ThumbnailBytes); err != nil {
 				log.Println(err)
-				// 忽略错误
+				_ = os.Remove(thumbFilePath)
+			} else {
+				thumbnailURL = thumbnailPath
+				thumbnailSize = int64(len(processedImage.ThumbnailBytes))
 			}
-			thumbnailURL = thumbnailPath
 		}
 	}
 
@@ -484,7 +495,7 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 		OriginalFileName: fileHeader.Filename,
 		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
 		FileSize:         int64(len(processedImage.CompressedBytes)),
-		ThumbnailSize:    int64(len(processedImage.ThumbnailBytes)),
+		ThumbnailSize:    thumbnailSize,
 		MimeType:         processedImage.MimeType,
 		Width:            processedImage.Width,
 		Height:           processedImage.Height,

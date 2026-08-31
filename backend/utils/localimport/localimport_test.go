@@ -27,8 +27,11 @@ func testDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("gorm.Open() error = %v", err)
 	}
-	if err := db.AutoMigrate(&models.Image{}); err != nil {
+	if err := db.AutoMigrate(&models.Image{}, &models.Buckets{}); err != nil {
 		t.Fatalf("AutoMigrate() error = %v", err)
+	}
+	if err := db.Create(&models.Buckets{Id: 1, Name: "local", Type: "default", Config: map[string]any{}}).Error; err != nil {
+		t.Fatalf("create default bucket: %v", err)
 	}
 	return db
 }
@@ -377,6 +380,17 @@ func TestImportOrdinaryImagesGenerateWebPThumbnails(t *testing.T) {
 			thumbBytes, err := os.ReadFile(thumbPath)
 			if err != nil {
 				t.Fatalf("ReadFile(thumbnail) error = %v", err)
+			}
+			wantStorageBytes := int64(len(tt.data) + len(thumbBytes))
+			if imageModel.StorageBytes == nil || *imageModel.StorageBytes != wantStorageBytes {
+				t.Fatalf("storage_bytes = %v, want %d", imageModel.StorageBytes, wantStorageBytes)
+			}
+			var bucket models.Buckets
+			if err := db.First(&bucket, 1).Error; err != nil {
+				t.Fatalf("read bucket: %v", err)
+			}
+			if bucket.Usage != uint64(wantStorageBytes) {
+				t.Fatalf("bucket usage = %d, want %d", bucket.Usage, wantStorageBytes)
 			}
 			if _, err := webp.Decode(bytes.NewReader(thumbBytes)); err != nil {
 				t.Fatalf("thumbnail should be webp: %v", err)

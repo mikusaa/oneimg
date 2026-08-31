@@ -197,13 +197,10 @@ func (s *ImageService) Delete(ctx context.Context, id int) error {
 		if err := tx.Where("image_id = ?", image.Id).Delete(&models.ImageToTags{}).Error; err != nil {
 			return err
 		}
-		if image.BucketId != 1 && image.FileSize > 0 {
-			if err := tx.Model(&models.Buckets{}).Where("id = ?", image.BucketId).
-				UpdateColumn("usage", gorm.Expr("CASE WHEN usage >= ? THEN usage - ? ELSE 0 END", image.FileSize, image.FileSize)).Error; err != nil {
-				return err
-			}
+		if err := tx.Delete(&image).Error; err != nil {
+			return err
 		}
-		return tx.Delete(&image).Error
+		return decrementBucketUsage(tx, image.BucketId, imageStorageBytes(image))
 	})
 }
 

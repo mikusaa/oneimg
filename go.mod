@@ -17,6 +17,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	golang.org/x/crypto v0.54.0
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39
+	golang.org/x/sys v0.47.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
 )
@@ -86,7 +87,6 @@ require (
 	golang.org/x/arch v0.23.0 // indirect
 	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 )

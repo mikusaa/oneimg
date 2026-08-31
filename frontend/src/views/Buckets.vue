@@ -25,37 +25,40 @@
 
         <div class="mb-5 grid grid-cols-3 divide-x divide-slate-200/80 border-y border-slate-200/80 py-3 dark:divide-white/10 dark:border-white/10">
           <div class="px-3 first:pl-0">
-            <p class="text-xs text-gray-500 dark:text-gray-400">总容量</p>
-            <p class="mt-1 truncate text-base font-semibold text-gray-800 dark:text-white">{{ storage.total_readable || '--' }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ storage.type === 'default' ? '磁盘容量' : '配置容量' }}</p>
+            <p class="mt-1 truncate text-base font-semibold text-gray-800 dark:text-white">{{ storage.total_readable }}</p>
           </div>
           <div class="px-3">
-            <p class="text-xs text-gray-500 dark:text-gray-400">已使用</p>
-            <p class="mt-1 truncate text-base font-semibold text-gray-800 dark:text-white">{{ storage.usage_readable }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">OneImg 占用</p>
+            <p class="mt-1 flex min-w-0 items-center gap-1.5 text-base font-semibold text-gray-800 dark:text-white">
+              <span class="truncate">{{ storage.usage_readable }}</span>
+              <span v-if="!storage.usage_exact" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">估算</span>
+            </p>
           </div>
           <div class="px-3 last:pr-0">
-            <p class="text-xs text-gray-500 dark:text-gray-400">剩余容量</p>
-            <p class="mt-1 truncate text-base font-semibold text-gray-800 dark:text-white">{{ storage.usage_free || '--' }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ storage.type === 'default' ? '图片目录可用' : '剩余配额' }}</p>
+            <p class="mt-1 truncate text-base font-semibold text-gray-800 dark:text-white">{{ storage.usage_free }}</p>
           </div>
         </div>
 
         <div class="mb-5">
           <div class="flex items-center justify-between mb-2">
-            <p class="text-sm text-gray-600 dark:text-gray-300">使用率：{{ storage.usage_percent }}%</p>
+            <p class="text-sm text-gray-600 dark:text-gray-300">{{ storage.type === 'default' ? '磁盘使用率' : '配额使用率' }}：{{ storage.usage_percent == null ? '--' : `${storage.usage_percent}%` }}</p>
             <p class="text-xs text-gray-500 dark:text-gray-400">
-              {{ storage.usage_readable }} / {{ storage.total_readable }}
+              {{ storage.progress_readable }}
             </p>
           </div>
           <div class="w-full h-2 bg-gray-200 dark:bg-dark-300 rounded-full overflow-hidden">
             <div
               class="h-full rounded-full bg-blue-500 transition-[width] duration-500 dark:bg-blue-400"
-              :style="{ width: `${storage.usage_percent}%` }"
+              :style="{ width: `${storage.usage_percent || 0}%` }"
             ></div>
           </div>
         </div>
 
-        <div v-if="storage.type === 'default'" class="border-t border-slate-200/80 pt-4 dark:border-white/10">
+        <div v-if="storage.type === 'default' && canUpdateCDN" class="border-t border-slate-200/80 pt-4 dark:border-white/10">
           <label class="field-label" :for="`default-cdn-${storage.id}`">CDN 域名</label>
-          <div v-if="canUpdateCDN" class="settings-token-row">
+          <div class="settings-token-row">
             <input
               :id="`default-cdn-${storage.id}`"
               v-model="cdnDomains[storage.id]"
@@ -75,9 +78,6 @@
               保存
             </button>
           </div>
-          <p v-else class="text-sm text-slate-700 dark:text-slate-200">
-            {{ storage.cdn_domain || '未配置' }}
-          </p>
           <p class="field-hint">CDN 站点根路径需指向本地 uploads 目录，返回链接会移除 /uploads 前缀。</p>
         </div>
 
@@ -109,16 +109,27 @@ import PageHeader from '@/components/PageHeader.vue';
 import message from '@/utils/message.ts';
 import PopupModal from '@/utils/popupModal.ts';
 import { getStoredUser, hasPermission } from '@/utils/permissions.ts';
+import type { StorageBucket } from '@/api/generated';
 
 const currentUser = getStoredUser();
 const canCreateStorage = hasPermission('storage:create', currentUser);
 const canUpdateStorage = hasPermission('storage:update', currentUser);
 const canDeleteStorage = hasPermission('storage:delete', currentUser);
 const canUpdateCDN = hasPermission('setting:upload', currentUser);
-const buckets = ref([]);
-const cdnDomains = reactive({});
-const savedCDNDomains = reactive({});
-const savingCDN = ref(null);
+type StorageView = StorageBucket & {
+  key: number;
+  total_readable: string;
+  usage_readable: string;
+  usage_free: string;
+  usage_percent: number | null;
+  progress_readable: string;
+  cdn_domain?: string;
+};
+
+const buckets = ref<StorageView[]>([]);
+const cdnDomains = reactive<Record<number, string>>({});
+const savedCDNDomains = reactive<Record<number, string>>({});
+const savingCDN = ref<number | null>(null);
 
 const typeSpecificFields = {
   s3: [
@@ -153,15 +164,48 @@ const typeSpecificFields = {
 const sensitiveFields = ['s3_access_key', 's3_secret_key', 'r2_access_key', 'r2_secret_key', 'ftp_user', 'ftp_pass', 'webdav_user', 'webdav_pass'];
 
 const storagePayload = (formData) => {
-  const { name, type, capacity, ...config } = formData
-  return { name, type, capacity_bytes: Math.max(0, Number(capacity || 0)) * 1024 * 1024 * 1024, config }
+  const { id, name, type, capacity, ...config } = formData
+  const payload: Record<string, unknown> = { name, type, capacity_bytes: Math.max(0, Number(capacity || 0)) * 1024 * 1024 * 1024, config }
+  if (Number(id) > 0) payload.id = Number(id)
+  return payload
 }
 
-const decorateBucket = (bucket) => {
+const readableBytes = (value?: number) => {
+  if (value == null || !Number.isFinite(value)) return '--'
+  if (value === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const exponent = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1)
+  return `${(value / 1024 ** exponent).toFixed(exponent === 0 ? 0 : 2)} ${units[exponent]}`
+}
+
+const decorateBucket = (bucket: StorageBucket): StorageView => {
   const capacity = Number(bucket.capacity_bytes || 0)
   const usage = Number(bucket.usage_bytes || 0)
-  const readable = value => value ? `${(value / 1024 / 1024 / 1024).toFixed(2)} GB` : '0 B'
-  return { ...bucket, key: bucket.id, total_readable: readable(capacity), usage_readable: readable(usage), usage_free: readable(Math.max(0, capacity - usage)), usage_percent: capacity ? Math.min(100, Math.round(usage / capacity * 100)) : 0 }
+  if (bucket.type === 'default') {
+    const total = bucket.filesystem?.total_bytes
+    const filesystemUsed = bucket.filesystem?.used_bytes
+    const available = bucket.filesystem?.available_bytes
+    const percent = total && filesystemUsed != null ? Math.min(100, Math.round(filesystemUsed / total * 100)) : null
+    return {
+      ...bucket,
+      key: bucket.id,
+      total_readable: readableBytes(total),
+      usage_readable: readableBytes(usage),
+      usage_free: readableBytes(available),
+      usage_percent: percent,
+      progress_readable: total == null || filesystemUsed == null ? '--' : `${readableBytes(filesystemUsed)} / ${readableBytes(total)}`,
+    }
+  }
+  const percent = capacity > 0 ? Math.min(100, Math.round(usage / capacity * 100)) : null
+  return {
+    ...bucket,
+    key: bucket.id,
+    total_readable: capacity > 0 ? readableBytes(capacity) : '无限制',
+    usage_readable: readableBytes(usage),
+    usage_free: capacity > 0 ? readableBytes(Math.max(0, capacity - usage)) : '无限制',
+    usage_percent: percent,
+    progress_readable: capacity > 0 ? `${readableBytes(usage)} / ${readableBytes(capacity)}` : '--',
+  }
 }
 
 // 添加存储弹窗
@@ -255,7 +299,7 @@ const AddBucketModal = () => {
 const UpdateBucketModal = (bucket) => {
   const setValue = typeSpecificFields[bucket.type].map(field => ({
     ...field,
-    defaultValue: field.name == 'capacity' ? formatCapacity(bucket[field.name]) : (bucket.config[field.name] ?? ''),
+    defaultValue: field.name == 'capacity' ? formatCapacity(bucket.capacity_bytes) : (bucket.config[field.name] ?? ''),
     placeholder: sensitiveFields.includes(field.name) && bucket.config?.[`${field.name}_configured`] ? '已配置，留空表示不修改' : field.placeholder,
     tip: sensitiveFields.includes(field.name) && bucket.config?.[`${field.name}_configured`] ? '当前已配置，后端不会返回明文；留空表示继续使用原值' : field.tip,
     required: sensitiveFields.includes(field.name) ? !bucket.config?.[`${field.name}_configured`] : field.required,

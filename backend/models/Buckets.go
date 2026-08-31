@@ -6,7 +6,7 @@ type Buckets struct {
 	Type     string         `json:"type" gorm:"not null"`                             // 存储类型
 	Capacity uint64         `json:"capacity" gorm:"not null"`                         // 容量
 	Config   map[string]any `json:"config" gorm:"type:text;not null;serializer:json"` // 配置
-	Usage    uint64         `json:"usage" gorm:"not null"`                            // 已使用容量
+	Usage    uint64         `json:"usage" gorm:"not null"`                            // 配额控制计数器，不等同于文件系统使用量
 }
 
 // 定义每个bucket的存储类型

@@ -15,12 +15,20 @@ import (
 )
 
 type storageDTO struct {
-	ID            int            `json:"id"`
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	CapacityBytes uint64         `json:"capacity_bytes"`
-	UsageBytes    uint64         `json:"usage_bytes"`
-	Config        map[string]any `json:"config,omitempty"`
+	ID            int                   `json:"id"`
+	Name          string                `json:"name"`
+	Type          string                `json:"type"`
+	CapacityBytes uint64                `json:"capacity_bytes"`
+	UsageBytes    uint64                `json:"usage_bytes"`
+	UsageExact    bool                  `json:"usage_exact"`
+	Filesystem    *storageFilesystemDTO `json:"filesystem,omitempty"`
+	Config        map[string]any        `json:"config,omitempty"`
+}
+
+type storageFilesystemDTO struct {
+	TotalBytes     uint64 `json:"total_bytes"`
+	UsedBytes      uint64 `json:"used_bytes"`
+	AvailableBytes uint64 `json:"available_bytes"`
 }
 
 type storageRequest struct {
@@ -30,8 +38,26 @@ type storageRequest struct {
 	Config        map[string]any `json:"config"`
 }
 
-func toStorageDTO(item models.Buckets) storageDTO {
-	return storageDTO{ID: item.Id, Name: item.Name, Type: item.Type, CapacityBytes: item.Capacity, UsageBytes: item.Usage, Config: item.Config}
+func toStorageDTO(item services.StorageBucketSummary) storageDTO {
+	result := storageDTO{
+		ID: item.Bucket.Id, Name: item.Bucket.Name, Type: item.Bucket.Type,
+		CapacityBytes: item.Bucket.Capacity, UsageBytes: item.UsageBytes,
+		UsageExact: item.UsageExact, Config: item.Bucket.Config,
+	}
+	if item.Filesystem != nil {
+		result.Filesystem = &storageFilesystemDTO{
+			TotalBytes: item.Filesystem.TotalBytes, UsedBytes: item.Filesystem.UsedBytes,
+			AvailableBytes: item.Filesystem.AvailableBytes,
+		}
+	}
+	return result
+}
+
+func toUploadStorageDTO(item models.Buckets) storageDTO {
+	return storageDTO{
+		ID: item.Id, Name: item.Name, Type: item.Type,
+		CapacityBytes: item.Capacity, UsageBytes: item.Usage, UsageExact: false,
+	}
 }
 
 func (s *Server) listStorage(c *gin.Context) {
@@ -68,8 +94,12 @@ func (s *Server) createStorage(c *gin.Context) {
 	if handleStorageError(c, err) {
 		return
 	}
+	summary, err := s.services.Storage.Get(item.Id)
+	if handleStorageError(c, err) {
+		return
+	}
 	c.Header("Location", "/api/v1/storage-buckets/"+itoa(item.Id))
-	writeData(c, http.StatusCreated, toStorageDTO(item), nil)
+	writeData(c, http.StatusCreated, toStorageDTO(summary), nil)
 }
 
 func (s *Server) updateStorage(c *gin.Context) {
@@ -85,7 +115,11 @@ func (s *Server) updateStorage(c *gin.Context) {
 	if handleStorageError(c, err) {
 		return
 	}
-	writeData(c, http.StatusOK, toStorageDTO(item), nil)
+	summary, err := s.services.Storage.Get(item.Id)
+	if handleStorageError(c, err) {
+		return
+	}
+	writeData(c, http.StatusOK, toStorageDTO(summary), nil)
 }
 
 func (s *Server) deleteStorage(c *gin.Context) {
@@ -140,9 +174,7 @@ func (s *Server) uploadOptions(c *gin.Context) {
 	}
 	items := make([]storageDTO, 0, len(buckets))
 	for _, bucket := range buckets {
-		dto := toStorageDTO(bucket)
-		dto.Config = nil
-		items = append(items, dto)
+		items = append(items, toUploadStorageDTO(bucket))
 	}
 	writeData(c, http.StatusOK, gin.H{"max_file_size": setting.MaxFileSize, "allowed_types": strings.Split(setting.AllowedTypes, ","), "max_files": 10, "default_storage": setting.DefaultStorage, "storage_buckets": items}, nil)
 }

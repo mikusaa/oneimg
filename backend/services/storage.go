@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
+	"golang.org/x/sys/unix"
 	"gorm.io/gorm"
 )
 
@@ -29,7 +30,24 @@ var (
 	ErrStorageCapacity      = errors.New("storage capacity is invalid")
 )
 
-type StorageService struct{ db *gorm.DB }
+type FilesystemMetrics struct {
+	TotalBytes     uint64
+	UsedBytes      uint64
+	AvailableBytes uint64
+}
+
+type StorageBucketSummary struct {
+	Bucket     models.Buckets
+	UsageBytes uint64
+	UsageExact bool
+	Filesystem *FilesystemMetrics
+}
+
+type StorageService struct {
+	db                *gorm.DB
+	uploadsPath       string
+	filesystemMetrics func(string) (*FilesystemMetrics, error)
+}
 
 type StorageInput struct {
 	Name          string
@@ -38,17 +56,16 @@ type StorageInput struct {
 	Config        map[string]any
 }
 
-func NewStorageService(db *gorm.DB) *StorageService { return &StorageService{db: db} }
+func NewStorageService(db *gorm.DB) *StorageService {
+	return &StorageService{db: db, uploadsPath: "uploads", filesystemMetrics: readFilesystemMetrics}
+}
 
-func (s *StorageService) List() ([]models.Buckets, error) {
+func (s *StorageService) List() ([]StorageBucketSummary, error) {
 	items := make([]models.Buckets, 0)
 	if err := s.db.Where("type <> ?", "telegram").Order("id ASC").Find(&items).Error; err != nil {
 		return nil, err
 	}
-	for index := range items {
-		items[index].Config = secureconfig.MaskBucketConfigValues(items[index].Config)
-	}
-	return items, nil
+	return s.summarize(items)
 }
 
 func (s *StorageService) UploadOptions(user models.User) (models.Settings, []models.Buckets, error) {
@@ -76,13 +93,57 @@ func (s *StorageService) UploadOptions(user models.User) (models.Settings, []mod
 	return setting, result, nil
 }
 
-func (s *StorageService) Get(id int) (models.Buckets, error) {
+func (s *StorageService) Get(id int) (StorageBucketSummary, error) {
 	var item models.Buckets
 	if err := s.db.First(&item, id).Error; err != nil {
-		return item, err
+		return StorageBucketSummary{}, err
 	}
-	item.Config = secureconfig.MaskBucketConfigValues(item.Config)
-	return item, nil
+	items, err := s.summarize([]models.Buckets{item})
+	if err != nil {
+		return StorageBucketSummary{}, err
+	}
+	return items[0], nil
+}
+
+func (s *StorageService) summarize(items []models.Buckets) ([]StorageBucketSummary, error) {
+	aggregates, err := loadStorageAggregates(s.db)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]StorageBucketSummary, 0, len(items))
+	for _, item := range items {
+		aggregate := aggregates[item.Id]
+		usageExact := aggregate.UnknownCount == 0
+		usageBytes := nonNegativeBytes(aggregate.ExactBytes)
+		if !usageExact {
+			usageBytes = maxUint64(item.Usage, nonNegativeBytes(aggregate.FallbackBytes))
+		}
+		item.Config = secureconfig.MaskBucketConfigValues(item.Config)
+		summary := StorageBucketSummary{Bucket: item, UsageBytes: usageBytes, UsageExact: usageExact}
+		if item.Type == "default" && s.filesystemMetrics != nil {
+			if filesystem, metricErr := s.filesystemMetrics(s.uploadsPath); metricErr == nil {
+				summary.Filesystem = filesystem
+			}
+		}
+		result = append(result, summary)
+	}
+	return result, nil
+}
+
+func readFilesystemMetrics(path string) (*FilesystemMetrics, error) {
+	var stats unix.Statfs_t
+	if err := unix.Statfs(path, &stats); err != nil {
+		return nil, err
+	}
+	blockSize := filesystemBlockSize(stats)
+	total := stats.Blocks * blockSize
+	free := stats.Bfree * blockSize
+	available := stats.Bavail * blockSize
+	used := uint64(0)
+	if total >= free {
+		used = total - free
+	}
+	return &FilesystemMetrics{TotalBytes: total, UsedBytes: used, AvailableBytes: available}, nil
 }
 
 func validateStorageInput(input StorageInput, allowDefault bool) (StorageInput, error) {
@@ -94,9 +155,6 @@ func validateStorageInput(input StorageInput, allowDefault bool) (StorageInput, 
 	}
 	if input.Name == "" || !valid[input.Type] {
 		return input, ErrStorageTypeInvalid
-	}
-	if input.Type != "default" && input.CapacityBytes == 0 {
-		return input, ErrStorageCapacity
 	}
 	required := map[string][]string{
 		"s3":     {"s3_endpoint", "s3_access_key", "s3_secret_key", "s3_bucket"},
@@ -162,7 +220,7 @@ func (s *StorageService) Update(id int, input StorageInput) (models.Buckets, err
 	if err != nil {
 		return existing, err
 	}
-	if input.CapacityBytes < existing.Usage {
+	if input.CapacityBytes > 0 && input.CapacityBytes < existing.Usage {
 		return existing, ErrStorageCapacity
 	}
 	encrypted, err := secureconfig.EncryptBucketConfigValues(input.Config)
