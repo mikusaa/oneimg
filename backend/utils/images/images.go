@@ -684,3 +684,8 @@ func (s *ImageService) ReplaceMagicVariables(pattern string, originalName string
 
 	return pattern
 }
+
+// BuildOutputFileName applies the existing naming policy to a validated media extension.
+func (s *ImageService) BuildOutputFileName(name, ext string, setting models.Settings, role int) string {
+	return s.buildOutputFileName(name, ext, setting, role)
+}

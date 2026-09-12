@@ -16,6 +16,8 @@ var settingGroupPermission = map[string]string{
 }
 
 type settingsPatchRequest struct {
+	VideoUploadEnabled  *bool   `json:"video_upload_enabled"`
+	MaxVideoFileSize    *int    `json:"max_video_file_size"`
 	OriginalImage       *bool   `json:"original_image"`
 	SaveWebP            *bool   `json:"save_webp"`
 	Thumbnail           *bool   `json:"thumbnail"`
@@ -54,7 +56,7 @@ func (s *Server) getSettings(c *gin.Context) {
 	all := settingsMap(item)
 	result := map[string]any{}
 	keys := map[string][]string{
-		"upload":   {"default_storage", "default_path", "file_name", "max_file_size", "allowed_types", "save_original_name", "public_image_domain", "cdn_domain"},
+		"upload":   {"default_storage", "default_path", "file_name", "max_file_size", "video_upload_enabled", "max_video_file_size", "allowed_types", "save_original_name", "public_image_domain", "cdn_domain"},
 		"image":    {"original_image", "save_webp", "thumbnail", "main_image_quality", "skip_compress_formats"},
 		"security": {"registration_enabled", "referer_white_enable", "referer_white_list"},
 		"seo":      {"seo_title", "seo_description", "seo_keywords", "seo_icp", "public_security", "seo_icon"},
@@ -88,6 +90,7 @@ func (s *Server) patchSettings(c *gin.Context) {
 	item, err := s.services.Settings.Update(services.SettingsPatch{
 		OriginalImage: input.OriginalImage, SaveWebP: input.SaveWebP, Thumbnail: input.Thumbnail,
 		RegistrationEnabled: input.RegistrationEnabled, SaveOriginalName: input.SaveOriginalName,
+		VideoUploadEnabled: input.VideoUploadEnabled, MaxVideoFileSize: input.MaxVideoFileSize,
 		DefaultStorage: input.DefaultStorage, MaxFileSize: input.MaxFileSize, AllowedTypes: input.AllowedTypes,
 		MainImageQuality: input.MainImageQuality, SkipCompressFormats: input.SkipCompressFormats,
 		DefaultPath: input.DefaultPath, FileName: input.FileName, PublicImageDomain: input.PublicImageDomain,
@@ -151,7 +154,7 @@ func (r settingsPatchRequest) groups() []string {
 			result = append(result, group)
 		}
 	}
-	if r.DefaultStorage != nil || r.MaxFileSize != nil || r.AllowedTypes != nil || r.SaveOriginalName != nil || r.DefaultPath != nil || r.FileName != nil || r.PublicImageDomain != nil || r.CDNDomain != nil {
+	if r.VideoUploadEnabled != nil || r.MaxVideoFileSize != nil || r.DefaultStorage != nil || r.MaxFileSize != nil || r.AllowedTypes != nil || r.SaveOriginalName != nil || r.DefaultPath != nil || r.FileName != nil || r.PublicImageDomain != nil || r.CDNDomain != nil {
 		add("upload")
 	}
 	if r.OriginalImage != nil || r.SaveWebP != nil || r.Thumbnail != nil || r.MainImageQuality != nil || r.SkipCompressFormats != nil {
@@ -168,6 +171,7 @@ func (r settingsPatchRequest) groups() []string {
 
 func settingsMap(item models.Settings) map[string]any {
 	return map[string]any{
+		"video_upload_enabled": item.VideoUploadEnabled, "max_video_file_size": item.MaxVideoFileSize,
 		"original_image": item.OriginalImage, "save_webp": item.SaveWebp, "thumbnail": item.Thumbnail,
 		"registration_enabled": item.StartRegister, "save_original_name": item.SaveOriginalName,
 		"default_storage": item.DefaultStorage, "max_file_size": item.MaxFileSize, "allowed_types": item.AllowedTypes,

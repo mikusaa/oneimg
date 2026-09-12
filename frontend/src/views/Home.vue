@@ -1,13 +1,14 @@
 <template>
   <div class="page-shell">
-    <PageHeader title="控制中心" description="上传图片并查看近期处理结果" />
+    <PageHeader title="控制中心" description="上传图片、视频并查看近期处理结果" />
 
-    <section class="dashboard-summary page-surface" aria-label="图片统计概览">
+    <section class="dashboard-summary page-surface" aria-label="文件统计概览">
       <div v-for="item in dashboardSummaryItems" :key="item.label" class="dashboard-summary-item">
         <span class="dashboard-summary-icon" aria-hidden="true"><i :class="item.icon"></i></span>
         <span class="min-w-0">
           <span class="dashboard-summary-label">{{ item.label }}</span>
           <span class="dashboard-summary-value" :class="{ 'animate-pulse text-slate-300 dark:text-slate-700': statsLoading }">{{ item.value }}</span>
+          <span v-if="item.detail" class="block text-xs text-slate-500 dark:text-slate-400">{{ item.detail }}</span>
         </span>
       </div>
     </section>
@@ -19,7 +20,7 @@
             <div>
               <h2 class="section-title mt-1 flex items-center gap-2 text-base font-semibold sm:text-lg">
                 <i class="ri-upload-cloud-2-line text-primary"></i>
-                图片上传
+                {{ videoUploadEnabled ? '图片与视频上传' : '图片上传' }}
               </h2>
             </div>
             <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -51,12 +52,12 @@
             <div class="upload-icon mb-2.5 text-4xl text-slate-900 transition-transform duration-200 dark:text-white sm:text-[42px]" :class="{ 'scale-110 text-primary': isDragOver }">
               <i class="ri-upload-cloud-line"></i>
             </div>
-            <h3 class="mb-1.5 text-base font-semibold text-slate-900 dark:text-white">拖拽图片到此处，或点击选择图片</h3>
-            <p class="mx-auto mb-3 max-w-md text-sm leading-5 text-slate-500 dark:text-slate-400">图片会先加入待上传列表，确认后统一上传。</p>
+            <h3 class="mb-1.5 text-base font-semibold text-slate-900 dark:text-white">{{ videoUploadEnabled ? '拖入图片或 MP4 / WebM 视频，或点击选择' : '拖拽图片到此处，或点击选择图片' }}</h3>
+            <p class="mx-auto mb-3 max-w-md text-sm leading-5 text-slate-500 dark:text-slate-400">文件会先加入待上传列表，确认后统一上传。</p>
             <div class="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <button type="button" class="primary-button w-full px-4 py-2 sm:w-auto">
               <i class="ri-file-image-line"></i>
-              选择图片
+              {{ videoUploadEnabled ? '选择文件' : '选择图片' }}
             </button>
             <button 
             @click.stop="uploadbyurlmodal"
@@ -68,8 +69,9 @@
             </button>
             </div>
             <p class="paste-tip mt-2.5 text-center text-xs text-slate-500 dark:text-slate-400">
-              支持 Ctrl+V 粘贴和直接拖入，最多 {{ MAX_UPLOAD_FILES }} 张
+              支持粘贴图片和直接拖入文件，最多 {{ MAX_UPLOAD_FILES }} 个文件
             </p>
+            <p class="mt-1 text-xs text-slate-500">图片上限 {{ formatFileSize(maxFileSize) }}<span v-if="videoUploadEnabled"> · 视频上限 {{ formatFileSize(maxVideoFileSize) }} · MP4 / WebM</span></p>
           </div>
 
           <!-- 上传进度状态 -->
@@ -113,7 +115,8 @@
               :class="{ 'upload-queue-item-error': item.status === 'failed' }"
             >
               <div class="upload-queue-preview">
-                <img :src="item.previewUrl" :alt="item.file.name" class="h-full w-full object-cover">
+                <span v-if="fileVideoMime(item.file)" class="video-placeholder"><i class="ri-video-line text-xl"></i></span>
+                <img v-else :src="item.previewUrl" :alt="item.file.name" class="h-full w-full object-cover">
                 <button
                   type="button"
                   class="upload-queue-remove"
@@ -140,7 +143,7 @@
           ref="fileInput"
           type="file"
           multiple
-          accept="image/*"
+          :accept="[...allowedFileTypes, ...(videoUploadEnabled ? ['.mp4', '.webm'] : [])].join(',')"
           @change="handleFileSelect"
           class="hidden"
         </div>
@@ -196,7 +199,7 @@
                 最近上传
               </h2>
             </div>
-            <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300">{{ recentImages.length }} 张</span>
+            <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-600 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300">{{ recentImages.length }} 个</span>
           </div>
 
       <TransitionGroup v-if="recentImages.length > 0" name="result-list" tag="div" class="result-stream">
@@ -207,12 +210,13 @@
         >
           <div class="result-card-layout">
             <div class="result-card-media result-card-media-large">
-            <div class="loading absolute inset-0 z-0 flex items-center justify-center bg-gray-100 text-slate-300 dark:bg-gray-800">
+            <div v-if="!isVideo(image)" class="loading absolute inset-0 z-0 flex items-center justify-center bg-gray-100 text-slate-300 dark:bg-gray-800">
               <svg class="w-8 h-8 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="transform: scaleX(-1) scaleY(-1);">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </div>
-            <img 
+            <button v-if="isVideo(image)" type="button" class="video-placeholder" :aria-label="`播放 ${image.file_name}`" @click.stop="previewImage(image)"><i class="ri-play-circle-line text-5xl"></i><span>{{ image.mime_type.split('/')[1].toUpperCase() }}</span></button>
+            <img v-else
               :src="getFullUrl(image.thumbnail || image.url)"
               :alt="image.file_name || '图片预览'"
               class="recent-image h-full w-full object-cover opacity-0"
@@ -229,23 +233,23 @@
                   <p class="truncate text-sm font-medium text-slate-900 dark:text-white">{{ image.file_name }}</p>
                   <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <span class="result-meta-pill">{{ formatFileSize(image.file_size) }}</span>
-                    <span class="result-meta-pill">{{ image.width }}×{{ image.height }}</span>
+                    <span class="result-meta-pill">{{ isVideo(image) ? image.mime_type.split('/')[1].toUpperCase() : `${image.width}×${image.height}` }}</span>
                   </div>
                 </div>
                 <div class="flex items-center justify-end gap-1.5 sm:self-end lg:justify-end">
                   <button 
                     @click.stop="downloadImage(image)"
                     class="result-card-action"
-                    title="下载图片"
-                    aria-label="下载图片"
+                    title="下载文件"
+                    aria-label="下载文件"
                   >
                     <i class="ri-download-line text-sm"></i>
                   </button>
                   <button 
                     @click.stop="deleteImage(image.id)"
                     class="result-card-action border-red-200 bg-red-50 text-red-500 hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
-                    title="删除图片"
-                    aria-label="删除图片"
+                    title="删除文件"
+                    aria-label="删除文件"
                   >
                     <i class="ri-delete-bin-line text-sm"></i>
                   </button>
@@ -341,6 +345,11 @@
         </button>
       </template>
     </AppDialog>
+    <VideoPreview v-if="videoPreview" :key="videoPreview.id" :media="videoPreview" :url="getFullUrl(videoPreview.url)" @close="videoPreview = null">
+      <template #actions>
+        <button class="danger-button" @click="deleteImage(videoPreview.id); videoPreview = null">删除</button>
+      </template>
+    </VideoPreview>
   </div>
 </template>
 
@@ -350,6 +359,9 @@ import errorImg from '@/assets/images/error.webp';
 import { computed, ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import AppDialog from '@/components/AppDialog.vue'
+import VideoPreview from '@/components/VideoPreview.vue'
+import { isVideo, fileVideoMime, mediaLink } from '@/utils/media'
+const videoPreview = ref(null)
 import PageHeader from '@/components/PageHeader.vue'
 import TagSelector from '@/components/TagSelector.vue'
 import Loading from '@/utils/loading.ts'
@@ -374,8 +386,10 @@ const fileInput = ref(null);
 const uploadQueue = ref([]);
 const allowedFileTypes = ref([...ALLOWED_FILE_TYPES]);
 const maxFileSize = ref(DEFAULT_MAX_FILE_SIZE);
+const videoUploadEnabled = ref(false);
+const maxVideoFileSize = ref(100 * 1024 * 1024);
 const statsLoading = ref(true);
-const dashboardStats = ref({ total_images: 0, total_size: 0, today_uploads: 0, month_uploads: 0 });
+const dashboardStats = ref({ total_images: 0, total_videos: 0, image_size: 0, video_size: 0, total_size: 0, today_uploads: 0, month_uploads: 0, today_image_uploads: 0, today_video_uploads: 0, month_image_uploads: 0, month_video_uploads: 0 });
 
 // 标签相关
 const presetTags = ref([]);
@@ -405,10 +419,12 @@ const urlTagOptions = computed(() => [
   ...presetTags.value.map(tag => ({ value: tag.id, label: tag.name }))
 ]);
 const dashboardSummaryItems = computed(() => [
-  { label: '图片总数', value: formatNumber(dashboardStats.value.total_images), icon: 'ri-image-line' },
-  { label: '图片体积', value: formatFileSize(dashboardStats.value.total_size), icon: 'ri-hard-drive-2-line' },
-  { label: '今日上传', value: formatNumber(dashboardStats.value.today_uploads), icon: 'ri-calendar-check-line' },
-  { label: '本月上传', value: formatNumber(dashboardStats.value.month_uploads), icon: 'ri-calendar-line' },
+  { label: '图片总数', value: `${formatNumber(dashboardStats.value.total_images)} 张`, icon: 'ri-image-line', detail: '' },
+  { label: '视频总数', value: `${formatNumber(dashboardStats.value.total_videos)} 个`, icon: 'ri-video-line', detail: '' },
+  { label: '图片体积', value: formatFileSize(dashboardStats.value.image_size), icon: 'ri-image-2-line', detail: '不含缩略图' },
+  { label: '视频体积', value: formatFileSize(dashboardStats.value.video_size), icon: 'ri-film-line', detail: '原文件大小' },
+  { label: '今日上传', value: formatNumber(dashboardStats.value.today_uploads), icon: 'ri-calendar-check-line', detail: `图片 ${dashboardStats.value.today_image_uploads} 张 · 视频 ${dashboardStats.value.today_video_uploads} 个` },
+  { label: '本月上传', value: formatNumber(dashboardStats.value.month_uploads), icon: 'ri-calendar-line', detail: `图片 ${dashboardStats.value.month_image_uploads} 张 · 视频 ${dashboardStats.value.month_video_uploads} 个` },
 ]);
 const uploadQueueTotalSize = computed(() => uploadQueue.value.reduce((total, item) => total + item.file.size, 0));
 
@@ -475,6 +491,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character =>
 })[character]);
 const getPreviewFileName = image => image?.original_file_name || image?.file_name || '图片预览';
 const getImageSizeSummary = image => {
+  if (isVideo(image)) return formatFileSize(Number(image.file_size || 0));
   const originalSize = Number(image?.original_file_size || 0);
   const savedSize = Number(image?.file_size || 0);
   const savedLabel = formatFileSize(savedSize);
@@ -503,20 +520,8 @@ const getSpotlightDescription = image => [
 /**
  * 生成HTML代码
  */
-const getHtmlCode = (image) => {
-  const url = getFullUrl(image.url);
-  const alt = getImageAltText(image);
-  return `<img src="${url}" alt="${alt}"/>`;
-};
-
-/**
- * 生成Markdown代码
- */
-const getMarkdownCode = (image) => {
-  const url = getFullUrl(image.url);
-  const filename = getImageAltText(image);
-  return `![${filename}](${url})`;
-};
+const getHtmlCode = image => mediaLink(image, 'html', getFullUrl(image.url));
+const getMarkdownCode = image => mediaLink(image, 'markdown', getFullUrl(image.url));
 
 // ====================== API 请求函数 ======================
 /**
@@ -534,6 +539,8 @@ const getUploadConfig = async () => {
     const result = await response.json();
     if (response.ok && result.data) {
       const options = result.data;
+      videoUploadEnabled.value = options.video_upload_enabled === true;
+      maxVideoFileSize.value = Number(options.max_video_file_size) || 100 * 1024 * 1024;
       const tagsResponse = await apiFetch(`${API_BASE_URL}/api/v1/tags`);
       const tagsPayload = await tagsResponse.json();
       presetTags.value = tagsResponse.ok && Array.isArray(tagsPayload.data) ? tagsPayload.data : [];
@@ -604,7 +611,7 @@ const loadDashboardStats = async () => {
 };
 
 /**
- * 删除单张图片
+ * 删除单个文件
  */
 const deleteAsync = async (imageId) => { 
   let loadingInstance;
@@ -643,7 +650,7 @@ const deleteAsync = async (imageId) => {
       throw new Error(result.detail || '删除失败');
     }
   } catch (error) {
-    console.error('删除图片错误:', error);
+    console.error('删除文件错误:', error);
     Message.error(`删除失败: ${error.message}`, {
       duration: 3000,
       position: 'top-right',
@@ -751,15 +758,18 @@ const validateFiles = (files) => {
   const validFiles = [];
   
   files.forEach(file => {
-    if (!file.type.startsWith('image/') || !allowedFileTypes.value.includes(file.type)) {
-      Message.warning(`${file.name} 不是允许上传的图片格式`, {
+    const videoMime = fileVideoMime(file);
+    const mime = videoMime || file.type;
+    if ((videoMime && !videoUploadEnabled.value) || !allowedFileTypes.value.includes(mime)) {
+      Message.warning(`${file.name} 不是允许上传的文件格式`, {
         duration: 2000,
         position: 'top-right'
       });
       return;
     }
-    if (file.size > maxFileSize.value) {
-      Message.warning(`${file.name} 超过 ${formatFileSize(maxFileSize.value)} 大小限制`, {
+    const limit = videoMime ? maxVideoFileSize.value : maxFileSize.value;
+    if (file.size > limit) {
+      Message.warning(`${file.name} 超过 ${formatFileSize(limit)} 大小限制`, {
         duration: 2500,
         position: 'top-right'
       });
@@ -800,16 +810,16 @@ const addFilesToQueue = files => {
       id: `queued-${queueSequence}`,
       fingerprint,
       file,
-      previewUrl: URL.createObjectURL(file),
+      previewUrl: fileVideoMime(file) ? '' : URL.createObjectURL(file),
       status: 'pending',
       error: '',
     });
     addedCount += 1;
   });
 
-  if (addedCount > 0) Message.success(`已加入 ${addedCount} 张图片`);
+  if (addedCount > 0) Message.success(`已加入 ${addedCount} 个文件`);
   if (duplicateCount > 0) Message.warning(`已跳过 ${duplicateCount} 个队列内重复文件`);
-  if (overflowCount > 0) Message.warning(`队列最多 ${MAX_UPLOAD_FILES} 张，已跳过 ${overflowCount} 张`);
+  if (overflowCount > 0) Message.warning(`队列最多 ${MAX_UPLOAD_FILES} 个文件，已跳过 ${overflowCount} 个`);
 };
 
 const releaseQueueItem = item => {
@@ -929,7 +939,7 @@ const uploadQueuedFiles = async () => {
     } else if (duplicateCount > 0) {
       Message.warning(`上传完成，已跳过 ${duplicateCount} 张重复图片`);
     } else {
-      Message.success(`成功上传 ${uploadedCount} 张图片`);
+      Message.success(`成功上传 ${uploadedCount} 个文件`);
     }
   } catch (error) {
     console.error('上传错误:', error);
@@ -982,24 +992,7 @@ const handleImageError = (e) => {
 const copyImageLink = async (image, type) => {
   if (!image) return;
   
-  const fullUrl = getFullUrl(image.url);
-  const altText = getImageAltText(image);
-  let copyText = '';
-  
-  switch (type) {
-    case 'url':
-      copyText = fullUrl;
-      break;
-    case 'html':
-      copyText = `<img src="${fullUrl}" alt="${altText}" width="${image.width || ''}" height="${image.height || ''}">`;
-      break;
-    case 'markdown':
-      copyText = `![${altText}](${fullUrl})`;
-      break;
-    default:
-      copyText = fullUrl;
-  }
-  
+  const copyText = mediaLink(image, type, getFullUrl(image.url));
   try {
     await navigator.clipboard.writeText(copyText);
     Message.success(`已复制${getTypeText(type)}格式`, {
@@ -1052,7 +1045,7 @@ const deleteImage = (imageId) => {
       <div class="flex gap-3">
         <i class="fa fa-exclamation-triangle text-warning text-xl mt-1"></i>
         <div>
-          <p>确定要删除这张图片吗？</p>
+          <p>确定要删除这个文件吗？</p>
           <p class="mt-1 text-secondary text-sm">删除后无法恢复，请谨慎操作</p>
         </div>
       </div>
@@ -1094,7 +1087,7 @@ const downloadImage = (image) => {
   link.click();
   document.body.removeChild(link);
   
-  Message.info('开始下载图片', {
+  Message.info('开始下载文件', {
     duration: 1500,
     position: 'top-right'
   });
@@ -1107,6 +1100,7 @@ const downloadImage = (image) => {
  * 图片预览功能
  */
 const previewImage = (image) => {
+  if (isVideo(image)) { videoPreview.value = image; return }
   if (!image || !image.url) {
     Message.error('图片信息不完整，无法预览', {
       duration: 2000,
@@ -1384,7 +1378,7 @@ const handleBeforeUnload = event => {
 
 onBeforeRouteLeave(() => {
   if (!shouldConfirmQueueExit()) return true;
-  return window.confirm('待上传列表中还有图片，离开后将清空。确认离开吗？');
+  return window.confirm('待上传列表中还有文件，离开后将清空。确认离开吗？');
 });
 
 // ====================== 生命周期 ======================

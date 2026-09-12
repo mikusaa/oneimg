@@ -16,6 +16,9 @@ type Settings struct {
 	// 默认存储
 	DefaultStorage int `gorm:"column:default_storage;default:1" json:"default_storage"` // 默认存储
 
+	VideoUploadEnabled bool `gorm:"column:video_upload_enabled;default:false" json:"video_upload_enabled"`
+	MaxVideoFileSize   int  `gorm:"column:max_video_file_size;default:104857600" json:"max_video_file_size"`
+
 	// 默认上传配置
 	MaxFileSize        int    `gorm:"column:max_file_size;default:10485760" json:"max_file_size"` // 文件最大上传大小
 	AllowedTypes       string `gorm:"column:allowed_types;default:'image/jpeg,image/png,image/gif,image/webp,image/svg+xml'" json:"allowed_types"`

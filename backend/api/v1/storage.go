@@ -176,7 +176,17 @@ func (s *Server) uploadOptions(c *gin.Context) {
 	for _, bucket := range buckets {
 		items = append(items, toUploadStorageDTO(bucket))
 	}
-	writeData(c, http.StatusOK, gin.H{"max_file_size": setting.MaxFileSize, "allowed_types": strings.Split(setting.AllowedTypes, ","), "max_files": 10, "default_storage": setting.DefaultStorage, "storage_buckets": items}, nil)
+	allowedTypes := []string{}
+	for _, value := range strings.Split(setting.AllowedTypes, ",") {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if strings.HasPrefix(value, "image/") {
+			allowedTypes = append(allowedTypes, value)
+		}
+	}
+	if setting.VideoUploadEnabled {
+		allowedTypes = append(allowedTypes, "video/mp4", "video/webm")
+	}
+	writeData(c, http.StatusOK, gin.H{"video_upload_enabled": setting.VideoUploadEnabled, "max_video_file_size": setting.MaxVideoFileSize, "max_file_size": setting.MaxFileSize, "allowed_types": allowedTypes, "max_files": 10, "default_storage": setting.DefaultStorage, "storage_buckets": items}, nil)
 }
 
 func handleStorageError(c *gin.Context, err error) bool {

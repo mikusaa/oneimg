@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,11 +17,12 @@ import (
 
 // FTPConfig FTP 配置结构体
 type FTPConfig struct {
-	Host     string // FTP服务器地址（如 192.168.1.100）
-	Port     int    // FTP端口（默认21）
-	User     string // 用户名
-	Password string // 密码
-	Timeout  int    // 连接超时时间（秒，默认5）
+	Context  context.Context // Optional request lifetime for control and data connections.
+	Host     string          // FTP服务器地址（如 192.168.1.100）
+	Port     int             // FTP端口（默认21）
+	User     string          // 用户名
+	Password string          // 密码
+	Timeout  int             // 连接超时时间（秒，默认5）
 	// 新版库默认启用被动模式，无需手动配置
 }
 
@@ -62,13 +64,21 @@ func (f *FTPUtil) GetClient() (*ftp.ServerConn, error) {
 	addr := fmt.Sprintf("%s:%d", f.config.Host, f.config.Port)
 
 	// 正确的连接创建方式（新版库）
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(f.config.Timeout)*time.Second)
-	defer cancel()
-
-	// 组合配置项：上下文 + 超时
+	requestCtx := f.config.Context
+	if requestCtx == nil {
+		requestCtx = context.Background()
+	}
+	dialer := &net.Dialer{Timeout: time.Duration(f.config.Timeout) * time.Second}
 	conn, err := ftp.Dial(addr,
-		ftp.DialWithContext(ctx),
 		ftp.DialWithTimeout(time.Duration(f.config.Timeout)*time.Second),
+		ftp.DialWithDialFunc(func(network, address string) (net.Conn, error) {
+			connection, err := dialer.DialContext(requestCtx, network, address)
+			if err != nil {
+				return nil, err
+			}
+			stop := context.AfterFunc(requestCtx, func() { _ = connection.Close() })
+			return &requestConn{Conn: connection, stop: stop}, nil
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("FTP连接失败: %w", err)
@@ -257,3 +267,24 @@ func (f *FTPUtil) GetFileStreamReader(remotePath string) (io.ReadCloser, int64, 
 
 // 	return entries, nil
 // }
+
+// UploadStream writes without buffering the complete file. Cancellation closes the data connection.
+func (f *FTPUtil) UploadStream(ctx context.Context, path string, body io.Reader) error {
+	f.config.Context = ctx
+	client, err := f.GetClient()
+	if err != nil {
+		return err
+	}
+	if err = f.makeDirRecursive(client, filepath.Dir(path)); err != nil {
+		return err
+	}
+	return client.Stor(path, body)
+}
+
+// requestConn stops its cancellation callback when the FTP library closes a connection.
+type requestConn struct {
+	net.Conn
+	stop func() bool
+}
+
+func (c *requestConn) Close() error { c.stop(); return c.Conn.Close() }

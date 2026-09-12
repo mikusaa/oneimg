@@ -1,11 +1,11 @@
 <template>
   <div class="page-shell text-gray-800 dark:text-gray-200">
-    <PageHeader title="图库管理" description="检索、整理和批量管理图片" />
+    <PageHeader title="图库管理" description="检索、整理和批量管理文件" />
 
     <nav v-if="canManageTags" class="view-tabs" aria-label="图库视图">
       <button type="button" class="view-tab" :class="{ 'view-tab-active': activeView === 'images' }" @click="selectView('images')">
         <i class="ri-gallery-view-2"></i>
-        图片
+        文件
       </button>
       <button type="button" class="view-tab" :class="{ 'view-tab-active': activeView === 'tags' }" @click="selectView('tags')">
         <i class="ri-price-tag-3-line"></i>
@@ -17,6 +17,7 @@
       <div class="content-panel gallery-panel-compact gallery-topbar-compact space-y-2">
         <div class="gallery-topbar-minimal">
           <div class="gallery-topbar-filters">
+            <div class="gallery-inline-control gallery-inline-control-select"><label class="gallery-inline-label" for="media-type">类型</label><select id="media-type" v-model="mediaType" class="input-modern gallery-inline-select" :disabled="loading" @change="currentPage = 1; loadImages()"><option value="">全部</option><option value="image">图片</option><option value="video">视频</option></select></div>
             <div v-if="isAdmin" class="gallery-inline-control gallery-inline-control-role">
               <span class="gallery-inline-label">角色</span>
               <div class="role-buttons grid w-full grid-cols-3 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto" role="group" aria-label="图片角色筛选">
@@ -166,7 +167,7 @@
             class="gallery-image-card gallery-image-card-compact"
             :class="isImageSelected(image.id) ? 'border-primary ring-2 ring-primary/20 dark:border-primary' : 'hover:border-slate-300 dark:hover:border-white/20'"
             tabindex="0"
-            :aria-label="`查看图片 ${getImageAltText(image)}`"
+            :aria-label="`查看文件 ${getImageAltText(image)}`"
             :aria-selected="isImageSelected(image.id)"
             @keydown.enter.prevent="openPreview(image)"
           >
@@ -195,12 +196,13 @@
             </div>
 
             <div class="image-wrapper relative aspect-square overflow-hidden bg-gray-100 dark:bg-gray-950" @click="openPreview(image)">
-              <div class="loading absolute inset-0 flex items-center justify-center z-0 text-slate-300">
+              <div v-if="!isVideo(image)" class="loading absolute inset-0 flex items-center justify-center z-0 text-slate-300">
                 <svg class="w-8 h-8 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="transform: scaleX(-1) scaleY(-1);">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </div>
-              <img 
+              <button v-if="isVideo(image)" type="button" class="video-placeholder" :aria-label="`播放 ${image.file_name}`" @click.stop="openPreview(image)"><i class="ri-play-circle-line text-5xl"></i><span>{{ image.mime_type.split('/')[1].toUpperCase() }}</span></button>
+              <img v-else
                 :src="image.thumbnail || image.url" 
                 :alt="getImageAltText(image)"
                 class="image-thumbnail h-full w-full object-cover opacity-0"
@@ -216,7 +218,7 @@
               </p>
               <p class="gallery-image-card-meta gallery-image-card-meta-inline">
                 {{ formatFileSize(image.file_size) }} • 
-                {{ image.width }}×{{ image.height }}
+                {{ isVideo(image) ? image.mime_type.split('/')[1].toUpperCase() : `${image.width}×${image.height}` }}
               </p>
               <p class="gallery-image-card-meta">{{ formatDate(image.created_at) }}</p>
             </div>
@@ -294,7 +296,7 @@
           />
         </div>
         <div v-if="tagDialogMode === 'batch'" class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-950">
-          <p class="text-sm font-medium text-slate-700 dark:text-slate-200">已选择 {{ batchEditableImages.length }} 张图片</p>
+          <p class="text-sm font-medium text-slate-700 dark:text-slate-200">已选择 {{ batchEditableImages.length }} 个文件</p>
           <p class="mt-1.5 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
             {{ batchEditableImages.map(image => image.file_name).join('、') }}
           </p>
@@ -324,6 +326,13 @@
         </button>
       </template>
     </AppDialog>
+    <VideoPreview v-if="videoPreview" :key="videoPreview.id" :media="videoPreview" :url="getFullUrl(videoPreview.url)" @close="videoPreview = null">
+      <div class="mt-3 flex flex-wrap gap-2"><span v-for="tag in videoPreview.tags" :key="tag.id" class="result-meta-pill">{{ tag.name }} <button v-if="canManageImage(videoPreview, 'image:tag:delete')" :aria-label="`移除标签 ${tag.name}`" @click="deleteImageTagAsync(videoPreview.id, tag.id)">×</button></span></div>
+      <template #actions>
+        <button v-if="canManageImage(videoPreview, 'image:tag:add')" class="soft-button" @click="addImageTagModal(videoPreview.id); videoPreview = null">添加标签</button>
+        <button v-if="canManageImage(videoPreview, 'image:delete')" class="danger-button" @click="deleteImage(videoPreview.id); videoPreview = null">删除</button>
+      </template>
+    </VideoPreview>
   </div>
 </template>
 
@@ -332,6 +341,9 @@ import { apiFetch } from "@/api/client.ts"
 import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppDialog from '@/components/AppDialog.vue'
+import VideoPreview from '@/components/VideoPreview.vue'
+import { isVideo, mediaLink } from '@/utils/media'
+const videoPreview = ref(null)
 import PageHeader from '@/components/PageHeader.vue'
 import TagManager from '@/components/TagManager.vue'
 import TagSelector from '@/components/TagSelector.vue'
@@ -436,6 +448,7 @@ const selectedTags = ref([]); // 选中的标签ID数组
 const searchKeyword = ref('');
 const selectAll = ref(false); // 全选状态
 const currentPreviewImage = ref(null);
+const mediaType = ref('');
 const tagDialogOpen = ref(false);
 const tagDialogMode = ref('batch');
 const tagDialogValue = ref(null);
@@ -476,6 +489,7 @@ const getImageAltText = (image) => image?.original_file_name || image?.file_name
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
 const getPreviewFileName = image => image?.original_file_name || image?.file_name || '图片预览';
 const getImageSizeSummary = image => {
+  if (isVideo(image)) return formatFileSize(Number(image.file_size || 0));
   const originalSize = Number(image?.original_file_size || 0);
   const savedSize = Number(image?.file_size || 0);
   const savedLabel = formatFileSize(savedSize);
@@ -596,6 +610,7 @@ const loadImages = async () => {
       sort: 'created_at',
       order: 'desc'
     });
+    if (mediaType.value) params.set('media_type', mediaType.value);
     if (selectedTags.value.length) params.set('tag_ids', selectedTags.value.join(','));
     if (selectedBucket.value && selectedBucket.value !== 'null') params.set('bucket_id', String(selectedBucket.value));
     if (isAdmin.value && roleImage.value !== 'all') {
@@ -632,7 +647,7 @@ const loadImages = async () => {
 };
 
 /**
- * 批量删除图片
+ * 批量删除文件
  * @param {Array} deleteIds - 要删除的图片ID数组
  */
 const batchDeleteImages = async (deleteIds) => {
@@ -644,7 +659,7 @@ const batchDeleteImages = async (deleteIds) => {
 };
 
 /**
- * 删除单张图片
+ * 删除单个文件
  * @param {string|number} id - 图片ID
  * @returns {boolean} 是否删除成功
  */
@@ -673,8 +688,8 @@ const deleteAsync = async (id) => {
       throw new Error(result.detail || '删除失败');
     }
   } catch (error) {
-    console.error('删除图片错误:', error);
-    Message.error(`删除图片失败: ${error.message}`);
+    console.error('删除文件错误:', error);
+    Message.error(`删除文件失败: ${error.message}`);
     return false;
   } finally {
     await loadingInstance.hide();
@@ -724,7 +739,7 @@ const pustImageTag = async (imageId, values) => {
   }
 };
 
-// 删除图片标签
+// 删除文件标签
 const deleteImageTagAsync = async (imageId, tagId) => {
   try {
     const response = await apiFetch(`${API_BASE_URL}/api/v1/images/${imageId}/tags/${tagId}`, {
@@ -867,7 +882,7 @@ const handleBatchDelete = () => {
       <div class="flex gap-3">
         <i class="fa fa-exclamation-triangle text-warning text-xl mt-1"></i>
         <div>
-          <p>确定要删除选中的 ${filterIds.length} 张图片吗？</p>
+          <p>确定要删除选中的 ${filterIds.length} 个文件吗？</p>
           <p class="mt-1 text-secondary text-sm">删除后无法恢复，请谨慎操作</p>
         </div>
       </div>
@@ -892,16 +907,7 @@ const handleBatchDelete = () => {
   modal.open();
 };
 
-const formatBatchLinks = (format) => selectedImageRecords.value.map(image => {
-  const url = getFullUrl(image.url);
-  const alt = getImageAltText(image);
-  switch (format) {
-    case 'markdown': return `![${alt}](${url})`;
-    case 'html': return `<img src="${url}" alt="${alt}">`;
-    case 'bbcode': return `[img]${url}[/img]`;
-    default: return url;
-  }
-}).join('\n');
+const formatBatchLinks = format => selectedImageRecords.value.map(image => mediaLink(image, format, getFullUrl(image.url))).join('\n');
 
 const copyText = async (text) => {
   if (navigator.clipboard && window.isSecureContext) {
@@ -934,7 +940,7 @@ const handleBatchCopy = () => {
         <select id="batch-copy-format" class="input-modern w-full">
           <option value="url">URL</option>
           <option value="markdown">Markdown</option>
-          <option value="html">HTML</option>
+          <option value="html">HTML</option><option value="gif">动图式 HTML（视频）</option>
           <option value="bbcode">BBCode</option>
         </select>
         <label class="field-label" for="batch-copy-preview">复制预览</label>
@@ -1135,6 +1141,7 @@ const handleImageError = (e) => {
  * @param {Object} image - 图片对象
  */
 const openPreview = (image) => {
+  if (isVideo(image)) { currentPreviewImage.value = image; videoPreview.value = image; return }
   currentPreviewImage.value = image;
   
   // 生成预览弹窗内容
@@ -1326,17 +1333,7 @@ const registerPreviewGlobalFunctions = modal => {
   window.copyPreviewImageLink = (type) => {
     if (!currentPreviewImage.value) return;
     const image = currentPreviewImage.value;
-    const fullUrl = getFullUrl(image.url);
-    const altText = getImageAltText(image);
-    let copyText = '';
-    
-    switch (type) {
-      case 'url': copyText = fullUrl; break;
-      case 'html': copyText = `<img src="${fullUrl}" alt="${altText}" width="${image.width || ''}" height="${image.height || ''}">`; break;
-      case 'markdown': copyText = `![${altText}](${fullUrl})`; break;
-      default: copyText = fullUrl;
-    }
-    
+    const copyText = mediaLink(image, type, getFullUrl(image.url));
     try {
       navigator.clipboard.writeText(copyText);
       Message.success(`已复制${type.toUpperCase()}格式链接`);
@@ -1352,7 +1349,7 @@ const registerPreviewGlobalFunctions = modal => {
     }
   };
 
-  // 下载图片
+  // 下载文件
   window.downloadPreviewImage = () => {
     if (!currentPreviewImage.value) return;
     const image = currentPreviewImage.value;
@@ -1429,7 +1426,7 @@ const cleanPreviewGlobalFunctions = () => {
 };
 
 /**
- * 打开删除图片确认弹窗
+ * 打开删除文件确认弹窗
  * @param {string|number} imageId - 图片ID
  */
 const deleteImage = async (imageId) => {
@@ -1439,7 +1436,7 @@ const deleteImage = async (imageId) => {
       <div class="flex gap-3">
         <i class="fa fa-exclamation-triangle text-warning text-xl mt-1"></i>
         <div>
-          <p>确定要删除这张图片吗？</p>
+          <p>确定要删除这个文件吗？</p>
           <p class="mt-1 text-secondary text-sm">删除后无法恢复，请谨慎操作</p>
         </div>
       </div>

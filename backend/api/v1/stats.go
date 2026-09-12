@@ -9,8 +9,10 @@ import (
 )
 
 type trendDTO struct {
-	Date  string `json:"date"`
-	Count int64  `json:"count"`
+	ImageCount int64  `json:"image_count"`
+	VideoCount int64  `json:"video_count"`
+	Date       string `json:"date"`
+	Count      int64  `json:"count"`
 }
 type formatStatsDTO struct {
 	Format string `json:"format"`
@@ -42,7 +44,7 @@ func (s *Server) dashboardStats(c *gin.Context) {
 	for _, value := range item.SizeDistribution {
 		sizes = append(sizes, sizeStatsDTO{Range: value.Range, Count: value.Count})
 	}
-	writeData(c, http.StatusOK, gin.H{"total_images": item.TotalImages, "total_size": item.TotalSize, "today_uploads": item.TodayUploads, "month_uploads": item.MonthUploads, "recent_images": recent, "upload_trend": trends, "format_stats": formats, "size_distribution": sizes}, nil)
+	writeData(c, http.StatusOK, gin.H{"total_images": item.TotalImages, "total_videos": item.TotalVideos, "image_size": item.ImageSize, "video_size": item.VideoSize, "today_image_uploads": item.TodayImageUploads, "today_video_uploads": item.TodayVideoUploads, "month_image_uploads": item.MonthImageUploads, "month_video_uploads": item.MonthVideoUploads, "total_size": item.TotalSize, "today_uploads": item.TodayUploads, "month_uploads": item.MonthUploads, "recent_images": recent, "upload_trend": trends, "format_stats": formats, "size_distribution": sizes}, nil)
 }
 
 func (s *Server) imageStats(c *gin.Context) {
@@ -58,7 +60,7 @@ func (s *Server) imageStats(c *gin.Context) {
 func toTrendDTOs(items []services.TrendPoint) []trendDTO {
 	result := make([]trendDTO, 0, len(items))
 	for _, item := range items {
-		result = append(result, trendDTO{Date: item.Date, Count: item.Count})
+		result = append(result, trendDTO{Date: item.Date, Count: item.Count, ImageCount: item.ImageCount, VideoCount: item.VideoCount})
 	}
 	return result
 }

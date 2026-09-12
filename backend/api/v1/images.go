@@ -62,6 +62,11 @@ func (s *Server) listImages(c *gin.Context) {
 	if !ok {
 		return
 	}
+	mediaType := c.Query("media_type")
+	if mediaType != "" && mediaType != "image" && mediaType != "video" {
+		writeProblem(c, http.StatusUnprocessableEntity, "invalid_query_parameter", "media_type 只能是 image 或 video")
+		return
+	}
 	sort := c.DefaultQuery("sort", "created_at")
 	if _, ok := map[string]bool{"created_at": true, "file_size": true, "filename": true, "id": true}[sort]; !ok {
 		writeProblem(c, http.StatusUnprocessableEntity, "invalid_query_parameter", "sort 参数无效")
@@ -109,7 +114,7 @@ func (s *Server) listImages(c *gin.Context) {
 		uploaderRole = &value
 	}
 	principal, _ := principalFrom(c)
-	items, total, err := s.services.Images.List(services.ImageListQuery{Page: page, PageSize: pageSize, Sort: sort, Order: order, Search: c.Query("q"), BucketID: bucketID, TagIDs: tagIDs, Untagged: untagged, UploaderRole: uploaderRole, User: *principal.User})
+	items, total, err := s.services.Images.List(services.ImageListQuery{MediaType: mediaType, Page: page, PageSize: pageSize, Sort: sort, Order: order, Search: c.Query("q"), BucketID: bucketID, TagIDs: tagIDs, Untagged: untagged, UploaderRole: uploaderRole, User: *principal.User})
 	if err != nil {
 		writeProblem(c, http.StatusInternalServerError, "image_list_failed", "读取图片列表失败")
 		return
@@ -317,7 +322,11 @@ func (s *Server) uploadImages(c *gin.Context) {
 		writeProblem(c, http.StatusInternalServerError, "upload_options_failed", "读取上传限制失败")
 		return
 	}
-	limit := int64(10)*int64(setting.MaxFileSize) + 1<<20
+	maxSize := int64(setting.MaxFileSize)
+	if setting.VideoUploadEnabled && int64(setting.MaxVideoFileSize) > maxSize {
+		maxSize = int64(setting.MaxVideoFileSize)
+	}
+	limit := int64(10)*maxSize + 1<<20
 	if c.Request.ContentLength > limit {
 		writeProblem(c, http.StatusRequestEntityTooLarge, "upload_batch_too_large", "上传批次超过允许大小")
 		return

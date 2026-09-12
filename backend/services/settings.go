@@ -22,6 +22,8 @@ type SettingsPatch struct {
 	SaveOriginalName    *bool
 	DefaultStorage      *int
 	MaxFileSize         *int
+	VideoUploadEnabled  *bool
+	MaxVideoFileSize    *int
 	AllowedTypes        *string
 	MainImageQuality    *int
 	SkipCompressFormats *string
@@ -89,10 +91,24 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 			}
 			put("max_file_size", *input.MaxFileSize)
 		}
+		if input.VideoUploadEnabled != nil {
+			put("video_upload_enabled", *input.VideoUploadEnabled)
+		}
+		if input.MaxVideoFileSize != nil {
+			if *input.MaxVideoFileSize < 1<<20 || *input.MaxVideoFileSize > 1<<30 {
+				return ErrSettingsValidation
+			}
+			put("max_video_file_size", *input.MaxVideoFileSize)
+		}
 		if input.AllowedTypes != nil {
 			value := strings.TrimSpace(*input.AllowedTypes)
 			if value == "" {
 				return ErrSettingsValidation
+			}
+			for _, mime := range strings.Split(value, ",") {
+				if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(mime)), "image/") {
+					return ErrSettingsValidation
+				}
 			}
 			put("allowed_types", value)
 		}

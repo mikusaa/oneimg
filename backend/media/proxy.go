@@ -1,31 +1,20 @@
 package media
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"time"
 
 	"oneimg/backend/database"
 	"oneimg/backend/models"
-	"oneimg/backend/utils/buckets"
-	"oneimg/backend/utils/ftp"
 	"oneimg/backend/utils/s3"
 	"oneimg/backend/utils/settings"
-	"oneimg/backend/utils/webdav"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -78,7 +67,7 @@ func ImageProxy(c *gin.Context) bool {
 	}
 
 	// 校验图片元信息
-	if imageModel.Width == 0 && imageModel.Height == 0 {
+	if imageModel.Width == 0 && imageModel.Height == 0 && !strings.HasPrefix(imageModel.MimeType, "video/") {
 		log.Printf("图片[%s]元信息不完整（宽高为0），继续代理访问", cleanPath)
 	}
 
@@ -139,229 +128,11 @@ func ImageProxy(c *gin.Context) bool {
 	return true
 }
 
-// proxyR2File R2文件代理
-func proxyR2File(c *gin.Context, objectKey, mimeType string, fileSize int64, bucket models.Buckets, s3Client *awss3.Client) {
-	// 清理objectKey（去除开头的/，适配S3路径规则）
-	objectKey = strings.TrimPrefix(objectKey, "/")
-
-	// 获取存储配置
-	storageConfig := buckets.ConvertToR2Bucket(bucket.Config)
-
-	// 校验bucket和objectKey
-	if storageConfig.R2Bucket == "" || objectKey == "" {
-		c.JSON(http.StatusInternalServerError, mediaError(500, "R2配置缺失（Bucket或ObjectKey为空）"))
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// 1. 获取R2文件对象
-	getInput := awss3.GetObjectInput{
-		Bucket: aws.String(storageConfig.R2Bucket),
-		Key:    aws.String(objectKey),
-	}
-
-	resp, err := s3Client.GetObject(ctx, &getInput)
-	if err != nil {
-		// 区分不同错误类型
-		var noSuchKeyErr *types.NoSuchKey
-		if errors.As(err, &noSuchKeyErr) {
-			c.JSON(http.StatusNotFound, mediaError(404, "R2文件不存在"))
-			return
-		}
-
-		var respErr *smithyhttp.ResponseError
-		if errors.As(err, &respErr) {
-			statusCode := respErr.HTTPStatusCode()
-			switch statusCode {
-			case http.StatusForbidden:
-				c.JSON(http.StatusForbidden, mediaError(403, "R2文件访问权限不足"))
-				return
-			case http.StatusRequestTimeout:
-				c.JSON(http.StatusGatewayTimeout, mediaError(504, "R2请求超时"))
-				return
-			}
-		}
-
-		log.Printf("R2获取文件失败 [key:%s, bucket:%s]: %v", objectKey, bucket.Name, err)
-		c.JSON(http.StatusBadGateway, mediaError(502, "R2文件获取失败"))
-		return
-	}
-	defer resp.Body.Close()
-
-	// 2. 设置响应头
-	c.Header("Content-Type", mimeType)
-	if resp.ContentLength != nil && *resp.ContentLength > 0 {
-		c.Header("Content-Length", strconv.FormatInt(*resp.ContentLength, 10))
-	} else if fileSize > 0 {
-		c.Header("Content-Length", strconv.FormatInt(fileSize, 10))
-	}
-	// 缓存控制（永久缓存）
-	c.Header("Cache-Control", "public, max-age=31536000")
-	// 存储类型标识
-	c.Header("X-Storage-Type", bucket.Type)
-	// 跨域支持（可选）
-	c.Header("Access-Control-Allow-Origin", "*")
-
-	// 3. 流式传输文件（避免内存溢出）
-	// 设置响应状态码
-	c.Status(http.StatusOK)
-	// 分块传输，每次4KB
-	buf := make([]byte, 4096)
-	_, err = io.CopyBuffer(c.Writer, resp.Body, buf)
-	if err != nil && err != io.EOF {
-		log.Printf("S3/R2文件传输失败 [key:%s]: %v", objectKey, err)
-	}
-}
-
-// proxyS3File S3文件代理
-func proxyS3File(c *gin.Context, objectKey, mimeType string, fileSize int64, bucket models.Buckets, s3Client *awss3.Client) {
-	// 清理objectKey（去除开头的/，适配S3路径规则）
-	objectKey = strings.TrimPrefix(objectKey, "/")
-
-	// 获取存储配置
-	storageConfig := buckets.ConvertToS3Bucket(bucket.Config)
-
-	// 校验bucket和objectKey
-	if storageConfig.S3Bucket == "" || objectKey == "" {
-		c.JSON(http.StatusInternalServerError, mediaError(500, "S3配置缺失（Bucket或ObjectKey为空）"))
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// 1. 获取S3文件对象
-	getInput := awss3.GetObjectInput{
-		Bucket: aws.String(storageConfig.S3Bucket),
-		Key:    aws.String(objectKey),
-	}
-
-	resp, err := s3Client.GetObject(ctx, &getInput)
-	if err != nil {
-		// 区分不同错误类型
-		var noSuchKeyErr *types.NoSuchKey
-		if errors.As(err, &noSuchKeyErr) {
-			c.JSON(http.StatusNotFound, mediaError(404, "S3文件不存在"))
-			return
-		}
-
-		var respErr *smithyhttp.ResponseError
-		if errors.As(err, &respErr) {
-			statusCode := respErr.HTTPStatusCode()
-			switch statusCode {
-			case http.StatusForbidden:
-				c.JSON(http.StatusForbidden, mediaError(403, "S3文件访问权限不足"))
-				return
-			case http.StatusRequestTimeout:
-				c.JSON(http.StatusGatewayTimeout, mediaError(504, "S3请求超时"))
-				return
-			}
-		}
-
-		log.Printf("S3获取文件失败 [key:%s, bucket:%s]: %v", objectKey, bucket.Name, err)
-		c.JSON(http.StatusBadGateway, mediaError(502, "S3文件获取失败"))
-		return
-	}
-	defer resp.Body.Close()
-
-	// 2. 设置响应头
-	c.Header("Content-Type", mimeType)
-	if resp.ContentLength != nil && *resp.ContentLength > 0 {
-		c.Header("Content-Length", strconv.FormatInt(*resp.ContentLength, 10))
-	} else if fileSize > 0 {
-		c.Header("Content-Length", strconv.FormatInt(fileSize, 10))
-	}
-	// 缓存控制（永久缓存）
-	c.Header("Cache-Control", "public, max-age=31536000")
-	// 存储类型标识
-	c.Header("X-Storage-Type", bucket.Type)
-	// 跨域支持（可选）
-	c.Header("Access-Control-Allow-Origin", "*")
-
-	// 3. 流式传输文件（避免内存溢出）
-	// 设置响应状态码
-	c.Status(http.StatusOK)
-	// 分块传输，每次4KB
-	buf := make([]byte, 4096)
-	_, err = io.CopyBuffer(c.Writer, resp.Body, buf)
-	if err != nil && err != io.EOF {
-		log.Printf("S3文件传输失败 [key:%s]: %v", objectKey, err)
-	}
-}
-
-// proxyWebDAVFile WebDAV文件代理
-func proxyWebDAVFile(c *gin.Context, relPath, mimeType string, fileSize int64, bucket models.Buckets) {
-	// 获取存储配置
-	storageConfig := buckets.ConvertToWebDavBucket(bucket.Config)
-
-	// 初始化WebDav客户端
-	if storageConfig.WebdavURL == "" {
-		c.JSON(http.StatusInternalServerError, mediaError(500, "WebDAV配置未设置（WebdavURL为空）"))
-		return
-	}
-	client := webdav.Client(webdav.Config{
-		BaseURL:  storageConfig.WebdavURL,
-		Username: storageConfig.WebdavUser,
-		Password: storageConfig.WebdavPass,
-		Timeout:  30 * time.Second,
-	})
-	// 验证WebDAV连接（非阻塞，仅日志）
-	go func() {
-		ctx := context.Background()
-		if _, err := client.WebDAVStat(ctx, ""); err != nil {
-			log.Printf("WebDAV连接验证失败: %v", err)
-		}
-	}()
-
-	ctx := context.Background()
-
-	// 验证文件存在
-	exists, err := client.WebDAVStat(ctx, relPath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, mediaError(500, "WebDAV文件状态验证失败"))
-		return
-	}
-	if !exists {
-		c.JSON(http.StatusNotFound, mediaError(404, "WebDAV文件不存在"))
-		return
-	}
-
-	// 获取文件流
-	resp, err := client.WebDAVGetFile(ctx, relPath)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, mediaError(502, "WebDAV文件获取失败"))
-		return
-	}
-	defer resp.Body.Close()
-
-	// 校验响应状态
-	if resp.StatusCode != http.StatusOK {
-		c.JSON(resp.StatusCode, mediaError(resp.StatusCode, "WebDAV文件获取失败"))
-		return
-	}
-
-	// 设置响应头
-	c.Header("Content-Type", mimeType)
-	if resp.ContentLength > 0 {
-		c.Header("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
-	} else if fileSize > 0 {
-		c.Header("Content-Length", strconv.FormatInt(fileSize, 10))
-	}
-	c.Header("Cache-Control", "public, max-age=31536000")
-	c.Header("X-Storage-Type", "webdav")
-	c.Header("Access-Control-Allow-Origin", "*")
-
-	// 流式传输文件
-	_, err = io.Copy(c.Writer, resp.Body)
-	if err != nil {
-		log.Printf("WebDAV文件传输失败：%v", err)
-	}
-}
-
 // proxyLocalFile 本地文件代理
 func proxyLocalFile(c *gin.Context, realPath string, mimeType string) {
+	if c.Request.Method == http.MethodHead || strings.Contains(c.GetHeader("Range"), ",") {
+		c.Request.Header.Del("Range")
+	}
 	fullPath := localProxyPath(realPath)
 	// 去除第一个/和\
 	fullPath = strings.TrimPrefix(fullPath, "/")
@@ -381,9 +152,12 @@ func proxyLocalFile(c *gin.Context, realPath string, mimeType string) {
 		return
 	}
 
+	if _, _, _, err := singleRange(requestedRange(c), fileInfo.Size()); err != nil {
+		rangeError(c, fileInfo.Size())
+		return
+	}
 	// 设置响应头
 	c.Header("Content-Type", mimeType)
-	c.Header("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
 	c.Header("Cache-Control", "public, max-age=31536000")
 	c.Header("X-Storage-Type", "default")
 	c.Header("Access-Control-Allow-Origin", "*")
@@ -403,80 +177,6 @@ func localProxyPath(realPath string) string {
 func isThumbnailPath(path string) bool {
 	cleanPath := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(path)), "/")
 	return strings.HasPrefix(cleanPath, "thumbnails/") || strings.Contains(cleanPath, "/thumbnails/")
-}
-
-// FTP代理
-func proxyFTPFile(c *gin.Context, ftpPath string, mimeType string, bucket models.Buckets) {
-	c.Header("Transfer-Encoding", "chunked")
-	c.Writer.Header().Del("Content-Length")
-
-	// 清理FTP路径
-	ftpPath = cleanFTPPath(ftpPath)
-
-	// 获取存储配置
-	storageConfig := buckets.ConvertToFTPBucket(bucket.Config)
-
-	ftpUtil := ftp.NewFTPUtil(ftp.FTPConfig{
-		Host:     storageConfig.FTPHost,
-		Port:     storageConfig.FTPPort,
-		User:     storageConfig.FTPUser,
-		Password: storageConfig.FTPPass,
-		Timeout:  60,
-	})
-	defer func() {
-		if err := ftpUtil.Close(); err != nil {
-			if !strings.Contains(err.Error(), "227 Entering Passive Mode") {
-				log.Printf("FTP连接关闭失败：%v", err)
-			}
-		}
-	}()
-
-	// 获取文件流
-	fileReader, _, err := ftpUtil.GetFileStreamReader(ftpPath)
-	if err != nil {
-		log.Printf("获取FTP文件流失败（路径：%s）：%v", ftpPath, err)
-		if strings.Contains(err.Error(), "550") {
-			c.AbortWithStatusJSON(http.StatusBadGateway, mediaError(502, "文件不存在或PureFTPd权限不足"))
-		} else {
-			c.AbortWithStatusJSON(http.StatusBadGateway, mediaError(502, "FTP文件获取失败："+err.Error()))
-		}
-		return
-	}
-	defer func() {
-		if err := fileReader.Close(); err != nil {
-			if !strings.Contains(err.Error(), "227 Entering Passive Mode") {
-				log.Printf("FTP文件流关闭失败：%v", err)
-			}
-		}
-	}()
-
-	c.Header("Content-Type", mimeType)
-	c.Header("Cache-Control", "public, max-age=31536000")
-	c.Header("X-Storage-Type", "ftp")
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Connection", "close")
-
-	c.Status(http.StatusOK)
-
-	buf := make([]byte, 4096)
-	for {
-		n, err := fileReader.Read(buf)
-		if n > 0 {
-			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
-				break
-			}
-			c.Writer.Flush()
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
-			break
-		}
-	}
-	c.Writer.Flush()
-	c.Abort()
 }
 
 // 辅助函数

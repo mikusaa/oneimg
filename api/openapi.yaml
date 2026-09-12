@@ -204,12 +204,12 @@ paths:
       summary: 获取上传选项
       tags: [Images]
       responses:
-        '200': { $ref: '#/components/responses/DataResponse' }
+        '200': { $ref: '#/components/responses/UploadOptionsResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
   /images:
     get:
       operationId: listImages
-      summary: 获取图片列表
+      summary: 获取图片和视频列表
       tags: [Images]
       parameters:
         - { $ref: '#/components/parameters/Page' }
@@ -221,12 +221,13 @@ paths:
         - { name: tag_ids, in: query, description: 以逗号分隔的正整数 ID, schema: { type: string } }
         - { name: untagged, in: query, schema: { type: boolean } }
         - { name: uploader_role, in: query, schema: { type: integer, enum: [1, 3] } }
+        - { name: media_type, in: query, description: 不传返回全部，历史空 MIME 记录归为图片, schema: { type: string, enum: [image, video] } }
       responses:
         '200': { $ref: '#/components/responses/ImageCollectionResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
     post:
       operationId: uploadImages
-      summary: 上传图片
+      summary: 上传图片或已启用的 MP4/WebM 视频
       tags: [Images]
       requestBody:
         required: true
@@ -522,6 +523,16 @@ components:
       required: true
       content: { application/json: { schema: { $ref: '#/components/schemas/StorageRequest' } } }
   responses:
+    UploadOptionsResponse:
+      headers: { X-Request-ID: { schema: { type: string } } }
+      description: 实际允许的文件类型、分类大小限制和可用存储
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/UploadOptions' }
     ProblemResponse:
       description: RFC 9457 问题详情
       headers: { X-Request-ID: { schema: { type: string } } }
@@ -653,8 +664,8 @@ components:
         created_at: { type: string, format: date-time }
     TrendPoint:
       type: object
-      required: [date, count]
-      properties: { date: { type: string }, count: { type: integer, format: int64, minimum: 0 } }
+      required: [date, count, image_count, video_count]
+      properties: { date: { type: string }, count: { type: integer, format: int64, minimum: 0 }, image_count: { type: integer, format: int64, minimum: 0 }, video_count: { type: integer, format: int64, minimum: 0 } }
     FormatStats:
       type: object
       required: [format, count, size]
@@ -665,10 +676,17 @@ components:
       properties: { range: { type: string }, count: { type: integer, format: int64, minimum: 0 } }
     DashboardStats:
       type: object
-      required: [total_images, total_size, today_uploads, month_uploads, recent_images, upload_trend, format_stats, size_distribution]
+      required: [total_images, total_videos, image_size, video_size, today_image_uploads, today_video_uploads, month_image_uploads, month_video_uploads, total_size, today_uploads, month_uploads, recent_images, upload_trend, format_stats, size_distribution]
       properties:
-        total_images: { type: integer, format: int64, minimum: 0 }
-        total_size: { type: integer, format: int64, minimum: 0, description: 主图文件大小合计，不包含缩略图 }
+        total_images: { type: integer, format: int64, minimum: 0, description: 仅图片数量，历史空 MIME 记录归为图片 }
+        total_videos: { type: integer, format: int64, minimum: 0 }
+        image_size: { type: integer, format: int64, minimum: 0 }
+        video_size: { type: integer, format: int64, minimum: 0 }
+        today_image_uploads: { type: integer, format: int64, minimum: 0 }
+        today_video_uploads: { type: integer, format: int64, minimum: 0 }
+        month_image_uploads: { type: integer, format: int64, minimum: 0 }
+        month_video_uploads: { type: integer, format: int64, minimum: 0 }
+        total_size: { type: integer, format: int64, minimum: 0, description: 图片主文件与视频原文件大小合计，不包含缩略图 }
         today_uploads: { type: integer, format: int64, minimum: 0 }
         month_uploads: { type: integer, format: int64, minimum: 0 }
         recent_images: { type: array, items: { $ref: '#/components/schemas/Image' } }
@@ -765,6 +783,17 @@ components:
       type: object
       required: [username, password, role]
       properties: { username: { type: string, minLength: 3, maxLength: 50 }, password: { type: string, minLength: 6, maxLength: 100 }, role: { type: integer, enum: [1, 3] } }
+    UploadOptions:
+      type: object
+      required: [video_upload_enabled, max_video_file_size, max_file_size, allowed_types, max_files, default_storage, storage_buckets]
+      properties:
+        video_upload_enabled: { type: boolean }
+        max_video_file_size: { type: integer }
+        max_file_size: { type: integer, description: 图片单文件字节上限 }
+        allowed_types: { type: array, items: { type: string }, description: 实际允许的图片与视频 MIME 类型 }
+        max_files: { type: integer }
+        default_storage: { type: integer }
+        storage_buckets: { type: array, items: { type: object, additionalProperties: true } }
     SettingsPatch:
       type: object
       additionalProperties: false
@@ -775,8 +804,10 @@ components:
         registration_enabled: { type: boolean }
         save_original_name: { type: boolean }
         default_storage: { type: integer }
-        max_file_size: { type: integer }
-        allowed_types: { type: string }
+        max_file_size: { type: integer, description: 图片单文件字节上限 }
+        video_upload_enabled: { type: boolean, default: false }
+        max_video_file_size: { type: integer, minimum: 1048576, maximum: 1073741824, default: 104857600 }
+        allowed_types: { type: string, description: 逗号分隔的图片 MIME 类型，视频通过独立开关启用 }
         main_image_quality: { type: integer }
         skip_compress_formats: { type: string }
         default_path: { type: string }

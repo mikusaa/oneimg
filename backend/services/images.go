@@ -26,6 +26,7 @@ var ErrStorageDelete = errors.New("stored image could not be deleted")
 type ImageService struct{ db *gorm.DB }
 
 type ImageListQuery struct {
+	MediaType    string
 	Page         int
 	PageSize     int
 	Sort         string
@@ -48,6 +49,11 @@ func NewImageService(db *gorm.DB) *ImageService { return &ImageService{db: db} }
 
 func (s *ImageService) List(input ImageListQuery) ([]ImageRecord, int64, error) {
 	query := s.db.Model(&models.Image{}).Select("images.id")
+	if input.MediaType == "video" {
+		query = query.Where(models.VideoSQL)
+	} else if input.MediaType == "image" {
+		query = query.Where("NOT (" + models.VideoSQL + ")")
+	}
 	if input.User.Role != models.RoleAdmin {
 		query = query.Where("images.user_id = ?", input.User.ID)
 	}

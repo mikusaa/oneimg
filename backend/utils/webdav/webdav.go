@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -260,3 +261,28 @@ func (c *WebDAVClient) WebDAVGetFile(ctx context.Context, path string) (*http.Re
 	}
 	return resp, nil
 }
+
+// WebDAVMedia bounds connection/header waits but leaves streaming lifetime to the request context.
+func (c *WebDAVClient) WebDAVMedia(ctx context.Context, path, method, byteRange, ifRange string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.config.BaseURL+c.NormalizePath(path), nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.config.Username != "" {
+		req.SetBasicAuth(c.config.Username, c.config.Password)
+	}
+	req.Header.Set("Accept-Encoding", "identity")
+	if byteRange != "" {
+		req.Header.Set("Range", byteRange)
+		if ifRange != "" {
+			req.Header.Set("If-Range", ifRange)
+		}
+	}
+	return mediaClient.Do(req)
+}
+
+var mediaClient = &http.Client{Transport: &http.Transport{
+	Proxy:               http.ProxyFromEnvironment,
+	DialContext:         (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+	TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 30 * time.Second, IdleConnTimeout: 90 * time.Second,
+}}

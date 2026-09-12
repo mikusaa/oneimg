@@ -21,3 +21,6 @@ type Image struct {
 	ContentHash      string    `json:"content_hash" gorm:"column:content_hash;index"`
 	CreatedAt        time.Time `json:"created_at"`
 }
+
+// VideoSQL is shared by filtering and aggregates. Legacy empty MIME values remain images.
+const VideoSQL = "LOWER(TRIM(COALESCE(mime_type, ''))) IN ('video/mp4', 'video/webm')"

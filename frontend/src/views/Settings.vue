@@ -147,9 +147,18 @@
                             <div class="settings-section-heading">
                                 <h3>上传限制</h3>
                             </div>
+                            <div class="settings-toggle-row mb-5">
+                                <div><p class="setting-row-title">允许视频上传</p><p class="setting-row-hint">支持 MP4 / WebM 原文件上传；关闭后已有视频仍可播放。</p></div>
+                                <label class="settings-switch" title="允许视频上传"><input v-model="systemSettings.video_upload_enabled" :data-save-state="saveStates.video_upload_enabled" type="checkbox" class="sr-only peer" @change="handleSwitchChange('video_upload_enabled', systemSettings.video_upload_enabled)"><span class="switch-track"></span><span class="switch-thumb"></span></label>
+                            </div>
+                            <div class="setting-group mb-5">
+                                <label class="field-label" for="max_video_file_size">视频最大文件大小</label>
+                                <div class="settings-input-suffix"><input id="max_video_file_size" v-model.number="systemSettings.max_video_file_size" :data-save-state="saveStates.max_video_file_size" type="number" :min="1048576" :max="1073741824" class="input-modern pr-16" @blur="handleFieldBlur('max_video_file_size', systemSettings.max_video_file_size)"><span>字节</span></div>
+                                <p class="field-hint">默认 104857600 字节（100 MiB），可设置为 1 MiB～1 GiB。视频不进行压缩或转码。</p>
+                            </div>
                             <div class="settings-field-grid">
                                 <div class="setting-group">
-                                    <label class="field-label" for="max_file_size">最大文件大小</label>
+                                    <label class="field-label" for="max_file_size">图片最大文件大小</label>
                                     <div class="settings-input-suffix">
                                         <input
                                             id="max_file_size"
@@ -488,6 +497,8 @@ const systemSettings = reactive({
     save_original_name: false,
     default_storage: 1,
     max_file_size: 10485760,
+    video_upload_enabled: false,
+    max_video_file_size: 104857600,
     allowed_types: 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml',
     main_image_quality: 85,
     skip_compress_formats: 'image/gif,image/svg+xml,image/webp',

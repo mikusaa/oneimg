@@ -2,7 +2,6 @@ package uploads
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"log"
 	"mime/multipart"
@@ -34,26 +33,12 @@ type FTPUploader struct{}
 
 // R2 上传实现
 func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *models.Buckets, fileHeader *multipart.FileHeader) (*interfaces.ImageUploadResult, error) {
-	// 验证图片
-	if err := images.ValidateImageFile(fileHeader, setting); err != nil {
-		return nil, fmt.Errorf("图片验证失败: %v", err)
-	}
-
-	// 打开文件
-	file, err := fileHeader.Open()
-	if err != nil {
-		return nil, fmt.Errorf("打开文件失败: %v", err)
-	}
-	defer file.Close()
-
-	// 获取角色
 	userRole := c.GetInt("user_role")
-
-	// 处理图片
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
+	processedImage, err := prepareUpload(c.Request.Context(), fileHeader, setting, userRole)
 	if err != nil {
-		return nil, fmt.Errorf("图片处理失败: %v", err)
+		return nil, fmt.Errorf("文件处理失败: %w", err)
 	}
+	defer processedImage.Close()
 	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
@@ -82,10 +67,10 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 
 	// 获取Bucket
 	storageConfig := buckets.ConvertToR2Bucket(bucket.Config)
-	_, err = client.PutObject(context.TODO(), &awss3.PutObjectInput{
+	_, err = client.PutObject(c.Request.Context(), &awss3.PutObjectInput{
 		Bucket:      aws.String(storageConfig.R2Bucket),
 		Key:         aws.String(objectKey),
-		Body:        bytes.NewReader(processedImage.CompressedBytes),
+		Body:        processedImage.Body,
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
@@ -96,7 +81,7 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	var thumbnailSize int64
 	// 检查是否上传缩略图
 	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
-		_, err = client.PutObject(context.TODO(), &awss3.PutObjectInput{
+		_, err = client.PutObject(c.Request.Context(), &awss3.PutObjectInput{
 			Bucket:      aws.String(storageConfig.R2Bucket),
 			Key:         aws.String(thumbnailPath),
 			Body:        bytes.NewReader(processedImage.ThumbnailBytes),
@@ -115,8 +100,8 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 		Message:          "上传成功",
 		FileName:         uniqueFileName,
 		OriginalFileName: fileHeader.Filename,
-		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
-		FileSize:         int64(len(processedImage.CompressedBytes)),
+		OriginalFileSize: processedImage.OriginalSize,
+		FileSize:         processedImage.FileSize,
 		ThumbnailSize:    thumbnailSize,
 		MimeType:         contentType,
 		URL:              url,
@@ -131,26 +116,12 @@ func (u *R2Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 
 // S3上传实现
 func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *models.Buckets, fileHeader *multipart.FileHeader) (*interfaces.ImageUploadResult, error) {
-	// 验证图片
-	if err := images.ValidateImageFile(fileHeader, setting); err != nil {
-		return nil, fmt.Errorf("图片验证失败: %v", err)
-	}
-
-	// 打开文件
-	file, err := fileHeader.Open()
-	if err != nil {
-		return nil, fmt.Errorf("打开文件失败: %v", err)
-	}
-	defer file.Close()
-
-	// 获取角色
 	userRole := c.GetInt("user_role")
-
-	// 处理图片
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
+	processedImage, err := prepareUpload(c.Request.Context(), fileHeader, setting, userRole)
 	if err != nil {
-		return nil, fmt.Errorf("图片处理失败: %v", err)
+		return nil, fmt.Errorf("文件处理失败: %w", err)
 	}
+	defer processedImage.Close()
 	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
@@ -179,10 +150,10 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 
 	// 获取Bucket
 	storageConfig := buckets.ConvertToS3Bucket(bucket.Config)
-	_, err = client.PutObject(context.TODO(), &awss3.PutObjectInput{
+	_, err = client.PutObject(c.Request.Context(), &awss3.PutObjectInput{
 		Bucket:      aws.String(storageConfig.S3Bucket),
 		Key:         aws.String(objectKey),
-		Body:        bytes.NewReader(processedImage.CompressedBytes),
+		Body:        processedImage.Body,
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
@@ -193,7 +164,7 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 	var thumbnailSize int64
 	// 检查是否上传缩略图
 	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
-		_, err = client.PutObject(context.TODO(), &awss3.PutObjectInput{
+		_, err = client.PutObject(c.Request.Context(), &awss3.PutObjectInput{
 			Bucket:      aws.String(storageConfig.S3Bucket),
 			Key:         aws.String(thumbnailPath),
 			Body:        bytes.NewReader(processedImage.ThumbnailBytes),
@@ -212,8 +183,8 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 		Message:          "上传成功",
 		FileName:         uniqueFileName,
 		OriginalFileName: fileHeader.Filename,
-		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
-		FileSize:         int64(len(processedImage.CompressedBytes)),
+		OriginalFileSize: processedImage.OriginalSize,
+		FileSize:         processedImage.FileSize,
 		ThumbnailSize:    thumbnailSize,
 		MimeType:         contentType,
 		URL:              url,
@@ -228,26 +199,12 @@ func (u *S3Uploader) Upload(c *gin.Context, setting *models.Settings, bucket *mo
 
 // WebDAV上传实现
 func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket *models.Buckets, fileHeader *multipart.FileHeader) (*interfaces.ImageUploadResult, error) {
-	// 验证图片
-	if err := images.ValidateImageFile(fileHeader, setting); err != nil {
-		return nil, fmt.Errorf("图片验证失败: %v", err)
-	}
-
-	// 打开文件
-	file, err := fileHeader.Open()
-	if err != nil {
-		return nil, fmt.Errorf("打开文件失败: %v", err)
-	}
-	defer file.Close()
-
-	// 获取角色
 	userRole := c.GetInt("user_role")
-
-	// 处理图片
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
+	processedImage, err := prepareUpload(c.Request.Context(), fileHeader, setting, userRole)
 	if err != nil {
-		return nil, fmt.Errorf("图片处理失败: %v", err)
+		return nil, fmt.Errorf("文件处理失败: %w", err)
 	}
+	defer processedImage.Close()
 	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
@@ -277,11 +234,11 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 		BaseURL:  storageConfig.WebdavURL,
 		Username: storageConfig.WebdavUser,
 		Password: storageConfig.WebdavPass,
-		Timeout:  30 * time.Second,
+		Timeout:  10 * time.Minute,
 	})
 
 	// 上传文件到WebDAV服务器
-	err = client.WebDAVUpload(context.TODO(), objectPath, bytes.NewReader(processedImage.CompressedBytes))
+	err = client.WebDAVUpload(c.Request.Context(), objectPath, processedImage.Body)
 	if err != nil {
 		return nil, fmt.Errorf("WebDAV上传失败：%v", err)
 	}
@@ -290,7 +247,7 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 	thumbnailURL := ""
 	var thumbnailSize int64
 	if setting.Thumbnail && len(processedImage.ThumbnailBytes) > 0 {
-		err = client.WebDAVUpload(context.TODO(), thumbnailPath, bytes.NewReader(processedImage.ThumbnailBytes))
+		err = client.WebDAVUpload(c.Request.Context(), thumbnailPath, bytes.NewReader(processedImage.ThumbnailBytes))
 		if err == nil {
 			thumbnailURL = thumbnailPath
 			thumbnailSize = int64(len(processedImage.ThumbnailBytes))
@@ -305,8 +262,8 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 		Message:          "上传成功",
 		FileName:         uniqueFileName,
 		OriginalFileName: fileHeader.Filename,
-		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
-		FileSize:         int64(len(processedImage.CompressedBytes)),
+		OriginalFileSize: processedImage.OriginalSize,
+		FileSize:         processedImage.FileSize,
 		ThumbnailSize:    thumbnailSize,
 		MimeType:         processedImage.MimeType,
 		URL:              url,
@@ -321,26 +278,12 @@ func (u *WebDAVUploader) Upload(c *gin.Context, setting *models.Settings, bucket
 
 // FTP上传实现
 func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *models.Buckets, fileHeader *multipart.FileHeader) (*interfaces.ImageUploadResult, error) {
-	// 验证图片
-	if err := images.ValidateImageFile(fileHeader, setting); err != nil {
-		return nil, fmt.Errorf("图片验证失败: %v", err)
-	}
-
-	// 打开文件
-	file, err := fileHeader.Open()
-	if err != nil {
-		return nil, fmt.Errorf("打开文件失败: %v", err)
-	}
-	defer file.Close()
-
-	// 获取角色
 	userRole := c.GetInt("user_role")
-
-	// 处理图片（压缩、生成缩略图等）
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
+	processedImage, err := prepareUpload(c.Request.Context(), fileHeader, setting, userRole)
 	if err != nil {
-		return nil, fmt.Errorf("图片处理失败: %v", err)
+		return nil, fmt.Errorf("文件处理失败: %w", err)
 	}
+	defer processedImage.Close()
 	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
@@ -369,11 +312,7 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 		Timeout:  10,
 	})
 	defer ftpUtil.Close()
-	err = ftpUtil.UploadImage(
-		objectPath,
-		processedImage.CompressedBytes,
-		processedImage.MimeType,
-	)
+	err = ftpUtil.UploadStream(c.Request.Context(), objectPath, processedImage.Body)
 	if err != nil {
 		return nil, fmt.Errorf("FTP上传失败：%v", err)
 	}
@@ -400,8 +339,8 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 		Message:          "上传成功",
 		FileName:         uniqueFileName,
 		OriginalFileName: fileHeader.Filename,
-		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
-		FileSize:         int64(len(processedImage.CompressedBytes)),
+		OriginalFileSize: processedImage.OriginalSize,
+		FileSize:         processedImage.FileSize,
 		ThumbnailSize:    thumbnailSize,
 		MimeType:         processedImage.MimeType,
 		URL:              url,
@@ -416,26 +355,12 @@ func (u *FTPUploader) Upload(c *gin.Context, setting *models.Settings, bucket *m
 
 // 本地默认上传实现
 func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucket *models.Buckets, fileHeader *multipart.FileHeader) (*interfaces.ImageUploadResult, error) {
-	// 验证图片
-	if err := images.ValidateImageFile(fileHeader, setting); err != nil {
-		return nil, fmt.Errorf("图片验证失败: %v", err)
-	}
-
-	// 打开文件
-	file, err := fileHeader.Open()
-	if err != nil {
-		return nil, fmt.Errorf("打开文件失败: %v", err)
-	}
-	defer file.Close()
-
-	// 获取角色
 	userRole := c.GetInt("user_role")
-
-	// 处理图片
-	processedImage, err := images.ImageSvc.ProcessImage(file, fileHeader, *setting, userRole)
+	processedImage, err := prepareUpload(c.Request.Context(), fileHeader, setting, userRole)
 	if err != nil {
-		return nil, fmt.Errorf("图片处理失败: %v", err)
+		return nil, fmt.Errorf("文件处理失败: %w", err)
 	}
+	defer processedImage.Close()
 	if duplicate := findDuplicateUploadResult(c, bucket, processedImage.ContentHash); duplicate != nil {
 		return duplicate, nil
 	}
@@ -462,7 +387,7 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 	filePath := filepath.Join(fullSubDir, uniqueFileName)
 
 	// 保存处理后的图片文件
-	if err := saveFile(filePath, processedImage.CompressedBytes); err != nil {
+	if err := saveStream(filePath, processedImage.Body); err != nil {
 		return nil, fmt.Errorf("保存文件失败：%v", err)
 	}
 	thumbnailURL := ""
@@ -493,8 +418,8 @@ func (u *DefaultUploader) Upload(c *gin.Context, setting *models.Settings, bucke
 		Storage:          bucket.Type,
 		FileName:         uniqueFileName,
 		OriginalFileName: fileHeader.Filename,
-		OriginalFileSize: int64(len(processedImage.OriginalBytes)),
-		FileSize:         int64(len(processedImage.CompressedBytes)),
+		OriginalFileSize: processedImage.OriginalSize,
+		FileSize:         processedImage.FileSize,
 		ThumbnailSize:    thumbnailSize,
 		MimeType:         processedImage.MimeType,
 		Width:            processedImage.Width,

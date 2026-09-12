@@ -80,6 +80,8 @@ export type Image = {
 export type TrendPoint = {
     date: string;
     count: number;
+    image_count: number;
+    video_count: number;
 };
 
 export type FormatStats = {
@@ -94,9 +96,19 @@ export type SizeStats = {
 };
 
 export type DashboardStats = {
-    total_images: number;
     /**
-     * 主图文件大小合计，不包含缩略图
+     * 仅图片数量，历史空 MIME 记录归为图片
+     */
+    total_images: number;
+    total_videos: number;
+    image_size: number;
+    video_size: number;
+    today_image_uploads: number;
+    today_video_uploads: number;
+    month_image_uploads: number;
+    month_video_uploads: number;
+    /**
+     * 图片主文件与视频原文件大小合计，不包含缩略图
      */
     total_size: number;
     today_uploads: number;
@@ -223,6 +235,24 @@ export type CreateUserRequest = {
     role: 1 | 3;
 };
 
+export type UploadOptions = {
+    video_upload_enabled: boolean;
+    max_video_file_size: number;
+    /**
+     * 图片单文件字节上限
+     */
+    max_file_size: number;
+    /**
+     * 实际允许的图片与视频 MIME 类型
+     */
+    allowed_types: Array<string>;
+    max_files: number;
+    default_storage: number;
+    storage_buckets: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
 export type SettingsPatch = {
     original_image?: boolean;
     save_webp?: boolean;
@@ -230,7 +260,15 @@ export type SettingsPatch = {
     registration_enabled?: boolean;
     save_original_name?: boolean;
     default_storage?: number;
+    /**
+     * 图片单文件字节上限
+     */
     max_file_size?: number;
+    video_upload_enabled?: boolean;
+    max_video_file_size?: number;
+    /**
+     * 逗号分隔的图片 MIME 类型，视频通过独立开关启用
+     */
     allowed_types?: string;
     main_image_quality?: number;
     skip_compress_formats?: string;
@@ -753,9 +791,11 @@ export type GetUploadOptionsError = GetUploadOptionsErrors[keyof GetUploadOption
 
 export type GetUploadOptionsResponses = {
     /**
-     * 请求成功
+     * 实际允许的文件类型、分类大小限制和可用存储
      */
-    200: DataEnvelope;
+    200: {
+        data: UploadOptions;
+    };
 };
 
 export type GetUploadOptionsResponse = GetUploadOptionsResponses[keyof GetUploadOptionsResponses];
@@ -776,6 +816,10 @@ export type ListImagesData = {
         tag_ids?: string;
         untagged?: boolean;
         uploader_role?: 1 | 3;
+        /**
+         * 不传返回全部，历史空 MIME 记录归为图片
+         */
+        media_type?: 'image' | 'video';
     };
     url: '/images';
 };

@@ -252,7 +252,7 @@ export const getUploadOptions = <ThrowOnError extends boolean = false>(options?:
 });
 
 /**
- * 获取图片列表
+ * 获取图片和视频列表
  */
 export const listImages = <ThrowOnError extends boolean = false>(options?: Options<ListImagesData, ThrowOnError>): RequestResult<ListImagesResponses, ListImagesErrors, ThrowOnError> => (options?.client ?? client).get<ListImagesResponses, ListImagesErrors, ThrowOnError>({
     security: [{
@@ -265,7 +265,7 @@ export const listImages = <ThrowOnError extends boolean = false>(options?: Optio
 });
 
 /**
- * 上传图片
+ * 上传图片或已启用的 MP4/WebM 视频
  */
 export const uploadImages = <ThrowOnError extends boolean = false>(options: Options<UploadImagesData, ThrowOnError>): RequestResult<UploadImagesResponses, UploadImagesErrors, ThrowOnError> => (options.client ?? client).post<UploadImagesResponses, UploadImagesErrors, ThrowOnError>({
     ...formDataBodySerializer,
