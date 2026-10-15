@@ -21,7 +21,7 @@ type Settings struct {
 
 	// 默认上传配置
 	MaxFileSize        int    `gorm:"column:max_file_size;default:10485760" json:"max_file_size"` // 文件最大上传大小
-	AllowedTypes       string `gorm:"column:allowed_types;default:'image/jpeg,image/png,image/gif,image/webp,image/svg+xml'" json:"allowed_types"`
+	AllowedTypes       string `gorm:"column:allowed_types;default:'image/jpeg,image/png,image/gif,image/webp'" json:"allowed_types"`
 	MainImageQuality   int    `gorm:"column:main_image_quality;default:85" json:"main_image_quality"`                                         // 主图WebP质量
 	SkipCompressFormat string `gorm:"column:skip_compress_formats;default:'image/gif,image/svg+xml,image/webp'" json:"skip_compress_formats"` // 跳过主图压缩/转换的格式
 	DefaultPath        string `gorm:"column:default_path;default:'/uploads/{year}/{moon}'" json:"default_path"`                               // 默认上传路径，支持时间、随机值、UUID、角色等魔法变量

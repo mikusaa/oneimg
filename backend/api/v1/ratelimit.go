@@ -2,6 +2,7 @@ package v1
 
 import (
 	"net/http"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -15,6 +16,10 @@ type rateWindow struct {
 }
 
 type rateLimiter struct {
+	*rateState
+}
+
+type rateState struct {
 	mu          sync.Mutex
 	windows     map[string]rateWindow
 	lastCleanup time.Time
@@ -22,19 +27,46 @@ type rateLimiter struct {
 
 const maxRateWindows = 10000
 
-func newRateLimiter() *rateLimiter { return &rateLimiter{windows: make(map[string]rateWindow)} }
+func newRateLimiter() *rateLimiter {
+	state := &rateState{windows: make(map[string]rateWindow)}
+	l := &rateLimiter{state}
+	stop := make(chan struct{})
+	runtime.AddCleanup(l, func(stop chan struct{}) { close(stop) }, stop)
+	go sweepRateWindows(state, stop)
+	return l
+}
+
+// The worker holds state, not its owner; retired routers do not leak a cleanup goroutine.
+func sweepRateWindows(state *rateState, stop <-chan struct{}) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case now := <-ticker.C:
+			state.mu.Lock()
+			state.cleanup(now)
+			state.mu.Unlock()
+		case <-stop:
+			return
+		}
+	}
+}
+
+func (state *rateState) cleanup(now time.Time) {
+	for identity, window := range state.windows {
+		if !window.Reset.After(now) {
+			delete(state.windows, identity)
+		}
+	}
+	state.lastCleanup = now
+}
 
 func (l *rateLimiter) allow(key string, limit int, duration time.Duration) (bool, time.Duration) {
 	now := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if now.Sub(l.lastCleanup) >= time.Minute || len(l.windows) >= maxRateWindows {
-		for identity, window := range l.windows {
-			if !window.Reset.After(now) {
-				delete(l.windows, identity)
-			}
-		}
-		l.lastCleanup = now
+		l.cleanup(now)
 	}
 	window, exists := l.windows[key]
 	if !exists && len(l.windows) >= maxRateWindows {

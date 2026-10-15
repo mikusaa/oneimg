@@ -28,6 +28,9 @@ func Init() *System {
 
 	// 初始化图片服务
 	images.InitImageService()
+	if err := images.ConfigureBudget(cfg.ImageMaxPixels, cfg.ImageMaxDimension); err != nil {
+		log.Fatal(err)
+	}
 	if err := passkeys.Init(cfg); err != nil {
 		log.Printf("Passkey 功能已禁用: %v", err)
 	} else {
@@ -47,6 +50,9 @@ func Init() *System {
 
 	// 初始化系统设置
 	InitSettings(db)
+	if err := MigrateImageTypes(db.DB); err != nil {
+		log.Fatalf("图像类型迁移失败: %v", err)
+	}
 	if err := InvalidateLegacyAPIAccess(db.DB); err != nil {
 		log.Fatalf("旧 API Token 清理失败: %v", err)
 	}
@@ -59,6 +65,11 @@ func Init() *System {
 
 	if err := ResetRemovedStorageDefaults(db.DB); err != nil {
 		log.Fatalf("已移除存储的默认配置修复失败: %v", err)
+	}
+	if count, err := services.CountSharedPhysicalObjects(db.DB); err != nil {
+		log.Fatalf("历史对象引用检查失败: %v", err)
+	} else if count > 0 {
+		log.Printf("发现 %d 个历史共享物理对象，仅报告，未改动文件", count)
 	}
 
 	r := &System{

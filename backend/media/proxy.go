@@ -14,6 +14,7 @@ import (
 	"oneimg/backend/models"
 	"oneimg/backend/utils/s3"
 	"oneimg/backend/utils/settings"
+	"oneimg/backend/utils/storageobject"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -95,6 +96,8 @@ func ImageProxy(c *gin.Context) bool {
 	} else {
 		imageUrl = imageModel.Url
 	}
+	// Preserve protective headers even when the backend returns a cache/error status.
+	mediaHeaders(c, mimeType, imageModel.Storage)
 
 	switch imageModel.Storage {
 	case "default":
@@ -160,21 +163,14 @@ func proxyLocalFile(c *gin.Context, realPath string, mimeType string) {
 		return
 	}
 	// 设置响应头
-	c.Header("Content-Type", mimeType)
-	c.Header("Cache-Control", "public, max-age=31536000")
-	c.Header("X-Storage-Type", "default")
-	c.Header("Access-Control-Allow-Origin", "*")
+	mediaHeaders(c, mimeType, "default")
 
 	// 流式传输
 	c.File(fullPath)
 }
 
 func localProxyPath(realPath string) string {
-	cleanPath := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(realPath)), "/")
-	if strings.HasPrefix(cleanPath, "thumbnails/") {
-		return filepath.Join(".", "data", cleanPath)
-	}
-	return filepath.Join(cleanPath)
+	return storageobject.LocalPath(realPath)
 }
 
 func isThumbnailPath(path string) bool {

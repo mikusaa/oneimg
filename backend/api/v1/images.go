@@ -10,6 +10,8 @@ import (
 
 	"oneimg/backend/models"
 	"oneimg/backend/services"
+	"oneimg/backend/utils/images"
+	"oneimg/backend/utils/storageobject"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -394,10 +396,11 @@ func (s *Server) uploadImages(c *gin.Context) {
 	for _, result := range results {
 		dto := uploadFileDTO{FileName: result.FileName}
 		if result.Error != nil {
+			code, detail, _ := uploadError(result.Error)
 			dto.Error = &struct {
 				Code   string `json:"code"`
 				Detail string `json:"detail"`
-			}{Code: "file_upload_failed", Detail: result.Error.Error()}
+			}{Code: code, Detail: detail}
 		} else {
 			record, readErr := s.services.Images.Get(result.ImageID)
 			if readErr != nil {
@@ -436,6 +439,14 @@ func (s *Server) importImage(c *gin.Context) {
 		writeProblem(c, http.StatusInternalServerError, "upload_options_failed", "读取上传限制失败")
 		return
 	}
+	ctx, release, err := images.AcquireProcessing(c.Request.Context())
+	if err != nil {
+		c.Header("Retry-After", "2")
+		writeProblem(c, http.StatusServiceUnavailable, "image_processing_busy", "图像处理繁忙，请稍后重试")
+		return
+	}
+	defer release()
+	c.Request = c.Request.WithContext(ctx)
 	header, err := services.DownloadRemoteImage(c.Request.Context(), input.URL, int64(setting.MaxFileSize))
 	switch {
 	case errors.Is(err, services.ErrImportURLInvalid):
@@ -473,7 +484,11 @@ func (s *Server) importImage(c *gin.Context) {
 		return
 	}
 	if results[0].Error != nil {
-		writeProblem(c, http.StatusBadGateway, "image_import_failed", results[0].Error.Error())
+		code, detail, status := uploadError(results[0].Error)
+		if status == http.StatusServiceUnavailable {
+			c.Header("Retry-After", "2")
+		}
+		writeProblem(c, status, code, detail)
 		return
 	}
 	item, err := s.services.Images.Get(results[0].ImageID)
@@ -483,4 +498,21 @@ func (s *Server) importImage(c *gin.Context) {
 	}
 	c.Header("Location", "/api/v1/images/"+itoa(item.Image.Id))
 	writeData(c, http.StatusCreated, toImageDTO(item), nil)
+}
+
+func uploadError(err error) (string, string, int) {
+	switch {
+	case errors.Is(err, images.ErrDimensionsExceeded):
+		return "image_dimensions_exceeded", "图片尺寸超过服务器处理预算（默认 4000 万像素，单边 16384）", http.StatusUnprocessableEntity
+	case errors.Is(err, images.ErrUnsupportedFormat), errors.Is(err, services.ErrImportNotImage):
+		return "unsupported_image_format", "不是有效的受支持栅格图片，SVG 不允许上传", http.StatusUnprocessableEntity
+	case errors.Is(err, images.ErrProcessingBusy):
+		return "image_processing_busy", "图像处理繁忙，请稍后重试", http.StatusServiceUnavailable
+	case errors.Is(err, storageobject.ErrConflict):
+		return "storage_object_conflict", "对象名称冲突，请重试", http.StatusConflict
+	case errors.Is(err, images.ErrFileTooLarge):
+		return "file_too_large", "文件超过实际字节大小限制", http.StatusUnprocessableEntity
+	default:
+		return "file_upload_failed", "文件上传失败，请检查存储配置或稍后重试", http.StatusBadGateway
+	}
 }

@@ -9,24 +9,28 @@ import (
 
 // 上传返回结构
 type ImageUploadResult struct {
-	Success          bool   `json:"success"`
-	Message          string `json:"message,omitempty"`
-	ID               int    `json:"id,omitempty"`
-	URL              string `json:"url,omitempty"`
-	ThumbnailURL     string `json:"thumbnail_url,omitempty"`
-	Storage          string `json:"storage,omitempty"`
-	FileName         string `json:"filename,omitempty"`
-	OriginalFileName string `json:"original_filename,omitempty"`
-	OriginalFileSize int64  `json:"original_file_size"`
-	FileSize         int64  `json:"file_size,omitempty"`
-	ThumbnailSize    int64  `json:"thumbnail_size,omitempty"`
-	MimeType         string `json:"mime_type,omitempty"`
-	Width            int    `json:"width,omitempty"`
-	Height           int    `json:"height,omitempty"`
-	ContentHash      string `json:"content_hash,omitempty"`
-	Duplicate        bool   `json:"duplicate,omitempty"`
-	CreatedAt        string `json:"created_at,omitempty"`
+	CreatedObjects   []CreatedObject `json:"-"`
+	Success          bool            `json:"success"`
+	Message          string          `json:"message,omitempty"`
+	ID               int             `json:"id,omitempty"`
+	URL              string          `json:"url,omitempty"`
+	ThumbnailURL     string          `json:"thumbnail_url,omitempty"`
+	Storage          string          `json:"storage,omitempty"`
+	FileName         string          `json:"filename,omitempty"`
+	OriginalFileName string          `json:"original_filename,omitempty"`
+	OriginalFileSize int64           `json:"original_file_size"`
+	FileSize         int64           `json:"file_size,omitempty"`
+	ThumbnailSize    int64           `json:"thumbnail_size,omitempty"`
+	MimeType         string          `json:"mime_type,omitempty"`
+	Width            int             `json:"width,omitempty"`
+	Height           int             `json:"height,omitempty"`
+	ContentHash      string          `json:"content_hash,omitempty"`
+	Duplicate        bool            `json:"duplicate,omitempty"`
+	CreatedAt        string          `json:"created_at,omitempty"`
 }
+
+// CreatedObject is a cleanup capability issued only after an acknowledged successful create.
+type CreatedObject struct{ Key string }
 
 // Upload 上传处理接口
 type StorageUploader interface {

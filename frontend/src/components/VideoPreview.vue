@@ -11,7 +11,7 @@
     <template #footer>
       <slot name="actions" />
       <a :href="url" target="_blank" rel="noopener noreferrer" class="soft-button">打开原文件</a>
-      <a :href="url" :download="media.file_name" class="soft-button">下载</a>
+      <a :href="url" :download="safeDownloadName(media.file_name || 'video')" class="soft-button">下载</a>
       <button class="primary-button" type="button" @click="close">关闭</button>
     </template>
   </AppDialog>
@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount, watch } from 'vue'
 import AppDialog from './AppDialog.vue'
-import { mediaLink, copyMediaText, type MediaRecord } from '@/utils/media'
+import { mediaLink, copyMediaText, safeDownloadName, type MediaRecord } from '@/utils/media'
 import Message from '@/utils/message'
 const props = defineProps<{ media: MediaRecord; url: string }>()
 const emit = defineEmits(['close'])

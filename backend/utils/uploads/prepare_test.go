@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/textproto"
 	"os"
+	"regexp"
 	"testing"
 
 	"oneimg/backend/models"
@@ -63,7 +64,7 @@ func TestPrepareVideoStreamsAndValidates(t *testing.T) {
 				t.Fatal("stream changed", err)
 			}
 			digest := sha256.Sum256(data)
-			if prepared.ContentHash != hex.EncodeToString(digest[:]) || prepared.FileSize != int64(len(data)) || prepared.MimeType != "video/"+format || prepared.UniqueFileName != "sample."+format {
+			if prepared.ContentHash != hex.EncodeToString(digest[:]) || prepared.FileSize != int64(len(data)) || prepared.MimeType != "video/"+format || !regexp.MustCompile(`^sample-[a-f0-9]{32}\.`+format+`$`).MatchString(prepared.UniqueFileName) {
 				t.Fatalf("invalid metadata: %+v", prepared)
 			}
 			prepared.Close()

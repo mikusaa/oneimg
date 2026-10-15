@@ -345,6 +345,7 @@
         </button>
       </template>
     </AppDialog>
+    <ImagePreview v-if="currentPreviewImage" :key="currentPreviewImage.id" :media="currentPreviewImage" :can-delete="true" @close="currentPreviewImage = null" @delete="deleteImage(currentPreviewImage.id); currentPreviewImage = null" />
     <VideoPreview v-if="videoPreview" :key="videoPreview.id" :media="videoPreview" :url="getFullUrl(videoPreview.url)" @close="videoPreview = null">
       <template #actions>
         <button class="danger-button" @click="deleteImage(videoPreview.id); videoPreview = null">删除</button>
@@ -360,6 +361,8 @@ import { computed, ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import AppDialog from '@/components/AppDialog.vue'
 import VideoPreview from '@/components/VideoPreview.vue'
+import ImagePreview from '@/components/ImagePreview.vue'
+import { safeMediaURL, safeDownloadName } from '@/utils/media'
 import { isVideo, fileVideoMime, mediaLink } from '@/utils/media'
 const videoPreview = ref(null)
 import PageHeader from '@/components/PageHeader.vue'
@@ -409,8 +412,8 @@ const selectedBucket = ref("1");
 // 预览相关
 const activeCopyMenu = ref(null);
 let previewCopyMenu = false;
-let currentPreviewImage = null;
-let previewModalInstance = null;
+const currentPreviewImage = ref(null);
+
 let queueSequence = 0;
 
 const uploadTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.id, label: tag.name })));
@@ -437,14 +440,7 @@ function isAdmin() {
 /**
  * 获取完整的图片URL
  */
-const getFullUrl = (path) => {
-  if (!path) return '';
-  if (typeof window === 'undefined') return path;
-  
-  // 处理绝对路径和相对路径
-  if (path.startsWith('http')) return path;
-  return `${window.location.origin}${path}`;
-};
+const getFullUrl = safeMediaURL;
 
 /**
  * 格式化文件大小
@@ -636,11 +632,7 @@ const deleteAsync = async (imageId) => {
       });
       
       // 如果删除的是当前预览的图片，关闭预览弹窗
-      if (currentPreviewImage?.id === imageId && previewModalInstance) {
-        previewModalInstance.close();
-        currentPreviewImage = null;
-        previewModalInstance = null;
-      }
+      if (currentPreviewImage.value?.id === imageId) currentPreviewImage.value = null;
       
       previewCopyMenu = false;
       activeCopyMenu.value = null;
@@ -1082,7 +1074,7 @@ const downloadImage = (image) => {
   const fullUrl = getFullUrl(image.url);
   const link = document.createElement('a');
   link.href = fullUrl;
-  link.download = image.file_name || `image-${Date.now()}.png`;
+  link.download = safeDownloadName(image.file_name || `image-${Date.now()}.png`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -1100,186 +1092,8 @@ const downloadImage = (image) => {
  * 图片预览功能
  */
 const previewImage = (image) => {
-  if (isVideo(image)) { videoPreview.value = image; return }
-  if (!image || !image.url) {
-    Message.error('图片信息不完整，无法预览', {
-      duration: 2000,
-      position: 'top-right'
-    });
-    return;
-  }
-  
-  currentPreviewImage = image;
-  const previewFileName = escapeHtml(getPreviewFileName(image));
-  const originalFileName = escapeHtml(image.original_file_name || image.file_name || '未知');
-  const sizeSummary = escapeHtml(getImageSizeSummary(image));
-  const spotlightDescription = escapeHtml(getSpotlightDescription(image));
-
-  const imageTags = image.tags || [];
-  const extraTagCount = Math.max(0, imageTags.length - 2);
-  const tagsHtml = imageTags.map((tag, index) => `
-    <div class="${index >= 2 ? 'home-preview-extra-tag hidden ' : ''}px-2 py-0.5 rounded bg-primary/10 dark:bg-primary/20 text-primary text-xs">
-      <span>${escapeHtml(tag.name)}</span>
-    </div>
-  `).join('') || '';
-  
-  // 构建预览弹窗内容
-  const previewContent = `
-    <div class="image-preview-popup w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden bg-white dark:bg-dark-200">
-      <!-- 顶部操作栏 -->
-      <div class="preview-header bg-light-50 pb-2 flex justify-between items-center gap-3">
-          <h3 class="min-w-0 flex-1 text-xs font-medium truncate" title="${previewFileName}">${previewFileName}</h3>
-          <div class="flex shrink-0 gap-1">
-              <!-- 下载按钮 -->
-              <button 
-                  class="px-3 py-1.5 text-xs bg-light-100 dark:bg-dark-300 hover:bg-light-200 whitespace-nowrap dark:hover:bg-dark-400 text-secondary rounded-md transition-colors duration-200 flex items-center gap-1"
-                  onclick="event.stopPropagation(); window.downloadPreviewImage()"
-              >
-                  <i class="ri-download-fill text-xs"></i>
-                  下载
-              </button>
-              <!-- 删除按钮 -->
-              <button 
-                  class="px-3 py-1.5 text-xs bg-danger/10 hover:bg-danger/20 whitespace-nowrap text-danger rounded-md transition-colors duration-200 flex items-center gap-1"
-                  onclick="event.stopPropagation(); window.deletePreviewImage(${image.id})"
-              >
-                  <i class="ri-delete-bin-fill text-xs"></i>
-                  删除
-              </button>
-          </div>
-      </div>
-      
-      <!-- 预览图片区域 -->
-      <div class="max-h-[360px] flex-1 overflow-auto flex items-center justify-center">
-          <a 
-              class="spotlight min-w-full max-w-full min-h-[260px] block" 
-              href="${getFullUrl(image.url)}" 
-              data-description="${spotlightDescription}"
-          >
-              <div class="relative max-w-full w-fill max-h-[360px] min-h-[260px] rounded-lg overflow-hidden animate-pulse flex items-center justify-center">
-                  <div class="absolute inset-0 flex items-center justify-center">
-                      <svg class="w-10 h-10 text-slate-300 animate-spin loading-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="transform: scaleX(-1) scaleY(-1);">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                  </div>
-                  <img 
-                      src="${getFullUrl(image.url)}"
-                      alt="${previewFileName}"
-                      class="max-w-full w-fill max-h-[360px] min-h-[260px] object-contain rounded-lg relative z-10 opacity-0 transition-opacity duration-300"
-                      onload="this.classList.remove('opacity-0'); this.parentElement.classList.remove('animate-pulse'); this.parentElement.querySelector('.loading-svg').classList.add('hidden');"
-                      onerror="this.parentElement.classList.remove('animate-pulse'); this.classList.remove('opacity-0'); this.src='${errorImg}';"
-                  />
-              </div>
-          </a>
-      </div>
-
-      <!-- 图片复制区域 -->
-      <div class="flex gap-1 flex-wrap items-center w-full mt-3 mb-3">
-          <p class="mr-1 text-xs text-secondary font-semibold">复制：</p>
-          <button 
-              onclick="window.copyPreviewImageLink('url')"
-              class="px-2 py-1 text-xs bg-primary shadow-md text-white dark:bg-dark-300 hover:bg-blue-800 rounded transition-colors duration-200">
-              <i class="ri-link text-xs w-4 text-center text-white"></i> URL
-          </button>
-
-          <button 
-              onclick="window.copyPreviewImageLink('html')"
-              class="px-2 py-1 text-xs bg-primary shadow-md text-white dark:bg-dark-300 hover:bg-blue-800 rounded transition-colors duration-200">
-              <i class="ri-code-fill text-xs w-4 text-center text-white"></i> HTML
-          </button>
-
-          <button 
-              onclick="window.copyPreviewImageLink('markdown')"
-              class="px-2 py-1 text-xs bg-primary shadow-md text-white dark:bg-dark-300 hover:bg-blue-800 rounded transition-colors duration-200">
-              <i class="ri-markdown-fill text-xs w-4 text-center text-white"></i> Markdown
-          </button>
-      </div>
-
-      <!-- 标签 -->
-      <div class="pt-2 flex flex-wrap gap-2 items-center">
-        <p class="mr-1 text-xs text-secondary font-semibold">标签：</p>
-        ${tagsHtml}
-        ${extraTagCount > 0 ? `<button
-          type="button"
-          onclick="window.toggleHomePreviewTags(this)"
-          data-count="${extraTagCount}"
-          class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-xs hover:text-slate-900 dark:bg-white/10 dark:text-slate-300 dark:hover:text-white">
-          +${extraTagCount}
-        </button>` : ''}
-      </div>
-      
-      <!-- 底部信息栏 -->
-      <div class="pt-2 flex flex-wrap gap-2 text-xs text-secondary">
-          <div class="flex items-center gap-1.5">
-              <i class="ri-ruler-line w-3.5 text-center"></i>
-              尺寸: ${image.width || '未知'}×${image.height || '未知'}
-          </div>
-          <div class="flex items-center gap-1.5">
-              <i class="ri-file-text-line w-3.5 text-center"></i>
-              原始文件名: ${originalFileName}
-          </div>
-          <div class="flex items-center gap-1.5">
-              <i class="ri-image-line w-3.5 text-center"></i>
-              ${sizeSummary}
-          </div>
-          <div class="flex items-center gap-1.5">
-              <i class="ri-hard-drive-3-line"></i>
-              存储: ${(image.storage === 'default' ? '本地' : image.storage) || '未知'}
-          </div>
-          <div class="flex items-center gap-1.5">
-              <i class="ri-user-line w-3.5 text-center"></i>
-              角色: ${Number(image.uploader_role) === 1 ? '管理员' : Number(image.uploader_role) === 3 ? '普通用户' : '已删除用户'}
-          </div>
-      </div>
-  </div>
-  `;
-
-  // 注册预览相关全局函数
-  window.copyPreviewImageLink = (type) => copyImageLink(currentPreviewImage, type);
-  window.downloadPreviewImage = () => downloadImage(currentPreviewImage);
-  window.toggleHomePreviewTags = button => {
-    const container = button.closest('.image-preview-popup');
-    const extraTags = Array.from(container?.querySelectorAll('.home-preview-extra-tag') ?? []) as HTMLElement[];
-    const shouldExpand = extraTags.some(tag => tag.classList.contains('hidden'));
-    extraTags.forEach(tag => tag.classList.toggle('hidden', !shouldExpand));
-    button.textContent = shouldExpand ? '收起' : `+${button.dataset.count}`;
-  };
-  window.deletePreviewImage = () => {
-    deleteImage(currentPreviewImage.id);
-    window.closePreviewModal?.();
-  };
-  window.closePreviewModal = () => {
-    if (previewModalInstance) {
-      previewModalInstance.close();
-      cleanupPreview();
-    }
-  };
-
-  // 创建预览弹窗
-  previewModalInstance = new PopupModal({
-    title: previewFileName,
-    content: previewContent,
-    type: 'default',
-    buttons: [{
-      text: '确定',
-      type: 'default',
-      callback: (modal) => modal.close()
-    }],
-    maskClose: true,
-    zIndex: 10000,
-    maxHeight: '90vh',
-    onClose: cleanupPreview
-  });
-
-  previewModalInstance.open();
-
-  // 阻止弹窗内容冒泡
-  nextTick(() => {
-    const previewContent = document.querySelector('.image-preview-popup');
-    if (previewContent) {
-      previewContent.addEventListener('click', (e) => e.stopPropagation());
-    }
-  });
+ if (isVideo(image)) { videoPreview.value = image; return }
+ currentPreviewImage.value = image;
 };
 
 /**
@@ -1334,19 +1148,7 @@ const postuploadbyurl = async (formData) => {
 /**
  * 清理预览相关资源
  */
-const cleanupPreview = () => {
-  // 清理全局函数
-  window.copyPreviewImageLink = null;
-  window.downloadPreviewImage = null;
-  window.deletePreviewImage = null;
-  window.closePreviewModal = null;
-  window.toggleHomePreviewTags = null;
-  
-  // 重置状态
-  currentPreviewImage = null;
-  previewModalInstance = null;
-  previewCopyMenu = false;
-};
+const cleanupPreview = () => { currentPreviewImage.value = null; };
 
 /**
  * 全局点击处理（关闭下拉菜单）

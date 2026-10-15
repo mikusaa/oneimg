@@ -234,6 +234,8 @@ func (s *StorageService) Delete(ctx context.Context, id int) error {
 	if id == 1 {
 		return ErrDefaultStorage
 	}
+	unlockBucket := lockBucket(id, true)
+	defer unlockBucket()
 	var bucket models.Buckets
 	if err := s.db.First(&bucket, id).Error; err != nil {
 		return err
@@ -242,8 +244,29 @@ func (s *StorageService) Delete(ctx context.Context, id int) error {
 	if err := s.db.Where("bucket_id = ?", id).Find(&images).Error; err != nil {
 		return err
 	}
+	var keys []string
+	var ids []int
 	for _, image := range images {
-		if err := deleteStoredImage(ctx, image, bucket); err != nil {
+		imageKeys, err := imageObjectKeys(image, bucket)
+		if err != nil {
+			return fmt.Errorf("%w: physical identity is unavailable", ErrStorageDelete)
+		}
+		keys = append(keys, imageKeys...)
+		ids = append(ids, image.Id)
+	}
+	unlock := lockObjects(keys)
+	defer unlock()
+	deleted := map[string]bool{}
+	for _, image := range images {
+		target, err := unreferencedImageObjects(s.db, image, bucket, ids)
+		if err != nil {
+			return err
+		}
+		target, err = distinctDeletionTarget(target, bucket, deleted)
+		if err != nil {
+			return fmt.Errorf("%w: physical identity is unavailable", ErrStorageDelete)
+		}
+		if err := deleteStoredImage(ctx, target, bucket); err != nil {
 			return fmt.Errorf("%w: %v", ErrStorageDelete, err)
 		}
 	}

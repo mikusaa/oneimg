@@ -326,6 +326,10 @@
         </button>
       </template>
     </AppDialog>
+    <ImagePreview v-if="imagePreviewOpen && currentPreviewImage" :key="currentPreviewImage.id" :media="currentPreviewImage"
+      :storage-name="presetBuckets.find(bucket => bucket.id == currentPreviewImage.bucket_id)?.name"
+      :can-delete="canManageImage(currentPreviewImage, 'image:delete')" :can-add-tag="canManageImage(currentPreviewImage, 'image:tag:add')" :can-delete-tag="canManageImage(currentPreviewImage, 'image:tag:delete')"
+      @close="imagePreviewOpen = false" @delete="deleteImage(currentPreviewImage.id); imagePreviewOpen = false" @add-tag="addImageTagModal(currentPreviewImage.id); imagePreviewOpen = false" @remove-tag="removePreviewTag" />
     <VideoPreview v-if="videoPreview" :key="videoPreview.id" :media="videoPreview" :url="getFullUrl(videoPreview.url)" @close="videoPreview = null">
       <div class="mt-3 flex flex-wrap gap-2"><span v-for="tag in videoPreview.tags" :key="tag.id" class="result-meta-pill">{{ tag.name }} <button v-if="canManageImage(videoPreview, 'image:tag:delete')" :aria-label="`移除标签 ${tag.name}`" @click="deleteImageTagAsync(videoPreview.id, tag.id)">×</button></span></div>
       <template #actions>
@@ -342,6 +346,8 @@ import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppDialog from '@/components/AppDialog.vue'
 import VideoPreview from '@/components/VideoPreview.vue'
+import ImagePreview from '@/components/ImagePreview.vue'
+import { safeMediaURL, safeDownloadName } from '@/utils/media'
 import { isVideo, mediaLink } from '@/utils/media'
 const videoPreview = ref(null)
 import PageHeader from '@/components/PageHeader.vue'
@@ -371,14 +377,7 @@ const STORAGE_MAP = {
  * @param {string} path - 图片相对路径
  * @returns {string} 完整URL
  */
-const getFullUrl = (path) => {
-  if (!path) return '';
-  if (typeof window === 'undefined') return path;
-  
-  // 处理绝对路径和相对路径
-  if (path.startsWith('http')) return path;
-  return `${window.location.origin}${path}`;
-};
+const getFullUrl = safeMediaURL;
 
 /**
  * 格式化文件大小
@@ -746,7 +745,7 @@ const deleteImageTagAsync = async (imageId, tagId) => {
       method: 'DELETE',
     });
 
-    const result = await response.json();
+    const result = response.status === 204 ? {} : await response.json();
     if (response.ok) {
       // 更新本地数据
       const image = images.value.find(item => item.id === imageId);
@@ -1141,288 +1140,13 @@ const handleImageError = (e) => {
  * @param {Object} image - 图片对象
  */
 const openPreview = (image) => {
-  if (isVideo(image)) { currentPreviewImage.value = image; videoPreview.value = image; return }
-  currentPreviewImage.value = image;
-  
-  // 生成预览弹窗内容
-  const previewContent = generatePreviewContent(image);
-  
-  const customModal = new PopupModal({
-    title: escapeHtml(getPreviewFileName(image)),
-    content: previewContent,
-    type: 'default',
-    buttons: [
-      {
-        text: '确定',
-        type: 'default',
-        callback: (modal) => {
-          modal.close();
-          // 清理全局函数
-          cleanPreviewGlobalFunctions();
-        }
-      }
-    ],
-    maskClose: true,
-    zIndex: 10000,
-    maxHeight: '90vh'
-  });
-
-  // 注册弹窗操作函数
-  registerPreviewGlobalFunctions(customModal);
-
-  customModal.open();
+ currentPreviewImage.value = image;
+ if (isVideo(image)) { videoPreview.value = image; imagePreviewOpen.value = false; return }
+ imagePreviewOpen.value = true;
 };
-
-/**
- * 生成预览弹窗内容
- * @param {Object} image - 图片对象
- * @returns {string} HTML字符串
- */
-const generatePreviewContent = (image) => {
-  const altText = escapeHtml(getImageAltText(image));
-  const sizeSummary = escapeHtml(getImageSizeSummary(image));
-  const spotlightDescription = escapeHtml(getSpotlightDescription(image));
-  const canDelete = canManageImage(image, 'image:delete');
-  const canAddTag = canManageImage(image, 'image:tag:add');
-  const canDeleteTag = canManageImage(image, 'image:tag:delete');
-  const roleClass = getRoleName(image) === '管理员'
-    ? 'background-color: #e0f2fe; color: #0369a1; dark:background-color: #075985; dark:color: #bae6fd;' 
-    : getRoleName(image) === '普通用户'
-      ? 'background-color: #e0e7ff; color: #3730a3;'
-      : 'background-color: #dcfce7; color: #166534; dark:background-color: #14532d; dark:color: #bbf7d0;';
-  
-  const imageTags = image.tags || [];
-  const extraTagCount = Math.max(0, imageTags.length - 2);
-  const tagsHtml = imageTags.map((tag, index) => `
-    <div class="${index >= 2 ? 'preview-extra-tag hidden ' : ''}px-2 py-0.5 rounded bg-primary/10 dark:bg-primary/20 text-primary text-xs" data-tag-id="${tag.id}" data-image-id="${image.id}">
-      <span>${escapeHtml(tag.name)}</span>
-      ${canDeleteTag ? `<button
-        onclick="window.deleteImageTag(event, ${image.id}, ${tag.id})"
-        class="ml-1 text-primary/70 hover:text-primary/30">
-        <i class="ri-close-line text-xs"></i>
-      </button>` : ''}
-    </div>
-  `).join('') || '';
-
-  return `
-    <div class="image-preview-popup w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden bg-white dark:bg-dark-200">
-      <!-- 顶部操作栏 -->
-      <div class="preview-header bg-light-50 pb-2 flex justify-between items-center">
-        <div class="flex items-center gap-2">
-          <span class="text-xs px-2 py-0.5 rounded" style="${roleClass}">
-            ${getRoleName(image)}
-          </span>
-          <span class="text-xs text-white px-2 py-0.5 rounded bg-success">
-            ${escapeHtml(presetBuckets.value.find(bucket => bucket.id == image.bucket_id)?.name || '未知')}
-          </span>
-        </div>
-        <div class="flex gap-1">
-          <!-- 下载按钮 -->
-          <button 
-            class="px-3 py-1.5 text-xs bg-light-100 dark:bg-dark-300 hover:bg-light-200 whitespace-nowrap dark:hover:bg-dark-400 text-secondary rounded-md transition-colors duration-200 flex items-center gap-1"
-            onclick="event.stopPropagation(); window.downloadPreviewImage()"
-          >
-            <i class="ri-download-fill text-xs"></i>
-            下载
-          </button>
-          ${canDelete ? `<button
-            class="px-3 py-1.5 text-xs bg-danger/10 hover:bg-danger/20 whitespace-nowrap text-danger rounded-md transition-colors duration-200 flex items-center gap-1"
-            onclick="event.stopPropagation(); window.deletePreviewImage(${image.id})"
-          >
-            <i class="ri-delete-bin-fill text-xs"></i>
-            删除
-          </button>` : ''}
-        </div>
-      </div>
-      
-      <!-- 预览图片区域 -->
-      <div class="max-h-[360px] flex-1 overflow-auto flex items-center justify-center">
-        <a 
-          class="spotlight min-w-full max-w-full min-h-[260px] block" 
-          href="${getFullUrl(image.url)}" 
-          data-description="${spotlightDescription}"
-        >
-          <div class="relative max-w-full w-fill max-h-[360px] min-h-[260px] rounded-lg overflow-hidden animate-pulse flex items-center justify-center">
-            <div class="absolute inset-0 flex items-center justify-center">
-              <svg class="w-10 h-10 text-slate-300 animate-spin loading-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="transform: scaleX(-1) scaleY(-1);">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </div>
-            <img 
-              src="${getFullUrl(image.url)}"
-              alt="${altText}" 
-              class="max-w-full w-fill max-h-[360px] min-h-[260px] object-contain rounded-lg relative z-10 opacity-0 transition-opacity duration-300"
-              onload="this.classList.remove('opacity-0'); this.parentElement.classList.remove('animate-pulse'); this.parentElement.querySelector('.loading-svg').classList.add('hidden');"
-              onerror="this.parentElement.classList.remove('animate-pulse'); this.classList.remove('opacity-0'); this.src='${errorImg}';"
-            />
-          </div>
-        </a>
-      </div>
-
-      <!-- 图片复制区域 -->
-      <div class="flex gap-1 flex-wrap items-center w-full mt-3 mb-3">
-        <p class="mr-1 text-xs text-secondary font-semibold">复制：</p>
-        <button 
-          onclick="window.copyPreviewImageLink('url')"
-          class="px-2 py-1 text-xs bg-primary shadow-md text-white dark:bg-dark-300 hover:bg-blue-800 rounded transition-colors duration-200">
-          <i class="ri-link text-xs w-4 text-center text-white"></i> URL
-        </button>
-        <button 
-          onclick="window.copyPreviewImageLink('html')"
-          class="px-2 py-1 text-xs bg-primary shadow-md text-white dark:bg-dark-300 hover:bg-blue-800 rounded transition-colors duration-200">
-          <i class="ri-code-fill text-xs w-4 text-center text-white"></i> HTML
-        </button>
-        <button 
-          onclick="window.copyPreviewImageLink('markdown')"
-          class="px-2 py-1 text-xs bg-primary shadow-md text-white dark:bg-dark-300 hover:bg-blue-800 rounded transition-colors duration-200">
-          <i class="ri-markdown-fill text-xs w-4 text-center text-white"></i> Markdown
-        </button>
-      </div>
-
-      <!-- 标签 -->
-      <div class="pt-2 flex flex-wrap gap-2 items-center">
-        <p class="mr-1 text-xs text-secondary font-semibold">标签：</p>
-        ${tagsHtml}
-        ${extraTagCount > 0 ? `<button
-          type="button"
-          onclick="window.togglePreviewTags(this)"
-          data-count="${extraTagCount}"
-          class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-xs hover:text-slate-900 dark:bg-white/10 dark:text-slate-300 dark:hover:text-white">
-          +${extraTagCount}
-        </button>` : ''}
-        ${canAddTag ? `<button
-          onclick="window.addImageTag(${image.id})"
-          class="flex items-center px-2 py-1 bg-success/10 dark:bg-success/20 text-success rounded-full text-xs hover:text-success/30 transition-colors">
-          <i class="ri-add-line"></i>
-        </button>` : ''}
-      </div>
-      
-      <!-- 底部信息栏 -->
-      <div class="pt-2 flex flex-wrap gap-2 text-xs text-secondary">
-        <div class="flex items-center gap-1.5">
-          <i class="ri-ruler-line w-3.5 text-center"></i>
-          尺寸: ${image.width || '未知'}×${image.height || '未知'}
-        </div>
-        <div class="flex items-center gap-1.5">
-          <i class="ri-file-text-line w-3.5 text-center"></i>
-          原始文件名: ${escapeHtml(image.original_file_name || image.file_name || '未知')}
-        </div>
-        <div class="flex items-center gap-1.5">
-          <i class="ri-image-line w-3.5 text-center"></i>
-          ${sizeSummary}
-        </div>
-        <div class="flex items-center gap-1.5">
-          <i class="ri-hard-drive-3-line"></i>
-          存储: ${STORAGE_MAP[image.storage] || image.storage || '未知'}
-        </div>
-        <div class="flex items-center gap-1.5">
-          <i class="ri-user-line"></i>
-          角色: ${getRoleName(image)}
-        </div>
-      </div>
-    </div>
-  `;
-};
-
-/**
- * 注册预览弹窗全局函数
- * @param {Object} modal - 弹窗实例
- */
-const registerPreviewGlobalFunctions = modal => {
-  // 复制图片链接
-  window.copyPreviewImageLink = (type) => {
-    if (!currentPreviewImage.value) return;
-    const image = currentPreviewImage.value;
-    const copyText = mediaLink(image, type, getFullUrl(image.url));
-    try {
-      navigator.clipboard.writeText(copyText);
-      Message.success(`已复制${type.toUpperCase()}格式链接`);
-    } catch (error) {
-      // 降级处理
-      const textArea = document.createElement('textarea');
-      textArea.value = copyText;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      Message.success(`已复制${type.toUpperCase()}格式链接`);
-    }
-  };
-
-  // 下载文件
-  window.downloadPreviewImage = () => {
-    if (!currentPreviewImage.value) return;
-    const image = currentPreviewImage.value;
-    const link = document.createElement('a');
-    link.href = getFullUrl(image.url);
-    link.download = image.file_name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    Message.success('下载已开始');
-  };
-
-  // 删除预览图片
-  window.deletePreviewImage = async (id) => {
-    modal.close();
-    await deleteImage(id);
-  };
-
-  // 添加标签
-  window.addImageTag = (id) => {
-    modal.close();
-    addImageTagModal(id);
-  };
-
-  window.togglePreviewTags = button => {
-    const container = button.closest('.image-preview-popup');
-    const extraTags = Array.from(container?.querySelectorAll('.preview-extra-tag') ?? []) as HTMLElement[];
-    const shouldExpand = extraTags.some(tag => tag.classList.contains('hidden'));
-    extraTags.forEach(tag => tag.classList.toggle('hidden', !shouldExpand));
-    button.textContent = shouldExpand ? '收起' : `+${button.dataset.count}`;
-  };
-
-  // 删除标签
-  window.deleteImageTag = async (event, imgId, tagId) => {
-    event.preventDefault();
-    if (await deleteImageTagAsync(imgId, tagId)) {
-      modal.close();
-      openPreview(currentPreviewImage.value);
-    }
-  };
-
-  // 切换复制菜单（预留）
-  window.togglePreviewCopyMenu = () => {
-    const dropdown = document.getElementById('previewCopyDropdown');
-    const icon = document.getElementById('copyMenuIcon');
-    if (dropdown && icon) {
-      const isHidden = dropdown.classList.contains('hidden');
-      if (isHidden) {
-        dropdown.classList.remove('hidden', 'opacity-0', 'translate-y-[-5px]');
-        dropdown.classList.add('block', 'opacity-100', 'translate-y-0');
-        icon.classList.add('rotate-180');
-      } else {
-        dropdown.classList.add('hidden', 'opacity-0', 'translate-y-[-5px]');
-        dropdown.classList.remove('block', 'opacity-100', 'translate-y-0');
-        icon.classList.remove('rotate-180');
-      }
-    }
-  };
-};
-
-/**
- * 清理预览弹窗全局函数
- */
-const cleanPreviewGlobalFunctions = () => {
-  [
-    'togglePreviewCopyMenu',
-    'copyPreviewImageLink',
-    'downloadPreviewImage',
-    'deletePreviewImage',
-    'addImageTag',
-    'deleteImageTag',
-    'togglePreviewTags'
-  ].forEach(fnName => delete window[fnName]);
+const imagePreviewOpen = ref(false);
+const removePreviewTag = async (tagID: number) => {
+ if (currentPreviewImage.value) await deleteImageTagAsync(currentPreviewImage.value.id, tagID);
 };
 
 /**
@@ -1496,7 +1220,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   // 清理全局函数和资源
-  cleanPreviewGlobalFunctions();
+  imagePreviewOpen.value = false;
 });
 </script>
 

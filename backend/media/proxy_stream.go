@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -31,11 +32,39 @@ func AllowReadMethod(c *gin.Context) bool {
 }
 
 func mediaHeaders(c *gin.Context, mime, storage string) {
+	if strings.EqualFold(strings.SplitN(mime, ";", 2)[0], "image/svg+xml") || strings.EqualFold(filepath.Ext(c.Request.URL.Path), ".svg") {
+		mime = "image/svg+xml"
+		svgHeaders(c.Writer.Header())
+		if _, wrapped := c.Writer.(*svgPolicyWriter); !wrapped {
+			c.Writer = &svgPolicyWriter{c.Writer}
+		}
+	} else {
+		c.Header("Cache-Control", "public, max-age=31536000")
+	}
 	c.Header("Content-Type", mime)
-	c.Header("Cache-Control", "public, max-age=31536000")
 	c.Header("X-Storage-Type", storage)
 	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length")
+}
+
+func svgHeaders(header http.Header) {
+	header.Set("Content-Type", "image/svg+xml")
+	header.Set("X-Content-Type-Options", "nosniff")
+	header.Set("Content-Security-Policy", "sandbox; default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; object-src 'none'; base-uri 'none'; form-action 'none'")
+	header.Set("Cache-Control", "no-cache, max-age=0, must-revalidate")
+}
+
+// ServeContent removes Content-Type on 304. Reinstate the policy at the final write boundary.
+type svgPolicyWriter struct{ gin.ResponseWriter }
+
+func (w *svgPolicyWriter) WriteHeader(code int) {
+	svgHeaders(w.Header())
+	w.ResponseWriter.WriteHeader(code)
+}
+func (w *svgPolicyWriter) WriteHeaderNow() { svgHeaders(w.Header()); w.ResponseWriter.WriteHeaderNow() }
+func (w *svgPolicyWriter) Write(data []byte) (int, error) {
+	svgHeaders(w.Header())
+	return w.ResponseWriter.Write(data)
 }
 
 // singleRange ignores unsupported units and multi-range requests. Invalid byte ranges return 416.
@@ -183,7 +212,7 @@ func proxyWebDAVFile(c *gin.Context, path, mime string, _ int64, bucket models.B
 		return
 	}
 	client := webdav.Client(webdav.Config{BaseURL: cfg.WebdavURL, Username: cfg.WebdavUser, Password: cfg.WebdavPass, Timeout: 30 * time.Second})
-	resp, err := client.WebDAVMedia(c.Request.Context(), path, c.Request.Method, requestedRange(c), c.GetHeader("If-Range"))
+	resp, err := client.WebDAVMedia(c.Request.Context(), path, c.Request.Method, requestedRange(c), c.GetHeader("If-Range"), c.GetHeader("If-None-Match"), c.GetHeader("If-Modified-Since"))
 	if err != nil {
 		c.Status(http.StatusBadGateway)
 		return

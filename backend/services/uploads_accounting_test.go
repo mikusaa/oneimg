@@ -20,7 +20,8 @@ type accountingUploader struct {
 
 func (u accountingUploader) Upload(_ *gin.Context, _ *models.Settings, _ *models.Buckets, file *multipart.FileHeader) (*interfaces.ImageUploadResult, error) {
 	return &interfaces.ImageUploadResult{
-		Success: true, URL: "/" + file.Filename, ThumbnailURL: "/thumb-" + file.Filename,
+		CreatedObjects: []interfaces.CreatedObject{{Key: "/" + file.Filename}, {Key: "/thumb-" + file.Filename}},
+		Success:        true, URL: "/" + file.Filename, ThumbnailURL: "/thumb-" + file.Filename,
 		Storage: u.storage, FileName: file.Filename, FileSize: u.fileSize, ThumbnailSize: u.thumbnailSize,
 	}, nil
 }
@@ -67,8 +68,8 @@ func TestUploadAccountingIsTransactionalForDefaultAndRemoteBuckets(t *testing.T)
 			if len(results) != 2 || results[0].Error != nil || !errors.Is(results[1].Error, ErrStorageCapacityExceeded) {
 				t.Fatalf("results = %#v", results)
 			}
-			if cleanupCalls != 1 {
-				t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
+			if cleanupCalls != 2 {
+				t.Fatalf("cleanup calls = %d, want 2", cleanupCalls)
 			}
 			var bucket models.Buckets
 			if err := db.First(&bucket, test.bucketID).Error; err != nil {

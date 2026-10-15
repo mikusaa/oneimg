@@ -1,14 +1,20 @@
 package localimport
 
 import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -212,15 +218,32 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 		return nil
 	}
 
-	fileBytes, err := os.ReadFile(path)
+	ctx, release, err := images.AcquireProcessing(context.Background())
+	if err != nil {
+		return err
+	}
+	defer release()
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	var setting models.Settings
+	if err := i.db.First(&setting).Error; err != nil {
+		return err
+	}
+	fileBytes, err := images.ReadBounded(ctx, file, int64(setting.MaxFileSize))
 	if err != nil {
 		return fmt.Errorf("read file: %w", err)
 	}
 
 	mimeType := detectImageMimeType(path, fileBytes)
-	info, err := images.ImageSvc.InspectOriginalImage(fileBytes, filepath.Base(path), mimeType)
+	info, err := images.ImageSvc.InspectOriginalImageContext(ctx, fileBytes, filepath.Base(path), mimeType)
 	if err != nil {
 		return err
+	}
+	if !slices.Contains(strings.Split(setting.AllowedTypes, ","), info.MimeType) {
+		return images.ErrUnsupportedFormat
 	}
 	mimeType = info.MimeType
 	if mimeType == "" {
@@ -230,6 +253,11 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 	thumbnailURL := ""
 	if len(info.ThumbnailBytes) > 0 {
 		thumbnailURL = thumbnailURLFromImageURL(imageURL)
+		id, err := images.NewObjectID()
+		if err != nil {
+			return err
+		}
+		thumbnailURL = strings.TrimSuffix(thumbnailURL, ".webp") + "-" + id + ".webp"
 		if !i.options.DryRun {
 			if err := i.writeThumbnail(thumbnailURL, info.ThumbnailBytes); err != nil {
 				return fmt.Errorf("write thumbnail: %w", err)
@@ -291,11 +319,20 @@ func (i *Importer) updateExistingImage(existing *models.Image, path string, crea
 		updates["created_at"] = createdAt
 	}
 	if strings.TrimSpace(existing.ContentHash) == "" {
-		fileBytes, err := os.ReadFile(path)
+		file, err := os.Open(path)
 		if err != nil {
 			return false, fmt.Errorf("read file for content hash: %w", err)
 		}
-		updates["content_hash"] = images.HashBytes(fileBytes)
+		hash := sha256.New()
+		_, copyErr := io.Copy(hash, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return false, copyErr
+		}
+		if closeErr != nil {
+			return false, closeErr
+		}
+		updates["content_hash"] = hex.EncodeToString(hash.Sum(nil))
 	}
 	if strings.TrimSpace(existing.OriginalFileName) == "" {
 		updates["original_filename"] = filepath.Base(path)
@@ -324,7 +361,19 @@ func (i *Importer) writeThumbnail(thumbnailURL string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(thumbPath), 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(thumbPath, data, 0644)
+	file, err := os.OpenFile(thumbPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(file, bytes.NewReader(data))
+	closeErr := file.Close()
+	if err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(thumbPath)
+	}
+	return err
 }
 
 func (i *Importer) createdAtForImage(imageURL string, fileInfo os.FileInfo) (time.Time, error) {
@@ -421,7 +470,7 @@ func detectImageMimeType(path string, fileBytes []byte) string {
 
 func isSupportedImageFile(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg":
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
 		return true
 	default:
 		return false

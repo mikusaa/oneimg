@@ -270,7 +270,7 @@
                                         type="text"
                                         class="input-modern"
                                         :disabled="systemSettings.original_image"
-                                        placeholder="image/gif,image/svg+xml,image/webp"
+                                        placeholder="image/gif,image/webp"
                                         @blur="handleFieldBlur('skip_compress_formats', systemSettings.skip_compress_formats)"
                                     >
                                     <p class="field-hint">支持 MIME 或扩展名，使用英文逗号分隔；命中后主图保持原格式。</p>
@@ -499,9 +499,9 @@ const systemSettings = reactive({
     max_file_size: 10485760,
     video_upload_enabled: false,
     max_video_file_size: 104857600,
-    allowed_types: 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml',
+    allowed_types: 'image/jpeg,image/png,image/gif,image/webp',
     main_image_quality: 85,
-    skip_compress_formats: 'image/gif,image/svg+xml,image/webp',
+    skip_compress_formats: 'image/gif,image/webp',
     default_path: '/uploads/{year}/{moon}',
     file_name: '{random}',
     public_image_domain: '',
@@ -715,7 +715,7 @@ const handleFieldBlur = (key, rawValue) => {
         value = String(value || '').trim()
         if (value === '') {
             message.warning('跳过压缩格式不能为空')
-            systemSettings.skip_compress_formats = updateSetting.skip_compress_formats || 'image/gif,image/svg+xml,image/webp'
+            systemSettings.skip_compress_formats = updateSetting.skip_compress_formats || 'image/gif,image/webp'
             return
         }
         systemSettings.skip_compress_formats = value

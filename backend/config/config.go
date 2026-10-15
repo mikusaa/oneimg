@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -32,10 +33,12 @@ type Config struct {
 	ConfigSecret string
 
 	// Passkey / WebAuthn配置
-	PasskeyRPID    string
-	PasskeyOrigins []string
-	PasskeyRPName  string
-	TrustedProxies []string
+	PasskeyRPID       string
+	PasskeyOrigins    []string
+	PasskeyRPName     string
+	TrustedProxies    []string
+	ImageMaxPixels    int
+	ImageMaxDimension int
 }
 
 // 全局配置实例
@@ -84,6 +87,8 @@ func CreateDefaultEnv() {
 SERVER_PORT=8080
 APP_URL=http://localhost:8080
 TRUSTED_PROXIES=
+IMAGE_MAX_PIXELS=40000000
+IMAGE_MAX_DIMENSION=16384
 
 # SQLite 数据库
 SQLITE_PATH=./data/data.db
@@ -177,6 +182,14 @@ func NewConfig() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	pixels, err := processLimit("IMAGE_MAX_PIXELS", 40000000)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dimension, err := processLimit("IMAGE_MAX_DIMENSION", 16384)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// 初始化全局配置
 	App = &Config{
@@ -191,9 +204,22 @@ func NewConfig() {
 		PasskeyOrigins: passkeyOrigins,
 		PasskeyRPName:  passkeyRPName,
 		TrustedProxies: trustedProxies,
+		ImageMaxPixels: pixels, ImageMaxDimension: dimension,
 	}
 
 	log.Println("✅ 配置初始化完成")
+}
+
+func processLimit(key string, maximum int) (int, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return maximum, nil
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n <= 0 || n > maximum {
+		return 0, fmt.Errorf("%s must be positive and at most %d", key, maximum)
+	}
+	return n, nil
 }
 
 // ParseTrustedProxies accepts explicit addresses only, never hostnames or the entire Internet.

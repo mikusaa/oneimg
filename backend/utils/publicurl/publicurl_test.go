@@ -1,10 +1,23 @@
 package publicurl
 
 import (
+	"net/url"
 	"testing"
 
 	"oneimg/backend/models"
 )
+
+func TestHistoricalPathDataIsNotURLSyntax(t *testing.T) {
+	raw := `/uploads/photo"#?%2F.png`
+	got := BuildForStorage(models.Settings{}, "default", 1, raw)
+	u, err := url.Parse(got)
+	if err != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != raw {
+		t.Fatal(got, err)
+	}
+	if EncodeMediaPath("javascript:alert(1)") != "" {
+		t.Fatal("active scheme accepted")
+	}
+}
 
 func TestBuildForStorageOnlyRewritesDefaultSupportedBucket(t *testing.T) {
 	setting := models.Settings{

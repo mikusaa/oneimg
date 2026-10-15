@@ -3,6 +3,7 @@ package images
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"image"
 	"image/color"
 	"image/gif"
@@ -10,6 +11,8 @@ import (
 	"image/png"
 	"mime/multipart"
 	"net/textproto"
+	"os"
+	"regexp"
 	"testing"
 
 	"github.com/chai2010/webp"
@@ -543,17 +546,6 @@ func TestShouldSkipCompressionSupportsMimeExtensionAndCase(t *testing.T) {
 	}
 }
 
-func TestShouldKeepOriginalOnDecodeErrorOnlyForSkippedWebP(t *testing.T) {
-	svc := &ImageService{}
-
-	if !svc.shouldKeepOriginalOnDecodeError("webp", "image/webp", "image/webp") {
-		t.Fatal("shouldKeepOriginalOnDecodeError() should keep skipped webp")
-	}
-	if svc.shouldKeepOriginalOnDecodeError("png", "image/png", "image/png") {
-		t.Fatal("shouldKeepOriginalOnDecodeError() should not keep failed png")
-	}
-}
-
 func TestProcessImageSaveOriginalNameUsesFinalExtension(t *testing.T) {
 	svc := &ImageService{}
 	fileBytes, _ := testLargePNGBytes(t)
@@ -567,7 +559,7 @@ func TestProcessImageSaveOriginalNameUsesFinalExtension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProcessImage() error = %v", err)
 	}
-	if processed.UniqueFileName != "sample.webp" {
+	if !regexp.MustCompile(`^sample-[a-f0-9]{32}\.webp$`).MatchString(processed.UniqueFileName) {
 		t.Fatalf("ProcessImage() filename = %q, want sample.webp", processed.UniqueFileName)
 	}
 	if processed.MimeType != "image/webp" || processed.OutputExt != ".webp" {
@@ -594,7 +586,7 @@ func TestProcessImageKeepsOriginalMetadataWhenWebPSavingsAreTooSmall(t *testing.
 	if !bytes.Equal(processed.CompressedBytes, fileBytes) {
 		t.Fatal("ProcessImage() should keep the original bytes when savings are below the absolute threshold")
 	}
-	if processed.UniqueFileName != "sample.png" || processed.MimeType != "image/png" || processed.OutputExt != ".png" {
+	if !regexp.MustCompile(`^sample-[a-f0-9]{32}\.png$`).MatchString(processed.UniqueFileName) || processed.MimeType != "image/png" || processed.OutputExt != ".png" {
 		t.Fatalf("ProcessImage() = %q %q %q, want sample.png image/png .png", processed.UniqueFileName, processed.MimeType, processed.OutputExt)
 	}
 	if processed.ContentHash != HashBytes(fileBytes) {
@@ -639,54 +631,33 @@ func TestProcessImageGIFGeneratesWebPThumbnail(t *testing.T) {
 	}
 }
 
-func TestProcessImageSVGHasNoThumbnail(t *testing.T) {
+func TestProcessImageRejectsSVGAndInvalidWebP(t *testing.T) {
 	svc := &ImageService{}
-	fileBytes := []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>`)
-	header := testHeader("sample.svg", "image/svg+xml", len(fileBytes))
-
-	processed, err := svc.ProcessImage(readSeekCloser{bytes.NewReader(fileBytes)}, header, models.Settings{}, 1)
-	if err != nil {
-		t.Fatalf("ProcessImage() error = %v", err)
-	}
-	if len(processed.ThumbnailBytes) != 0 {
-		t.Fatal("ProcessImage() should not generate svg thumbnail")
+	for _, data := range [][]byte{[]byte(`<svg xmlns="http://www.w3.org/2000/svg"/>`), testWebPVP8XBytes(640, 360), []byte("not a decodable webp")} {
+		for _, name := range []string{"fake.png", "fake.webp", "fake.svg"} {
+			if _, err := svc.ProcessImage(bytes.NewReader(data), testHeader(name, "image/png", len(data)), models.Settings{OriginalImage: true, SkipCompressFormat: "image/webp"}, 1); !errors.Is(err, ErrUnsupportedFormat) {
+				t.Fatalf("accepted invalid input %s: %v", name, err)
+			}
+		}
 	}
 }
 
-func TestProcessImageSkippedWebPBypassesDecode(t *testing.T) {
-	svc := &ImageService{}
-	fileBytes := testWebPVP8XBytes(640, 360)
-	header := testHeader("animated.webp", "image/webp", len(fileBytes))
-
-	processed, err := svc.ProcessImage(readSeekCloser{bytes.NewReader(fileBytes)}, header, models.Settings{
-		SkipCompressFormat: "image/webp",
-	}, 1)
+func TestProcessImagePreservesValidAnimatedWebP(t *testing.T) {
+	data, err := os.ReadFile("testdata/animated.webp")
 	if err != nil {
-		t.Fatalf("ProcessImage() error = %v", err)
+		t.Fatal(err)
 	}
-	if !bytes.Equal(processed.CompressedBytes, fileBytes) {
-		t.Fatal("ProcessImage() should keep skipped webp bytes")
-	}
-	if processed.MimeType != "image/webp" || processed.OutputExt != ".webp" || processed.Width != 640 || processed.Height != 360 {
-		t.Fatalf("ProcessImage() = mime %q ext %q size %dx%d, want image/webp .webp 640x360", processed.MimeType, processed.OutputExt, processed.Width, processed.Height)
-	}
-	if len(processed.ThumbnailBytes) != 0 {
-		t.Fatal("ProcessImage() should not generate thumbnail for skipped undecodable webp")
-	}
-}
-
-func TestProcessImageSkippedInvalidWebPStillUploadsWithoutSize(t *testing.T) {
 	svc := &ImageService{}
-	fileBytes := []byte("not a decodable animated webp")
-	header := testHeader("animated.webp", "image/webp", len(fileBytes))
-
-	processed, err := svc.ProcessImage(readSeekCloser{bytes.NewReader(fileBytes)}, header, models.Settings{
-		SkipCompressFormat: "image/webp",
-	}, 1)
+	processed, err := svc.ProcessImage(bytes.NewReader(data), testHeader("animated.webp", "image/webp", len(data)), models.Settings{}, 1)
 	if err != nil {
-		t.Fatalf("ProcessImage() error = %v", err)
+		t.Fatal(err)
 	}
-	if processed.Width != 0 || processed.Height != 0 {
-		t.Fatalf("ProcessImage() size = %dx%d, want 0x0", processed.Width, processed.Height)
+	if !bytes.Equal(data, processed.CompressedBytes) || processed.Width != 16 || processed.Height != 16 || len(processed.ThumbnailBytes) != 0 {
+		t.Fatal("animation changed")
+	}
+	for _, bad := range [][]byte{data[:len(data)-1], data[:32]} {
+		if _, err := svc.ProcessImage(bytes.NewReader(bad), testHeader("a.webp", "image/webp", len(bad)), models.Settings{}, 1); err == nil {
+			t.Fatal("truncated animation accepted")
+		}
 	}
 }

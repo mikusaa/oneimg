@@ -9,6 +9,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
+	"oneimg/backend/utils/storageobject"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,6 +22,16 @@ type Config struct {
 	Username string
 	Password string
 	Timeout  time.Duration
+}
+
+func (c *WebDAVClient) objectURL(path string) string {
+	u, err := url.Parse(c.config.BaseURL)
+	if err != nil {
+		return ""
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + "/" + c.NormalizePath(path)
+	u.RawPath = ""
+	return u.String()
 }
 
 type WebDAVClient struct {
@@ -64,7 +76,7 @@ func (c *WebDAVClient) NormalizePath(path string) string {
 func (c *WebDAVClient) WebDAVStat(ctx context.Context, path string) (bool, error) {
 	// 标准化路径
 	cleanPath := c.NormalizePath(path)
-	fullURL := c.config.BaseURL + cleanPath
+	fullURL := c.objectURL(cleanPath)
 
 	req, err := http.NewRequestWithContext(ctx, "PROPFIND", fullURL, nil)
 	if err != nil {
@@ -128,7 +140,7 @@ func (c *WebDAVClient) WebDAVMkdirAll(ctx context.Context, dirPath string) error
 		}
 
 		// 构建 MKCOL 请求（创建目录）
-		fullURL := c.config.BaseURL + currentPath
+		fullURL := c.objectURL(currentPath)
 		req, err := http.NewRequestWithContext(ctx, "MKCOL", fullURL, nil)
 		if err != nil {
 			return fmt.Errorf("构建创建目录请求失败：%w", err)
@@ -182,7 +194,7 @@ func (c *WebDAVClient) WebDAVUpload(ctx context.Context, remotePath string, file
 	}
 
 	// 构建上传URL
-	fullURL := c.config.BaseURL + cleanRemotePath
+	fullURL := c.objectURL(cleanRemotePath)
 	req, err := http.NewRequestWithContext(ctx, "PUT", fullURL, bytes.NewReader(fileBytes))
 	if err != nil {
 		return fmt.Errorf("构建上传请求失败：%w", err)
@@ -203,20 +215,48 @@ func (c *WebDAVClient) WebDAVUpload(ctx context.Context, remotePath string, file
 	}
 	defer resp.Body.Close()
 
-	// 读取响应体排查错误
-	respBody, _ := io.ReadAll(resp.Body)
-
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		log.Printf("文件 %s 上传成功", cleanRemotePath)
 		return nil
 	}
-	return fmt.Errorf("上传失败，状态码：%d，响应体：%s", resp.StatusCode, string(respBody))
+	return fmt.Errorf("上传失败，状态码：%d", resp.StatusCode)
+}
+
+func (c *WebDAVClient) WebDAVCreate(ctx context.Context, path string, body io.Reader) error {
+	dir := filepath.Dir(c.NormalizePath(path))
+	if dir != "." && dir != "" {
+		if err := c.WebDAVMkdirAll(ctx, dir); err != nil {
+			return err
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.objectURL(path), body)
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(c.config.Username, c.config.Password)
+	req.Header.Set("If-None-Match", "*")
+	client := &http.Client{Timeout: c.config.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		return storageobject.ErrOutcomeUncertain
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusCreated:
+		return nil
+	case http.StatusPreconditionFailed:
+		return storageobject.ErrConflict
+	case http.StatusOK, http.StatusNoContent:
+		return errors.Join(storageobject.ErrConditionalUnsupported, storageobject.ErrOutcomeUncertain)
+	default:
+		return fmt.Errorf("conditional WebDAV create failed: status %d", resp.StatusCode)
+	}
 }
 
 // WebDAVDelete 删除文件/目录
 func (c *WebDAVClient) WebDAVDelete(ctx context.Context, path string) error {
 	cleanPath := c.NormalizePath(path)
-	fullURL := c.config.BaseURL + cleanPath
+	fullURL := c.objectURL(cleanPath)
 
 	req, err := http.NewRequestWithContext(ctx, "DELETE", fullURL, nil)
 	if err != nil {
@@ -242,7 +282,7 @@ func (c *WebDAVClient) WebDAVDelete(ctx context.Context, path string) error {
 // WebDAVGetFile 获取文件流
 func (c *WebDAVClient) WebDAVGetFile(ctx context.Context, path string) (*http.Response, error) {
 	cleanPath := c.NormalizePath(path)
-	fullURL := c.config.BaseURL + cleanPath
+	fullURL := c.objectURL(cleanPath)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 	if err != nil {
@@ -263,11 +303,11 @@ func (c *WebDAVClient) WebDAVGetFile(ctx context.Context, path string) (*http.Re
 }
 
 // WebDAVMedia bounds connection/header waits but leaves streaming lifetime to the request context.
-func (c *WebDAVClient) WebDAVMedia(ctx context.Context, path, method, byteRange, ifRange string) (*http.Response, error) {
+func (c *WebDAVClient) WebDAVMedia(ctx context.Context, path, method, byteRange, ifRange string, validators ...string) (*http.Response, error) {
 	if method != http.MethodGet && method != http.MethodHead {
 		return nil, errors.New("public media is read-only")
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.config.BaseURL+c.NormalizePath(path), nil)
+	req, err := http.NewRequestWithContext(ctx, method, c.objectURL(path), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -275,6 +315,12 @@ func (c *WebDAVClient) WebDAVMedia(ctx context.Context, path, method, byteRange,
 		req.SetBasicAuth(c.config.Username, c.config.Password)
 	}
 	req.Header.Set("Accept-Encoding", "identity")
+	if len(validators) > 0 {
+		req.Header.Set("If-None-Match", validators[0])
+	}
+	if len(validators) > 1 {
+		req.Header.Set("If-Modified-Since", validators[1])
+	}
 	if byteRange != "" {
 		req.Header.Set("Range", byteRange)
 		if ifRange != "" {

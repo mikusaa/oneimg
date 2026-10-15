@@ -42,7 +42,7 @@ func HasDomain(setting models.Settings) bool {
 }
 
 func Build(setting models.Settings, imagePath string) string {
-	path := strings.TrimSpace(imagePath)
+	path := EncodeMediaPath(imagePath)
 	if path == "" || isAbsoluteURL(path) {
 		return path
 	}
@@ -60,9 +60,28 @@ func Build(setting models.Settings, imagePath string) string {
 
 func BuildForStorage(setting models.Settings, storage string, bucketID int, imagePath string) string {
 	if !SupportsStorage(storage) || bucketID != setting.DefaultStorage {
-		return imagePath
+		return EncodeMediaPath(imagePath)
 	}
 	return Build(setting, imagePath)
+}
+
+// Database paths are physical names, not URL syntax. Encode once at the DTO boundary.
+func EncodeMediaPath(value string) string {
+	if value == "" {
+		return ""
+	}
+	if isAbsoluteURL(value) {
+		u, err := url.Parse(value)
+		if err != nil || u.Host == "" || u.User != nil {
+			return ""
+		}
+		return u.String()
+	}
+	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" {
+		return ""
+	}
+	path := "/" + strings.TrimLeft(value, "/")
+	return (&url.URL{Path: path}).String()
 }
 
 func BuildCDNForStorage(setting models.Settings, storage string, imagePath string) string {
@@ -93,5 +112,6 @@ func SupportsStorage(storage string) bool {
 }
 
 func isAbsoluteURL(value string) bool {
+	value = strings.ToLower(value)
 	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
 }

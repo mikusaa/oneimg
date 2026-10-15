@@ -19,6 +19,14 @@ func TestPasswordRotationAndTokenCreationRace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	name := "renamed-owner"
+	renamed, err := NewAccountService(db).Update(user.ID, "old-password", &name, nil, "", user.AuthVersion)
+	if err != nil || renamed.AuthVersion != user.AuthVersion {
+		t.Fatal("username update rotated credentials", err)
+	}
+	if _, _, err := tokens.Authenticate(token.Plain); err != nil {
+		t.Fatal("username update revoked PAT", err)
+	}
 	passkey := models.PasskeyCredential{UserID: user.ID, Name: "retained", CredentialID: "key", CredentialData: "encrypted"}
 	if err := db.Create(&passkey).Error; err != nil {
 		t.Fatal(err)
@@ -43,8 +51,19 @@ func TestPasswordRotationAndTokenCreationRace(t *testing.T) {
 	if count != 1 {
 		t.Fatal("ordinary rotation deleted passkey")
 	}
+	otherToken, err := tokens.Create(other.ID, CreateTokenInput{AuthVersion: other.AuthVersion, Name: "target", Scopes: []string{"images:read"}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := NewUserService(db).ResetPassword(user.ID, other.ID); err != nil {
 		t.Fatal(err)
+	}
+	if _, _, err := tokens.Authenticate(otherToken.Plain); err == nil {
+		t.Fatal("admin reset did not revoke target PAT")
+	}
+	reset, err := accounts.Get(other.ID)
+	if err != nil || reset.AuthVersion != other.AuthVersion+1 {
+		t.Fatal("target version not rotated", err)
 	}
 	still, _ := accounts.Get(user.ID)
 	if still.AuthVersion != updated.AuthVersion {

@@ -2,6 +2,7 @@ package images
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -13,7 +14,6 @@ import (
 	"image/png"
 	"io"
 	"log"
-	"math/rand"
 	"mime/multipart"
 	"oneimg/backend/models"
 	"path/filepath"
@@ -22,7 +22,6 @@ import (
 
 	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
-	"github.com/google/uuid"
 	"golang.org/x/exp/slices"
 )
 
@@ -45,7 +44,9 @@ var (
 	ErrSVGThumbnail       = errors.New("svg thumbnail generation not supported")
 )
 
-type ImageService struct{}
+type ImageService struct {
+	decodeRaster func([]byte, string) (image.Image, error)
+}
 
 var ImageSvc *ImageService
 
@@ -79,164 +80,82 @@ type OriginalImageInfo struct {
 }
 
 // InspectOriginalImage 只读取原图元数据并生成内部缩略图，不改变主图字节。
-func (s *ImageService) InspectOriginalImage(fileBytes []byte, fileName, mimeType string) (*OriginalImageInfo, error) {
-	mimeType = normalizeMimeType(formatFromFilename(fileName), mimeType)
-	img, format, err := s.decodeImage(bytes.NewReader(fileBytes), mimeType)
-	if err != nil {
-		fileFormat := normalizeFormatToken(formatFromFilename(fileName))
-		normalizedMime := normalizeFormatToken(mimeType)
-		if fileFormat == "webp" || normalizedMime == "image/webp" {
-			width, height := readWebPDimensions(fileBytes)
-			return &OriginalImageInfo{
-				Width:    width,
-				Height:   height,
-				Format:   "webp",
-				MimeType: "image/webp",
-			}, nil
-		}
-		return nil, fmt.Errorf("decode image failed: %w", err)
-	}
-
-	var width, height int
-	if format != "svg" {
-		bounds := img.Bounds()
-		width, height = bounds.Dx(), bounds.Dy()
-	}
-
-	thumbnailBytes, err := s.generateThumbnail(img, format, mimeType)
-	if err != nil {
-		if !errors.Is(err, ErrSVGThumbnail) {
-			return nil, fmt.Errorf("generate thumbnail failed: %w", err)
-		}
-		thumbnailBytes = []byte{}
-	}
-
-	return &OriginalImageInfo{
-		Width:          width,
-		Height:         height,
-		Format:         format,
-		MimeType:       normalizeMimeType(format, mimeType),
-		ThumbnailBytes: thumbnailBytes,
-	}, nil
+func (s *ImageService) InspectOriginalImage(data []byte, name, mime string) (*OriginalImageInfo, error) {
+	return s.InspectOriginalImageContext(context.Background(), data, name, mime)
 }
 
-func (s *ImageService) buildSkippedImage(fileBytes []byte, originalFileName, mimeType string, setting models.Settings, userRole int) *ProcessedImage {
-	format := formatFromFilename(originalFileName)
-	if format == "" {
-		format = strings.TrimPrefix(strings.TrimPrefix(mimeType, "image/"), ".")
+func (s *ImageService) InspectOriginalImageContext(ctx context.Context, data []byte, name, mime string) (*OriginalImageInfo, error) {
+	_, release, err := AcquireProcessing(ctx)
+	if err != nil {
+		return nil, err
 	}
-	finalMimeType := normalizeMimeType(format, mimeType)
-	finalExt := extensionForImage(format, finalMimeType)
-	fileName := s.buildOutputFileName(originalFileName, finalExt, setting, userRole)
-	width, height := 0, 0
-	if normalizeFormatToken(format) == "webp" || normalizeFormatToken(finalMimeType) == "image/webp" {
-		width, height = readWebPDimensions(fileBytes)
+	defer release()
+	cfg, format, animated, err := inspectConfig(data)
+	if err != nil {
+		return nil, err
 	}
-
-	return &ProcessedImage{
-		OriginalBytes:   fileBytes,
-		CompressedBytes: fileBytes,
-		ThumbnailBytes:  []byte{},
-		Width:           width,
-		Height:          height,
-		Format:          format,
-		MimeType:        finalMimeType,
-		OutputExt:       finalExt,
-		UniqueFileName:  fileName,
-		ContentHash:     HashBytes(fileBytes),
+	info := &OriginalImageInfo{Width: cfg.Width, Height: cfg.Height, Format: format, MimeType: normalizeMimeType(format, "")}
+	if animated {
+		return info, nil
 	}
+	img, _, err := s.decodeBytes(data)
+	if err != nil {
+		return nil, err
+	}
+	info.Width, info.Height = img.Bounds().Dx(), img.Bounds().Dy()
+	info.ThumbnailBytes, err = s.generateThumbnail(img, format, info.MimeType)
+	return info, err
 }
 
-// ProcessImage 处理图片（压缩、获取尺寸等）
-func (s *ImageService) ProcessImage(
-	file multipart.File,
-	header *multipart.FileHeader,
-	setting models.Settings,
-	userRole int,
-) (*ProcessedImage, error) {
-	processingStarted := time.Now()
+func (s *ImageService) ProcessImage(file io.Reader, header *multipart.FileHeader, setting models.Settings, role int) (*ProcessedImage, error) {
+	return s.ProcessImageContext(context.Background(), file, header, setting, role)
+}
 
-	// 1. 读取文件内容（一次性读取，避免多次IO）
-	fileBytes, err := io.ReadAll(file)
+func (s *ImageService) ProcessImageContext(ctx context.Context, file io.Reader, header *multipart.FileHeader, setting models.Settings, role int) (*ProcessedImage, error) {
+	ctx, release, err := AcquireProcessing(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("read file failed: %w", err)
+		return nil, err
 	}
-
-	mimeType := normalizeMimeType(formatFromFilename(header.Filename), header.Header.Get("Content-Type"))
-	originalFileName := header.Filename
-
-	// 2. 解码图片（获取原图信息）
-	decodeStarted := time.Now()
-	img, format, err := s.decodeImage(bytes.NewReader(fileBytes), mimeType) // 新增MIME参数
-	decodeDuration := time.Since(decodeStarted)
+	defer release()
+	data, err := ReadBounded(ctx, file, int64(setting.MaxFileSize))
 	if err != nil {
-		if s.shouldKeepOriginalOnDecodeError(formatFromFilename(originalFileName), mimeType, setting.SkipCompressFormat) {
-			return s.buildSkippedImage(fileBytes, originalFileName, mimeType, setting, userRole), nil
+		return nil, err
+	}
+	cfg, format, animated, err := inspectConfig(data)
+	if err != nil {
+		return nil, err
+	}
+	mime := normalizeMimeType(format, "")
+	// The confirmed format, not the declared MIME or filename, controls admission.
+	if setting.AllowedTypes != "" && !slices.Contains(strings.Split(setting.AllowedTypes, ","), mime) {
+		return nil, ErrUnsupportedFormat
+	}
+	processed := &ProcessedImage{OriginalBytes: data, CompressedBytes: data, Width: cfg.Width, Height: cfg.Height, Format: format, MimeType: mime}
+	if !animated {
+		img, _, err := s.decodeBytes(data)
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("decode image failed: %w", err)
-	}
-
-	// 3. 获取图片基本信息
-	var width, height int
-	bounds := img.Bounds()
-	if format != "svg" {
-		width, height = bounds.Dx(), bounds.Dy()
-	}
-	// 4. 处理主图片（压缩/格式转换）
-	mainImageStarted := time.Now()
-	processedBytes, finalFormat, finalMimeType, err := s.processMainImage(
-		fileBytes, img, format, mimeType, header.Size, setting,
-	)
-	mainImageDuration := time.Since(mainImageStarted)
-	if err != nil {
-		return nil, fmt.Errorf("process main image failed: %w", err)
-	}
-
-	// 5. 处理文件扩展名
-	finalExt := extensionForImage(finalFormat, finalMimeType)
-
-	// 6. 生成缩略图。缩略图仅作后台快速预览，统一生成小 WebP；不可生成时留空。
-	thumbnailStarted := time.Now()
-	thumbnailBytes, err := s.generateThumbnail(img, finalFormat, finalMimeType)
-	thumbnailDuration := time.Since(thumbnailStarted)
-	if err != nil {
-		if !errors.Is(err, ErrSVGThumbnail) {
-			log.Printf("generate thumbnail failed: %v", err)
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
-		thumbnailBytes = []byte{}
+		processed.Width, processed.Height = img.Bounds().Dx(), img.Bounds().Dy()
+		processed.CompressedBytes, processed.Format, processed.MimeType, err = s.processMainImage(data, img, format, mime, int64(len(data)), setting)
+		if err != nil {
+			return nil, err
+		}
+		processed.ThumbnailBytes, err = s.generateThumbnail(img, format, mime)
+		if err != nil {
+			return nil, err
+		}
 	}
-
-	// 7. 处理文件名
-	fileName := s.buildOutputFileName(originalFileName, finalExt, setting, userRole)
-
-	// 8. 组装返回结果
-	processedImage := &ProcessedImage{
-		OriginalBytes:   fileBytes,
-		CompressedBytes: processedBytes,
-		ThumbnailBytes:  thumbnailBytes,
-		Width:           width,
-		Height:          height,
-		Format:          finalFormat,
-		MimeType:        finalMimeType,
-		OutputExt:       finalExt,
-		UniqueFileName:  fileName,
-		ContentHash:     HashBytes(processedBytes),
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	if totalDuration := time.Since(processingStarted); totalDuration >= SlowProcessingDuration {
-		logSlowImageProcessing(
-			originalFileName,
-			width,
-			height,
-			decodeDuration,
-			mainImageDuration,
-			thumbnailDuration,
-			totalDuration,
-			len(fileBytes),
-			len(processedBytes),
-			finalFormat,
-		)
-	}
-	return processedImage, nil
+	processed.OutputExt = extensionForImage(processed.Format, processed.MimeType)
+	processed.UniqueFileName = s.buildOutputFileName(header.Filename, processed.OutputExt, setting, role)
+	processed.ContentHash = HashBytes(processed.CompressedBytes)
+	return processed, nil
 }
 
 func HashBytes(data []byte) string {
@@ -330,7 +249,7 @@ func (s *ImageService) generateThumbnail(
 func (s *ImageService) shouldSkipCompression(format, mimeType, skipFormats string) bool {
 	rules := parseFormatList(skipFormats)
 	if len(rules) == 0 {
-		rules = parseFormatList("image/gif,image/svg+xml,image/webp")
+		rules = parseFormatList("image/gif,image/webp")
 	}
 
 	format = normalizeFormatToken(format)
@@ -349,15 +268,6 @@ func (s *ImageService) shouldSkipCompression(format, mimeType, skipFormats strin
 		}
 	}
 	return false
-}
-
-func (s *ImageService) shouldKeepOriginalOnDecodeError(format, mimeType, skipFormats string) bool {
-	if !s.shouldSkipCompression(format, mimeType, skipFormats) {
-		return false
-	}
-	format = normalizeFormatToken(format)
-	mimeType = normalizeFormatToken(mimeType)
-	return format == "webp" || mimeType == "image/webp"
 }
 
 func parseFormatList(value string) []string {
@@ -430,17 +340,22 @@ func extensionForImage(format, mimeType string) string {
 	return "." + format
 }
 
-func (s *ImageService) buildOutputFileName(originalFileName, finalExt string, setting models.Settings, userRole int) string {
+func (s *ImageService) buildOutputFileName(original, ext string, setting models.Settings, role int) string {
+	id, err := NewObjectID()
+	if err != nil {
+		panic(err)
+	} // Never fall back to a predictable object identity.
+	name := ""
 	if setting.SaveOriginalName {
-		ext := filepath.Ext(originalFileName)
-		return strings.TrimSuffix(originalFileName, ext) + finalExt
+		name = strings.TrimSuffix(original, filepath.Ext(original))
+	} else {
+		pattern := setting.FileName
+		if pattern == "" || pattern == "{random}" || pattern == "{uuid}" {
+			return id + ext
+		}
+		name = s.ReplaceMagicVariables(pattern, original, role)
 	}
-
-	pattern := setting.FileName
-	if pattern == "" {
-		pattern = "{random}"
-	}
-	return s.ReplaceMagicVariables(pattern, originalFileName, userRole) + finalExt
+	return SafeName(name) + "-" + id + ext
 }
 
 func normalizeMainImageQuality(quality int) int {
@@ -448,54 +363,6 @@ func normalizeMainImageQuality(quality int) int {
 		return DefaultCompressQuality
 	}
 	return quality
-}
-
-func readWebPDimensions(data []byte) (int, int) {
-	if len(data) < 20 || string(data[0:4]) != "RIFF" || string(data[8:12]) != "WEBP" {
-		return 0, 0
-	}
-
-	for offset := 12; offset+8 <= len(data); {
-		chunkType := string(data[offset : offset+4])
-		chunkSize := int(binary.LittleEndian.Uint32(data[offset+4 : offset+8]))
-		chunkStart := offset + 8
-		chunkEnd := chunkStart + chunkSize
-		if chunkSize < 0 || chunkEnd > len(data) {
-			return 0, 0
-		}
-
-		switch chunkType {
-		case "VP8X":
-			if chunkSize >= 10 {
-				width := int(data[chunkStart+4]) | int(data[chunkStart+5])<<8 | int(data[chunkStart+6])<<16
-				height := int(data[chunkStart+7]) | int(data[chunkStart+8])<<8 | int(data[chunkStart+9])<<16
-				return width + 1, height + 1
-			}
-		case "VP8L":
-			if chunkSize >= 5 && data[chunkStart] == 0x2f {
-				packed := binary.LittleEndian.Uint32(data[chunkStart+1 : chunkStart+5])
-				width := int(packed&0x3fff) + 1
-				height := int((packed>>14)&0x3fff) + 1
-				return width, height
-			}
-		case "VP8 ":
-			if chunkSize >= 10 &&
-				data[chunkStart+3] == 0x9d &&
-				data[chunkStart+4] == 0x01 &&
-				data[chunkStart+5] == 0x2a {
-				width := int(binary.LittleEndian.Uint16(data[chunkStart+6:chunkStart+8]) & 0x3fff)
-				height := int(binary.LittleEndian.Uint16(data[chunkStart+8:chunkStart+10]) & 0x3fff)
-				return width, height
-			}
-		}
-
-		offset = chunkEnd
-		if chunkSize%2 == 1 {
-			offset++
-		}
-	}
-
-	return 0, 0
 }
 
 func decodeAutoOrientedJPEG(reader *bytes.Reader) (image.Image, error) {
@@ -509,53 +376,64 @@ func decodeAutoOrientedJPEG(reader *bytes.Reader) (image.Image, error) {
 	return imaging.Decode(reader, imaging.AutoOrientation(true))
 }
 
-// decodeImage 解码图片，支持webp/gif/png/jpeg/SVG等格式
-// 优化点：增加SVG处理，避免解码失败
-func (s *ImageService) decodeImage(reader io.Reader, mimeType string) (image.Image, string, error) {
-	// 读取数据到缓冲区（复用）
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, "", fmt.Errorf("read image data: %w", err)
-	}
-	buf := bytes.NewReader(data)
-
-	// 优先处理SVG（MIME类型判断）
-	prefixLen := len(data)
-	if prefixLen > 100 {
-		prefixLen = 100
-	}
-	if mimeType == "image/svg+xml" || strings.HasPrefix(strings.ToLower(string(data[:prefixLen])), "<svg") {
-		// SVG返回空的image.Image（不解析矢量图），格式标记为svg
-		return image.NewRGBA(image.Rect(0, 0, 0, 0)), "svg", nil
-	}
-
-	// 按优先级解码（常用格式优先）
-	decodeFuncs := []struct {
-		decode func(*bytes.Reader) (image.Image, error)
-		format string
-	}{
-		{func(r *bytes.Reader) (image.Image, error) { return webp.Decode(r) }, "webp"},
-		{func(r *bytes.Reader) (image.Image, error) { return gif.Decode(r) }, "gif"},
-		{func(r *bytes.Reader) (image.Image, error) { return png.Decode(r) }, "png"},
-		{decodeAutoOrientedJPEG, "jpeg"},
-	}
-
-	for _, df := range decodeFuncs {
-		buf.Seek(0, io.SeekStart) // 重置读取指针
-		img, err := df.decode(buf)
-		if err == nil {
-			return img, df.format, nil
+// decodeImage inspects dimensions before choosing exactly one full decoder.
+func (s *ImageService) decodeImage(reader io.Reader, _ string) (image.Image, string, error) {
+	var data []byte
+	if r, ok := reader.(*bytes.Reader); ok {
+		// Callers already hold a bounded buffer. ReadAll on bytes.Reader avoids decoder retries.
+		data = make([]byte, r.Len())
+		_, _ = io.ReadFull(r, data)
+	} else {
+		var err error
+		data, err = ReadBounded(context.Background(), reader, 10<<20)
+		if err != nil {
+			return nil, "", err
 		}
 	}
+	return s.decodeBytes(data)
+}
 
-	// 最后尝试标准库的自动检测
-	buf.Seek(0, io.SeekStart)
-	img, format, err := image.Decode(buf)
+func (s *ImageService) decodeBytes(data []byte) (image.Image, string, error) {
+	_, format, animated, err := inspectConfig(data)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: %v", ErrUnsupportedFormat, err)
+		return nil, "", err
 	}
-
+	if animated {
+		return nil, "", ErrUnsupportedFormat
+	}
+	if s.decodeRaster != nil {
+		img, err := s.decodeRaster(data, format)
+		return img, format, err
+	}
+	var img image.Image
+	switch format {
+	case "jpeg":
+		img, err = decodeAutoOrientedJPEG(bytes.NewReader(data))
+	case "png":
+		img, err = png.Decode(bytes.NewReader(data))
+	case "gif":
+		img, err = gif.Decode(bytes.NewReader(data))
+	case "webp":
+		img, err = webp.Decode(bytes.NewReader(data))
+	default:
+		return nil, "", ErrUnsupportedFormat
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: invalid raster encoding", ErrUnsupportedFormat)
+	}
 	return img, format, nil
+}
+
+func validWebPBitstream(chunk riffChunk) bool {
+	data := make([]byte, 20+len(chunk.data)+len(chunk.data)%2)
+	copy(data[:4], "RIFF")
+	binary.LittleEndian.PutUint32(data[4:8], uint32(len(data)-8))
+	copy(data[8:12], "WEBP")
+	copy(data[12:16], chunk.kind)
+	binary.LittleEndian.PutUint32(data[16:20], uint32(len(chunk.data)))
+	copy(data[20:], chunk.data)
+	_, _, _, err := webp.GetInfo(data)
+	return err == nil
 }
 
 // convertToWebP 将图片转换为webp格式
@@ -592,7 +470,7 @@ func (s *ImageService) ValidateImage(
 
 	// 检查是否允许的类型
 	if !slices.Contains(allowedTypes, mimeType) {
-		return fmt.Errorf("unsupported content type: %s (allowed: %s)",
+		return fmt.Errorf("%w: content type %s (allowed: %s)", ErrUnsupportedFormat,
 			mimeType, strings.Join(allowedTypes, ", "))
 	}
 
@@ -638,15 +516,6 @@ func GetFileMimeType(header *multipart.FileHeader) string {
 	return header.Header.Get("Content-Type")
 }
 
-// generateUniqueFileName 生成唯一文件名
-func generateUniqueFileName() string {
-	timestamp := time.Now().UnixNano()
-	hash := fmt.Sprintf("%x", timestamp)
-	rand.New(rand.NewSource(time.Now().UnixNano()))
-	randomNum := rand.Intn(900) + 100
-	return fmt.Sprintf("%s%d", hash, randomNum)
-}
-
 // ReplaceMagicVariables 替换魔法变量
 func (s *ImageService) ReplaceMagicVariables(pattern string, originalName string, role int) string {
 	now := time.Now()
@@ -669,17 +538,17 @@ func (s *ImageService) ReplaceMagicVariables(pattern string, originalName string
 
 	// 随机变量
 	if strings.Contains(pattern, "{random}") {
-		pattern = strings.ReplaceAll(pattern, "{random}", generateUniqueFileName())
+		pattern = strings.ReplaceAll(pattern, "{random}", mustObjectID())
 	}
 
 	// UUID变量
 	if strings.Contains(pattern, "{uuid}") {
-		pattern = strings.ReplaceAll(pattern, "{uuid}", uuid.New().String())
+		pattern = strings.ReplaceAll(pattern, "{uuid}", mustObjectID())
 	}
 
 	// 原始文件名（不含扩展名）
 	ext := filepath.Ext(originalName)
-	nameWithoutExt := strings.TrimSuffix(originalName, ext)
+	nameWithoutExt := SafeName(strings.TrimSuffix(originalName, ext))
 	pattern = strings.ReplaceAll(pattern, "{filename}", nameWithoutExt)
 
 	return pattern
@@ -688,4 +557,12 @@ func (s *ImageService) ReplaceMagicVariables(pattern string, originalName string
 // BuildOutputFileName applies the existing naming policy to a validated media extension.
 func (s *ImageService) BuildOutputFileName(name, ext string, setting models.Settings, role int) string {
 	return s.buildOutputFileName(name, ext, setting, role)
+}
+
+func mustObjectID() string {
+	id, err := NewObjectID()
+	if err != nil {
+		panic(err)
+	}
+	return id
 }

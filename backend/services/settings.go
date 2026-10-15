@@ -106,11 +106,12 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 				return ErrSettingsValidation
 			}
 			for _, mime := range strings.Split(value, ",") {
-				if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(mime)), "image/") {
+				mime = strings.ToLower(strings.TrimSpace(mime))
+				if mime != "image/jpeg" && mime != "image/png" && mime != "image/gif" && mime != "image/webp" {
 					return ErrSettingsValidation
 				}
 			}
-			put("allowed_types", value)
+			put("allowed_types", strings.ToLower(strings.ReplaceAll(value, " ", "")))
 		}
 		if input.MainImageQuality != nil {
 			if *input.MainImageQuality < 0 || *input.MainImageQuality > 100 {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -196,7 +195,26 @@ func (s *ImageService) Delete(ctx context.Context, id int) error {
 	if err := s.db.First(&bucket, image.BucketId).Error; err != nil {
 		return err
 	}
-	if err := deleteStoredImage(ctx, image, bucket); err != nil {
+	unlockBucket := lockBucket(bucket.Id, false)
+	defer unlockBucket()
+	keys, err := imageObjectKeys(image, bucket)
+	if err != nil {
+		return fmt.Errorf("%w: physical identity is unavailable", ErrStorageDelete)
+	}
+	unlock := lockObjects(keys)
+	defer unlock()
+	if err := s.db.First(&image, id).Error; err != nil {
+		return err
+	}
+	target, err := unreferencedImageObjects(s.db, image, bucket, []int{image.Id})
+	if err != nil {
+		return err
+	}
+	target, err = distinctDeletionTarget(target, bucket, map[string]bool{})
+	if err != nil {
+		return err
+	}
+	if err := deleteStoredImage(ctx, target, bucket); err != nil {
 		return fmt.Errorf("%w: %v", ErrStorageDelete, err)
 	}
 	return s.db.Transaction(func(tx *gorm.DB) error {
@@ -212,10 +230,12 @@ func (s *ImageService) Delete(ctx context.Context, id int) error {
 
 func deleteStoredImage(ctx context.Context, image models.Image, bucket models.Buckets) error {
 	deletePair := func(deleteOne func(string) error) error {
-		if err := deleteOne(image.Url); err != nil {
-			return err
+		if image.Url != "" {
+			if err := deleteOne(image.Url); err != nil {
+				return err
+			}
 		}
-		if strings.TrimSpace(image.Thumbnail) != "" {
+		if strings.TrimSpace(image.Thumbnail) != "" && image.Thumbnail != image.Url {
 			return deleteOne(image.Thumbnail)
 		}
 		return nil
@@ -223,12 +243,7 @@ func deleteStoredImage(ctx context.Context, image models.Image, bucket models.Bu
 	switch image.Storage {
 	case "default":
 		return deletePair(func(value string) error {
-			clean := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(value)), "/")
-			if strings.HasPrefix(clean, "thumbnails/") {
-				clean = filepath.Join("data", filepath.FromSlash(clean))
-			} else {
-				clean = filepath.Join("uploads", filepath.FromSlash(strings.TrimPrefix(clean, "uploads/")))
-			}
+			clean := localObjectPath(value)
 			err := os.Remove(clean)
 			if errors.Is(err, os.ErrNotExist) {
 				return nil

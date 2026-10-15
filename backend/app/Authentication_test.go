@@ -10,8 +10,40 @@ import (
 	"oneimg/backend/config"
 	"oneimg/backend/database"
 	"oneimg/backend/models"
+	"oneimg/backend/services"
 	"oneimg/backend/utils/localsecret"
 )
+
+func TestNormalLegacyPATMigrationPreservesAuthentication(t *testing.T) {
+	cfg, db := authenticationDB(t)
+	hash, err := bcrypt.GenerateFromPassword([]byte("not-a-default-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := models.User{ID: 1, Username: "normal-admin", Password: string(hash), Role: models.RoleAdmin, AuthVersion: 7}
+	if err := db.DB.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	tokens := services.NewTokenService(db.DB, "test-only-token-secret")
+	token, err := tokens.Create(user.ID, services.CreateTokenInput{AuthVersion: 7, Name: "legacy", Scopes: []string{"images:read"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DB.Model(&models.PersonalAccessToken{}).Where("id = ?", token.Token.ID).UpdateColumn("auth_version", 0).Error; err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := MigrateAuthenticationState(db.DB, cfg); err != nil {
+			t.Fatal(err)
+		}
+		if _, authenticated, err := tokens.Authenticate(token.Plain); err != nil || authenticated.AuthVersion != 7 || authenticated.PasswordChangeRequired {
+			t.Fatal("normal legacy PAT was invalidated", err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(cfg.SqlitePath), ".admin_recovery_code")); !os.IsNotExist(err) {
+		t.Fatal("normal account received a recovery challenge", err)
+	}
+}
 
 func authenticationDB(t *testing.T) (*config.Config, *database.Database) {
 	t.Helper()

@@ -27,11 +27,14 @@ func testDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("gorm.Open() error = %v", err)
 	}
-	if err := db.AutoMigrate(&models.Image{}, &models.Buckets{}); err != nil {
+	if err := db.AutoMigrate(&models.Image{}, &models.Buckets{}, &models.Settings{}); err != nil {
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}
 	if err := db.Create(&models.Buckets{Id: 1, Name: "local", Type: "default", Config: map[string]any{}}).Error; err != nil {
 		t.Fatalf("create default bucket: %v", err)
+	}
+	if err := db.Create(&models.Settings{}).Error; err != nil {
+		t.Fatal(err)
 	}
 	return db
 }
@@ -109,6 +112,53 @@ func TestImageURLFromPath(t *testing.T) {
 	}
 	if got != "/uploads/2026/07/a.jpg" {
 		t.Fatalf("imageURLFromPath() = %q, want /uploads/2026/07/a.jpg", got)
+	}
+}
+
+func TestSameStemThumbnailsAndRollbackDoNotTouchOtherObjects(t *testing.T) {
+	tmp := t.TempDir()
+	root, dataRoot := filepath.Join(tmp, "uploads"), filepath.Join(tmp, "data")
+	writeFile(t, filepath.Join(root, "same.png"), encodePNG(t))
+	writeFile(t, filepath.Join(root, "same.jpg"), encodeJPEG(t))
+	legacyThumbnail := filepath.Join(dataRoot, "thumbnails", "same.webp")
+	writeFile(t, legacyThumbnail, []byte("historical thumbnail"))
+	db := testDB(t)
+	summary, err := NewImporter(db, quietOptions(root, dataRoot)).Run()
+	if err != nil || summary.Imported != 2 {
+		t.Fatal(summary, err)
+	}
+	var records []models.Image
+	if err := db.Find(&records).Error; err != nil {
+		t.Fatal(err)
+	}
+	if records[0].Thumbnail == records[1].Thumbnail {
+		t.Fatal("same stem reused a thumbnail key")
+	}
+	for _, record := range records {
+		if _, err := os.Stat(filepath.Join(dataRoot, record.Thumbnail)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Exec("CREATE TRIGGER reject_import BEFORE INSERT ON images BEGIN SELECT RAISE(ABORT, 'injected failure'); END").Error; err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "failed.png"), encodePNG(t))
+	summary, err = NewImporter(db, quietOptions(root, dataRoot)).Run()
+	if err != nil || summary.Failed != 1 {
+		t.Fatal(summary, err)
+	}
+	data, err := os.ReadFile(legacyThumbnail)
+	if err != nil || string(data) != "historical thumbnail" {
+		t.Fatal("historical thumbnail changed", err)
+	}
+	files, err := filepath.Glob(filepath.Join(dataRoot, "thumbnails", "failed*.webp"))
+	if err != nil || len(files) != 0 {
+		t.Fatal("failed import left a new thumbnail", files, err)
+	}
+	for _, record := range records {
+		if _, err := os.Stat(filepath.Join(dataRoot, record.Thumbnail)); err != nil {
+			t.Fatal("rollback removed another image's thumbnail", err)
+		}
 	}
 }
 
@@ -399,32 +449,23 @@ func TestImportOrdinaryImagesGenerateWebPThumbnails(t *testing.T) {
 	}
 }
 
-func TestImportSVGAndUndecodableWebPHaveNoThumbnail(t *testing.T) {
+func TestImportRejectsSVGAndUndecodableWebP(t *testing.T) {
 	tmp := t.TempDir()
 	root := filepath.Join(tmp, "uploads")
-	writeFile(t, filepath.Join(root, "2026", "07", "a.svg"), []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>`))
-	writeFile(t, filepath.Join(root, "2026", "07", "bad.webp"), []byte("not a decodable webp"))
-
+	writeFile(t, filepath.Join(root, "bad.svg"), []byte(`<svg/>`))
+	writeFile(t, filepath.Join(root, "bad.webp"), []byte("not a webp"))
 	db := testDB(t)
 	summary, err := NewImporter(db, quietOptions(root, filepath.Join(tmp, "data"))).Run()
 	if err != nil {
-		t.Fatalf("Run() error = %v", err)
+		t.Fatal(err)
 	}
-	if summary.Imported != 2 || summary.Failed != 0 {
-		t.Fatalf("summary = %+v, want two imported", summary)
+	if summary.Imported != 0 || summary.Failed != 1 || summary.SkippedIgnored != 1 {
+		t.Fatal(summary)
 	}
-
-	var images []models.Image
-	if err := db.Order("file_name").Find(&images).Error; err != nil {
-		t.Fatalf("Find() error = %v", err)
-	}
-	for _, imageModel := range images {
-		if imageModel.Thumbnail != "" {
-			t.Fatalf("%s thumbnail = %q, want empty", imageModel.FileName, imageModel.Thumbnail)
-		}
-		if imageModel.Width != 0 || imageModel.Height != 0 {
-			t.Fatalf("%s size = %dx%d, want 0x0", imageModel.FileName, imageModel.Width, imageModel.Height)
-		}
+	var count int64
+	db.Model(&models.Image{}).Count(&count)
+	if count != 0 {
+		t.Fatal("invalid input imported")
 	}
 }
 

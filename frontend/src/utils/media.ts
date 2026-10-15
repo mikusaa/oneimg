@@ -1,4 +1,15 @@
 export type MediaRecord = { mime_type?: string; url?: string; file_name?: string; original_file_name?: string }
+export function safeMediaURL(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim() || value.trim().startsWith('//')) return ''
+  try {
+    const url = new URL(value, window.location.origin + '/')
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return ''
+    return url.href
+  } catch { return '' }
+}
+export function safeDownloadName(value: string): string {
+  return (value || 'file').replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069/\\:"'<>|?#*]/g, '-').slice(0, 120).replace(/^[ .]+|[ .]+$/g, '') || 'file'
+}
 export const isVideo = (media: MediaRecord) => ['video/mp4', 'video/webm'].includes(String(media?.mime_type || '').split(';')[0].trim().toLowerCase())
 export const fileVideoMime = (file: File) => {
   const ext = file.name.split('.').pop()?.toLowerCase()

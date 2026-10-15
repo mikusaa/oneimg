@@ -95,16 +95,24 @@ func prepareUpload(ctx context.Context, header *multipart.FileHeader, setting *m
 	if err := images.ValidateImageFile(header, setting); err != nil {
 		return nil, err
 	}
-	processed, err := images.ImageSvc.ProcessImage(file, header, *setting, role)
+	ctx, release, err := images.AcquireProcessing(ctx)
 	if err != nil {
 		return nil, err
 	}
+	processed, err := images.ImageSvc.ProcessImageContext(ctx, body, header, *setting, role)
+	if err != nil {
+		release()
+		return nil, err
+	}
 	success = true
-	return &preparedUpload{ProcessedImage: processed, Body: contextFile{ReadSeeker: bytes.NewReader(processed.CompressedBytes), ctx: ctx}, FileSize: int64(len(processed.CompressedBytes)), OriginalSize: int64(len(processed.OriginalBytes)), close: file.Close}, nil
+	return &preparedUpload{ProcessedImage: processed, Body: contextFile{ReadSeeker: bytes.NewReader(processed.CompressedBytes), ctx: ctx}, FileSize: int64(len(processed.CompressedBytes)), OriginalSize: int64(len(processed.OriginalBytes)), close: func() error {
+		defer release()
+		return file.Close()
+	}}, nil
 }
 
 func saveStream(path string, body io.Reader) (err error) {
-	file, err := os.Create(path)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		return err
 	}

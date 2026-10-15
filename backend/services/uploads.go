@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"mime/multipart"
+	"time"
 
 	"oneimg/backend/interfaces"
 	"oneimg/backend/models"
@@ -40,6 +42,8 @@ func (s *UploadService) UploadBatch(c *gin.Context, user models.User, files []*m
 	if bucketID == 0 {
 		bucketID = setting.DefaultStorage
 	}
+	unlockBucket := lockBucket(bucketID, false)
+	defer unlockBucket()
 	_, allowedBuckets, err := NewStorageService(s.db).UploadOptions(user)
 	if err != nil {
 		return nil, err
@@ -114,7 +118,13 @@ func (s *UploadService) UploadBatch(c *gin.Context, user models.User, files []*m
 				return nil
 			})
 			if err != nil {
-				_ = s.deleteUploaded(context.Background(), image, bucket)
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				for _, object := range uploaded.CreatedObjects {
+					if cleanupErr := s.deleteUploaded(ctx, models.Image{Storage: bucket.Type, Url: object.Key}, bucket); cleanupErr != nil {
+						log.Printf("上传回滚清理失败，需核查孤儿对象 bucket=%d key=%q", bucket.Id, object.Key)
+					}
+				}
+				cancel()
 				item.Error = err
 				results = append(results, item)
 				continue

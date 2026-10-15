@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"oneimg/backend/utils/storageobject"
 	"path/filepath"
 	"strings"
 	"time"
@@ -24,6 +25,33 @@ type FTPConfig struct {
 	Password string          // 密码
 	Timeout  int             // 连接超时时间（秒，默认5）
 	// 新版库默认启用被动模式，无需手动配置
+}
+
+// FTP has no atomic create-if-absent. Fail closed when listing cannot establish absence.
+func (f *FTPUtil) UploadCreate(ctx context.Context, path string, body io.Reader) error {
+	f.config.Context = ctx
+	client, err := f.GetClient()
+	if err != nil {
+		return err
+	}
+	path = strings.ReplaceAll(path, "\\", "/")
+	dir := filepath.Dir(path)
+	if err := f.makeDirRecursive(client, dir); err != nil {
+		return err
+	}
+	entries, err := client.List(dir)
+	if err != nil {
+		return errors.New("cannot establish FTP object absence")
+	}
+	for _, entry := range entries {
+		if entry.Name == filepath.Base(path) {
+			return storageobject.ErrConflict
+		}
+	}
+	if err := client.Stor(path, body); err != nil {
+		return storageobject.ErrOutcomeUncertain
+	}
+	return nil
 }
 
 // FTPUtil FTP工具类
