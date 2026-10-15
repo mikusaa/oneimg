@@ -1,4 +1,4 @@
-name: 安全回归
+name: Security
 on:
   pull_request:
   push:

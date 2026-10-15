@@ -1,0 +1,136 @@
+# API 指南
+
+API 基础路径为 `/api/v1`。外部客户端使用个人访问令牌（PAT），不要复用旧版全局 API Token，也不要把管理员密码写入集成脚本。
+
+## 创建个人访问令牌
+
+1. 在浏览器登录，先完成初始改密或账号恢复。
+2. 打开“账户设置 → API 令牌”，创建命名明确的令牌。
+3. 按用途选择最小 scope 和有效期：30、90、365 天或永不过期。
+4. 创建成功后立即安全保存明文，界面与创建接口仅显示一次，之后不能再次读取。
+
+下面的列表和上传示例使用同一枚 PAT，因此需要同时勾选 **`images:read` 和 `images:write`**。仅查看列表时只需 `images:read`；上传、读取上传选项或 URL 导入必须有 `images:write`，只读令牌不能用于上传。
+
+PAT 使用 `Authorization: Bearer <token>` 请求头，不放在 URL、截图、公开日志或源码中。scope 只是令牌上限，实际操作仍受所属用户当前角色、功能权限、存储桶授权和资源所有权约束。用户降权、删除及凭证撤销会影响已有令牌。
+
+### 权限范围
+
+| scope | 用途 |
+| --- | --- |
+| `images:read` | 查询媒体列表和详情 |
+| `images:write` | 上传、URL 导入、读取上传选项、修改文件标签 |
+| `images:delete` | 删除媒体 |
+| `tags:read` / `tags:write` | 查询 / 管理标签 |
+| `storage:read` / `storage:write` | 查询 / 管理存储桶、连接测试 |
+| `users:read` / `users:write` | 查询 / 管理用户 |
+| `settings:read` / `settings:write` | 查询 / 修改系统设置 |
+| `stats:read` | 读取统计 |
+
+例如已有存储连接测试除了 `storage:write`，还要求用户具备 `storage:update` 权限；scope 不能绕过这一检查。
+
+## 常见请求
+
+以下命令使用 Bash。将地址换成自己的部署，通过交互读取 PAT，避免将明文写入命令历史；不会在本地保存令牌文件：
+
+```bash
+ONEIMG_URL='https://oneimg.example.com'
+read -r -s -p 'PAT: ' ONEIMG_TOKEN
+printf '\n'
+```
+
+### 查询列表与上传限制
+
+```bash
+curl -sS --get "${ONEIMG_URL}/api/v1/images" \
+  -H "Authorization: Bearer ${ONEIMG_TOKEN}" \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=20' \
+  --data-urlencode 'media_type=image'
+
+curl -sS "${ONEIMG_URL}/api/v1/upload-options" \
+  -H "Authorization: Bearer ${ONEIMG_TOKEN}"
+```
+
+列表可用 `media_type=image|video` 筛选，不传则返回全部。还支持 `q`、`bucket_id`、逗号分隔的 `tag_ids`、`untagged`、`sort` 和 `order`；`uploader_role` 仅供管理员筛选。页码从 1 开始，`page_size` 默认 20、最大 100。
+
+`upload-options` 返回当前允许的 MIME 类型、图片 / 视频分类大小上限、每批数量及可用存储桶。`allowed_types` 设置项只配置图片类型，视频是否可用由 `video_upload_enabled` 决定。
+
+### 上传图片或视频
+
+先确认 PAT 有 `images:write`，并将本地文件名替换为实际存在的文件：
+
+```bash
+curl -sS -X POST "${ONEIMG_URL}/api/v1/images" \
+  -H "Authorization: Bearer ${ONEIMG_TOKEN}" \
+  -F 'images=@photo.jpg' \
+  -F 'images=@second-photo.webp'
+```
+
+每批最多 10 个文件，重复使用 multipart `images` 字段；可用 `-F 'bucket_id=1'` 指定有权使用的桶。需要标签时，先创建或查询现有标签，再重复传入 `-F 'tag_ids=2' -F 'tag_ids=3'`，不要使用不存在的示例 ID。
+
+启用视频后，同一接口和 `images` 字段也接受 MP4 / WebM，例如 `-F 'images=@clip.mp4'`。不是另设 `/videos` 接口，视频大小与兼容性规则见[使用指南](usage.md#视频上传与播放)。
+
+**批量上传返回 HTTP 200 也可能包含文件失败。** 必须检查 `data.files` 中每项的 `success`、`error`，以及 `data.summary` 的 `total`、`succeeded`、`failed`；`duplicate` 表示复用已有记录，成功项通过 `image` 返回媒体信息。
+
+### 从 URL 导入图片
+
+此接口要求 `images:write`，仅接受允许访问的 HTTP / HTTPS 图片 URL，不用于导入视频：
+
+```bash
+curl -sS -X POST "${ONEIMG_URL}/api/v1/image-imports" \
+  -H "Authorization: Bearer ${ONEIMG_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://images.example.com/photo.jpg"}'
+```
+
+示例域名需要替换为实际图片来源。完成调用后可清除当前 Shell 中的令牌变量：
+
+```bash
+unset ONEIMG_TOKEN
+```
+
+## 响应与错误处理
+
+大多数成功响应以 `data` 包装结果；分页列表另有 `meta.pagination`，包含 `page`、`page_size`、`total`、`total_pages`。删除、撤销等接口可能返回 `204` 且无正文。
+
+请求级错误使用 `application/problem+json`。例如错误的媒体类型筛选：
+
+```json
+{
+  "type": "urn:oneimg:problem:invalid_query_parameter",
+  "title": "Unprocessable Entity",
+  "status": 422,
+  "detail": "media_type 只能是 image 或 video",
+  "code": "invalid_query_parameter",
+  "instance": "/api/v1/images",
+  "request_id": "example-request-id"
+}
+```
+
+部分校验错误还提供 `errors` 字段，列出 `field`、`code`、`message`。排查时保留 `request_id` 或响应头 `X-Request-ID`，但去掉密码、完整认证头和存储凭据。
+
+| 情况 | 处理方式 |
+| --- | --- |
+| `401`：令牌无效、过期、撤销或会话失效 | 重新登录或创建合适的新 PAT，不循环重放旧凭据 |
+| `403`：scope / 用户权限不足或 `password_change_required` | 检查 scope、用户授权，或先在浏览器完成改密 / 恢复 |
+| `409` / 文件级 `storage_object_conflict` | 保留失败信息，核对存储，不使用覆盖写绕过冲突 |
+| `413`、`422` 或文件级格式 / 大小 / 尺寸错误 | 调整请求或输入；SVG、不支持的格式及超限图像不会因重试变合法 |
+| `429`：限流 | 遵循 `Retry-After` 等待，减少调用频率 |
+| `503` 或文件级 `image_processing_busy` | 稍后重试失败项；请求级繁忙响应可带 `Retry-After`，不要无限自动重试 |
+| `5xx`：远端或服务错误 | 先核对结果及日志，避免盲目重发造成重复任务 |
+
+密码修改或管理员重置会撤销该用户全部旧会话和 PAT。普通升级不会无条件清空正常历史 PAT；v4.1.3 的历史默认密码风险账号是例外。具体规则见[升级指南](upgrading.md#初始化与账号恢复)。
+
+## 浏览器认证与完整契约
+
+项目网页使用 Session Cookie，写请求还需匹配的 `X-OneImg-CSRF`；外部集成优先使用 PAT，无需自行模拟网页登录。令牌管理仅接受浏览器会话，不能使用现有 PAT 创建另一枚 PAT。修改密码、注册或撤销 Passkey 等敏感操作还需当前密码。
+
+在自己的部署中访问以下地址，将 `https://oneimg.example.com` 换成实际 Origin：
+
+| 入口 | 地址 |
+| --- | --- |
+| OpenAPI YAML | `https://oneimg.example.com/api/openapi.yaml` |
+| OpenAPI JSON | `https://oneimg.example.com/api/openapi.json` |
+| Swagger UI | `https://oneimg.example.com/api/docs` |
+
+仓库契约源文件为 [api/openapi.yaml](../api/openapi.yaml)。Swagger UI 的界面资源由外部 CDN 加载；无外网环境可直接读取 YAML / JSON 契约。新增接口或生成客户端的维护方式见[开发指南](development.md#接口契约与客户端生成)。

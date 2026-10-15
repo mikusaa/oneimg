@@ -1,99 +1,30 @@
 # OneImg
 
-[![构建 GHCR 镜像](https://github.com/mikusaa/oneimg/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/mikusaa/oneimg/actions/workflows/build.yaml)
+[![Build](https://github.com/mikusaa/oneimg/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/mikusaa/oneimg/actions/workflows/build.yaml)
 [![GHCR 镜像](https://img.shields.io/badge/GHCR-ghcr.io%2Fmikusaa%2Foneimg-2496ED?logo=docker&logoColor=white)](https://github.com/mikusaa/oneimg/pkgs/container/oneimg)
 ![镜像架构](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-475569?logo=linux&logoColor=white)
 ![Go 版本](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)
 ![Vue 版本](https://img.shields.io/badge/Vue-3-42B883?logo=vuedotjs&logoColor=white)
 ![SQLite](https://img.shields.io/badge/database-SQLite-003B57?logo=sqlite&logoColor=white)
 
-基于 [onexru/oneimg](https://github.com/onexru/oneimg) 维护的个人部署分支，面向个人图床和受控多账号使用。
+OneImg 是面向个人图床和受控多账号使用的自托管媒体管理工具。本项目是基于 [onexru/oneimg](https://github.com/onexru/oneimg) 维护的个人部署分支，使用 Go、Vue 3 和 SQLite。
 
 ## 主要功能
 
-- 支持本地文件、剪贴板、拖拽和图片 URL 上传，可批量处理上传任务
-- 支持 MP4 / WebM 原文件上传、站内播放及图片／视频分类筛选与统计
-- 支持本地、S3/R2、WebDAV 和 FTP 存储；本地可配置 CDN 域名，S3/R2 可配置图片直链域名
-- 支持 WebP 转换、主图压缩、缩略图生成和动态 WebP 尺寸识别
-- 使用内容哈希跳过重复图片，记录原始文件名并支持文件名、URL 和哈希搜索
-- 支持标签筛选与管理、批量复制 URL/Markdown/HTML/BBCode，以及历史本地图片导入
-- 支持多账号、开放注册和管理员细粒度权限，数据统一存储在 SQLite
-- 支持密码与 Passkey 登录，一个账号可绑定多个 Passkey
-- 支持浅色、深色和跟随设备主题，可在桌面端和移动端使用
+- **上传与处理**：文件选择、拖拽、剪贴板图片和图片 URL 导入；批量上传、内容哈希去重、WebP 转换、压缩与缩略图。
+- **视频**：可选开启 MP4 / WebM 原文件上传和站内播放，不转码、不依赖 FFmpeg。
+- **存储**：本地、S3/R2、WebDAV 和 FTP；支持配置 CDN 或图片直链域名。
+- **整理与分享**：标签、文件名 / URL / 哈希搜索、图片与视频筛选、批量复制多种外链格式，以及历史本地图片导入。
+- **账号与集成**：多账号与细粒度权限、密码和 Passkey 登录、带 scope 的个人访问令牌（PAT）及 API v1。
+- **界面**：适配桌面与移动端，支持浅色、深色和跟随设备主题。
 
-## v4.1.3：安全加固
+## 快速启动
 
-本版本修复公共媒体写代理、共享默认密码、存储测试越权、预览 DOM XSS、SVG 主动内容、对象覆盖与误删、图片资源预算、旧凭证撤销和转发 IP 限流九项安全边界。
-
-- 升级后需要重新登录；普通历史 PAT 保留，改密或管理员重置密码后全部旧会话和 PAT 失效。
-- 新安装不再使用共享默认密码；历史 ID 1 账户仍使用 `123456` 时，必须通过服务器本地恢复码完成改密。
-- 禁止新增 SVG，历史 SVG 保留原 URL 并施加严格响应策略；新图片默认限制为 40MP、单边 16,384 像素。
-- 新对象包含随机唯一标识，保留可读原名但不再同名覆盖；删除历史共享对象前检查主图与缩略图引用。
-
-升级前备份数据库、配置和媒体，并核对可信代理、SVG 的全部访问出口及旧缓存。默认单实例运行；真实远端存储和目标生产容器仍需隔离验收。详见 [v4.1.3 发布说明](docs/releases/v4.1.3.md) 与 [安全加固部署说明](docs/security-hardening.md)。
-
-## v4.1.2：视频上传
-
-在「系统设置 → 上传规则」开启「允许视频上传」后，可通过文件选择、拖拽或现有 API 上传 MP4、WebM。升级后默认关闭，启用后沿用现有用户上传和存储桶权限；关闭开关不会影响已有视频的播放、管理和统计。
-
-视频大小限制独立于图片，默认 100 MiB，可设置为 1 MiB～1 GiB。视频原样保存，不转码、不压缩、不生成封面，也不需要安装 FFmpeg。URL 导入、剪贴板图片粘贴和 `import-local` 仍用于图片。
-
-首页和图库显示视频占位卡片，点击后使用浏览器原生控件播放；读取元数据后显示时长和分辨率。具体编码能否播放取决于浏览器，优先选择 H.264 MP4 或 VP9 WebM。应用代理支持单段 Range 请求；使用独立直链或 CDN 时，该服务也需要支持 Range 才能按需读取和拖动播放。
-
-视频可复制 URL、带控件的 HTML、Markdown 普通链接或静音循环的「动图式 HTML」。视频不能使用图片的 `<img>` 或 Markdown 图片语法嵌入。
-
-控制中心分别显示图片／视频数量和体积，今日／本月上传附分类数量。体积统计只包含图片主文件和视频原文件，不含缩略图；存储桶占用仍包含成功保存的图片缩略图。数量按当前记录统计，去重上传不会重复计数，删除后相应减少。
-
-API 保留 `/api/v1/images` 路径及 multipart `images` 字段。列表新增 `media_type=image|video` 筛选；设置增加 `video_upload_enabled` 和 `max_video_file_size`，`allowed_types` 仍只配置图片类型。`/upload-options` 返回实际允许的图片与视频类型和分类上限。统计中的 `total_images` 仅包含图片，新增 `total_videos`、分类体积和分类上传数；趋势中的 `count` 为文件合计，并提供 `image_count`、`video_count`。历史缺失 MIME 的记录继续归为图片。
-
-## 默认账号
-
-- 用户名：`admin`
-- 密码：不再提供共享默认密码。未指定 `DEFAULT_PASS`（或仍为旧模板的 `123456`）时，首次启动生成随机密码，保存在 SQLite 数据库同目录的 `.initial_admin_password`，权限 `0600`；日志只提示路径。
-
-首次登录必须修改初始密码，显式配置的初始密码也不例外。历史 ID 1 账户仍使用 `123456` 时，会进入受限恢复流程，需要服务器本地 `.admin_recovery_code` 才能解除限制；仅知道旧默认密码不足以恢复管理权限。
-
-安全升级、代理配置、SVG 出口策略及回滚约束见 [安全加固部署说明](docs/security-hardening.md)。
-
-## Docker 部署
-
-### 环境要求
-- Docker 20.10.0 或更高版本
-- Docker Compose v2.0.0 或更高版本
-
-### 使用 Docker Compose 部署
-
-1. **克隆项目**
-```bash
-git clone https://github.com/mikusaa/oneimg.git
-cd oneimg
-```
-
-2. **创建 Compose 配置**
+已安装 Docker 的新部署可直接使用固定版本镜像。以下命令在当前目录创建持久化目录，映射端口 `8080`：
 
 ```bash
-cp docker-compose.yml.example docker-compose.yml
-```
+mkdir -p data uploads
 
-3. **启动服务**
-
-```bash
-docker compose up -d --build
-```
-
-4. **访问系统**
-
-- `http://localhost:8080`
-
-5. **停止服务**
-
-```bash
-docker compose down
-```
-
-### 直接使用镜像
-
-```bash
 docker run -d \
   --name oneimg \
   --restart unless-stopped \
@@ -102,154 +33,39 @@ docker run -d \
   -e PGID=1000 \
   -e TZ=Asia/Shanghai \
   -e APP_URL=http://localhost:8080 \
-  -v /data/oneimg/data:/app/data \
-  -v /data/oneimg/uploads:/app/uploads \
-  ghcr.io/mikusaa/oneimg:latest
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/uploads:/app/uploads" \
+  ghcr.io/mikusaa/oneimg:v4.1.3
 ```
 
-GHCR 镜像同时提供 `linux/amd64` 和 `linux/arm64` 架构。
+访问 `http://localhost:8080`。镜像支持 `linux/amd64` 和 `linux/arm64`；`data` 保存数据库、配置和本地缩略图，`uploads` 保存本地媒体主文件，两者都需要持久化和备份。
 
-### 数据持久化
+示例使用 `1000:1000` 作为文件属主；如需更换用户、使用 Compose、从源码构建或通过公网域名访问，请先阅读[部署指南](docs/deployment.md)。公网部署需设置实际的 `APP_URL`，配置 HTTPS 和可信代理。
 
-系统数据和上传的图片通过 Docker 数据卷保持持久化：
+## 首次登录
 
-- 上传的图片存储在 `./uploads` 目录
-- SQLite 数据库和应用配置存储在 `./data` 目录
-
-备份时应同时备份 `data` 和 `uploads`。其中 `data/.env` 内的 `CONFIG_SECRET` 用于加密 Passkey 凭据和其他敏感配置，丢失或改变后已有加密数据将无法读取。
-
-### 文件权限
-
-容器支持通过 `PUID` 和 `PGID` 指定 OneImg 进程及持久化文件的属主。Compose 模板默认使用 `1000:1000`，也可以在项目根目录的 `.env` 中设置为宿主机用户的 UID/GID：
-
-```dotenv
-PUID=1000
-PGID=1000
-```
-
-Linux 上可通过 `id -u` 和 `id -g` 查询当前用户的 UID/GID。容器每次启动时会将 `/app/data` 和 `/app/uploads`（包括已有文件）的属主调整为指定值，然后以该用户身份运行应用，因此 SQLite、配置文件、原图和缩略图都会使用指定的属主。不要同时设置 Compose 的 `user` 字段，否则入口脚本无法以 root 身份修正挂载目录权限。
-
-### 导入历史图片
-
-`import-local` 可以将 `uploads` 中已有的图片登记到图库。建议先执行预览：
+默认用户名为 `admin`，不再提供共享默认密码。上述新部署首次启动后，通过服务器读取随机初始密码：
 
 ```bash
-docker compose run --rm oneimg ./main import-local --root /app/uploads --dry-run
+docker exec oneimg cat /app/data/.initial_admin_password
 ```
 
-确认统计结果后正式导入：
+首次登录必须修改密码，之后重新登录；即使显式设置了初始密码，也需要完成首次改密。初始密码文件权限为 `0600`，不要将其放入截图、日志或公开文档。
 
-```bash
-docker compose run --rm oneimg ./main import-local --root /app/uploads
-```
+已有正常账号不会因升级被重置。历史默认密码账号的恢复流程见[升级指南](docs/upgrading.md#初始化与账号恢复)。
 
-默认归属用户和存储桶均为 `1`，图片时间取文件修改时间。可使用 `--user-id`、`--bucket-id`、`--date-source` 和 `--update-existing-date` 调整；导入过程不会移动或重命名原图。
+## 文档导航
 
-### 自定义配置
+| 你想做什么 | 文档 |
+| --- | --- |
+| 安装、配置持久化、反向代理或 Passkey | [部署指南](docs/deployment.md) |
+| 上传、整理、复制外链、导入历史图片 | [使用指南](docs/usage.md) |
+| 创建 PAT、调用接口、处理错误 | [API 指南](docs/api.md) |
+| 备份、升级、恢复与检查兼容性变化 | [升级指南](docs/upgrading.md) |
+| 本地开发、生成 SDK、测试与发布检查 | [开发指南](docs/development.md) |
 
-Compose 模板会从项目根目录的 `.env` 读取变量并传入容器。例如生产环境可创建以下配置：
+## 升级与发布
 
-```dotenv
-PUID=1000
-PGID=1000
-APP_URL=https://oneimg.example.com
-PASSKEY_RP_ID=oneimg.example.com
-PASSKEY_ORIGINS=https://oneimg.example.com
-PASSKEY_RP_NAME=OneImg
-```
+升级前应备份一致的数据库、配置和媒体。升级至 v4.1.3 后需重新登录；改密或管理员重置会使旧会话和 PAT 失效。历史默认密码账号、可信代理、SVG 出口与缓存、图像限制及单实例运行要求，请按[升级指南](docs/upgrading.md)检查，不要直接用旧数据库撤销已完成的凭证撤销。
 
-项目根目录的 `.env` 用于 Docker Compose 变量替换；容器内持久化的 `data/.env` 是 OneImg 自身配置。首次启动会自动创建 `data/.env`，并生成稳定的 `SESSION_SECRET` 和 `CONFIG_SECRET`。
-
-不要在 Compose 中传入空的 `CONFIG_SECRET`，否则它会覆盖 `data/.env` 中的持久化密钥并禁用 Passkey。已有部署如果尚无 `CONFIG_SECRET`，应先运行以下命令生成一个固定值，再将结果写入 `data/.env`：
-
-```bash
-openssl rand -base64 32
-```
-
-修改配置后重启容器：
-
-```bash
-docker compose up -d
-```
-
-## API v1
-
-API 基础路径为 `/api/v1`。完整契约通过 `/api/openapi.yaml` 和 `/api/openapi.json` 提供 YAML、JSON 两种格式，Swagger UI 位于 `/api/docs`。
-
-浏览器请求使用 Session Cookie 和 `X-OneImg-CSRF`；外部调用请在“账户设置”创建个人 Bearer Token。Token 明文只在创建成功的 `201` 响应中显示一次，可选择 30、90、365 天或永不过期，并通过 scope 限制访问范围。Token 管理始终要求浏览器会话；密码修改和 Passkey 管理还要求当前密码。
-
-可用 scope 为：`images:read`、`images:write`、`images:delete`、`tags:read`、`tags:write`、`storage:read`、`storage:write`、`users:read`、`users:write`、`settings:read`、`settings:write`、`stats:read`。Token 的实际权限始终受所属用户当前角色、功能权限和资源所有权约束；用户降权或删除后立即生效。
-
-成功响应统一为 `{"data": ...}`，集合响应增加 `meta.pagination`；错误响应使用 `application/problem+json`，包含 `type`、`title`、`status`、`detail`、`code`、`instance` 和 `request_id`。上传使用重复的 `images` 和 `tag_ids` multipart 字段，每批最多 10 个文件，响应包含逐文件结果和汇总。
-
-示例：
-
-```bash
-# 登录并保存 Session/CSRF Cookie
-curl -c oneimg-cookies.txt -X POST https://oneimg.example.com/api/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"your-password"}'
-
-# 从 Cookie jar 读取 CSRF 值，通过浏览器会话创建个人 Token
-ONEIMG_CSRF=$(awk '$6 == "oneimg-csrf" { print $7 }' oneimg-cookies.txt)
-curl -b oneimg-cookies.txt -X POST https://oneimg.example.com/api/v1/me/tokens \
-  -H 'Content-Type: application/json' \
-  -H "X-OneImg-CSRF: ${ONEIMG_CSRF}" \
-  -d '{"name":"backup","scopes":["images:read"],"expiration_days":90}'
-
-curl -X GET https://oneimg.example.com/api/v1/images \
-  -H 'Authorization: Bearer oneimg_pat_<prefix>_<secret>'
-
-curl -X POST https://oneimg.example.com/api/v1/images \
-  -H 'Authorization: Bearer oneimg_pat_<prefix>_<secret>' \
-  -F images=@photo.jpg -F tag_ids=2
-```
-
-错误响应示例：
-
-```json
-{
-  "type": "urn:oneimg:problem:validation_error",
-  "title": "Unprocessable Entity",
-  "status": 422,
-  "detail": "请求字段无效",
-  "code": "validation_error",
-  "instance": "/api/v1/images",
-  "request_id": "c71e5fb1-9f16-4bb7-9881-20704ff03f1d",
-  "errors": [{ "field": "tag_ids", "code": "invalid", "message": "只能包含正整数 ID" }]
-}
-```
-
-这是一次破坏性升级。启动迁移会清空旧全局 API Token、关闭 `start_api` 并移除 `setting:api` 权限码；部署前请备份 `data` 和 `uploads`。
-
-### Passkey 登录
-
-Passkey 登录使用以下环境变量：
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `APP_URL` | `http://localhost:8080` | 对外访问地址；生产环境必须使用 HTTPS |
-| `PASSKEY_RP_ID` | 从 `APP_URL` 提取 | Passkey 绑定的域名，修改后旧凭据将无法使用 |
-| `PASSKEY_ORIGINS` | `APP_URL` 的 Origin | 允许的来源，多个来源使用英文逗号分隔 |
-| `PASSKEY_RP_NAME` | `OneImg` | 系统在 Passkey 提示中的名称 |
-| `CONFIG_SECRET` | 首次启动随机生成 | Passkey 凭据加密密钥，保存在 `data/.env`，必须保持不变 |
-
-使用 Passkey 前需满足以下条件：
-
-- 生产环境必须通过 HTTPS 访问，`APP_URL` 必须填写浏览器实际访问的公开地址，而不是容器地址。
-- `APP_URL` 和 `PASSKEY_ORIGINS` 必须是精确的 Origin，包含协议以及非标准端口，不能包含路径。
-- `PASSKEY_RP_ID` 只填写域名，不包含协议和端口；留空时从 `APP_URL` 自动推导。
-- 反向代理必须对外提供与配置一致的 HTTPS 地址。
-- RP ID 应长期保持不变。修改为其他根域后，已经注册的 Passkey 将不能继续使用。
-
-`http://localhost:8080` 可用于本机测试；在 localhost 注册的 Passkey 不能用于生产域名。
-
-配置有效时，启动日志会显示：
-
-```text
-Passkey 功能已启用 (RP ID: oneimg.example.com)
-```
-
-配置或密钥无效时，密码登录不会受影响，启动日志会显示 `Passkey 功能已禁用` 及具体原因。
-
-登录后可在“账户设置”中添加、重命名和删除 Passkey。添加和删除时需要验证当前密码，每个账号最多绑定 10 个 Passkey；密码始终保留作为恢复方式。登录页会在服务端配置有效且浏览器支持 WebAuthn 时显示“使用 Passkey”。具有对应权限的管理员也可以在用户管理页撤销其他用户的全部 Passkey。
+查看 [v4.1.3 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.1.3)或[所有 Releases](https://github.com/mikusaa/oneimg/releases)。
