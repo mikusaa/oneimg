@@ -266,6 +266,12 @@ export const listImages = <ThrowOnError extends boolean = false>(options?: Optio
 
 /**
  * 上传图片或已启用的 MP4/WebM 视频
+ *
+ * 每个文件独立返回成功或失败，批量结果仍为 HTTP 200。
+ * 新增图片只接受真实 JPEG/PNG/GIF/WebP，拒绝 SVG 及伪装内容。
+ * 默认图像预算为 40000000 像素、单边 16384；服务器可降低预算。
+ * 忙碌时文件返回 image_processing_busy，客户端应稍后手动重试，不无限自动重试。
+ *
  */
 export const uploadImages = <ThrowOnError extends boolean = false>(options: Options<UploadImagesData, ThrowOnError>): RequestResult<UploadImagesResponses, UploadImagesErrors, ThrowOnError> => (options.client ?? client).post<UploadImagesResponses, UploadImagesErrors, ThrowOnError>({
     ...formDataBodySerializer,
@@ -310,6 +316,8 @@ export const getImage = <ThrowOnError extends boolean = false>(options: Options<
 
 /**
  * 导入远程图片
+ *
+ * 无效格式或超出图像预算返回 422；处理繁忙返回 503 和 Retry-After，客户端应稍后重试。
  */
 export const importImage = <ThrowOnError extends boolean = false>(options: Options<ImportImageData, ThrowOnError>): RequestResult<ImportImageResponses, ImportImageErrors, ThrowOnError> => (options.client ?? client).post<ImportImageResponses, ImportImageErrors, ThrowOnError>({
     security: [{
@@ -486,6 +494,8 @@ export const getStorageBucket = <ThrowOnError extends boolean = false>(options: 
 
 /**
  * 更新存储桶
+ *
+ * 更换端点或账户时必须显式提供新凭证，否则返回 422 credentials_required_for_new_endpoint。
  */
 export const updateStorageBucket = <ThrowOnError extends boolean = false>(options: Options<UpdateStorageBucketData, ThrowOnError>): RequestResult<UpdateStorageBucketResponses, UpdateStorageBucketErrors, ThrowOnError> => (options.client ?? client).patch<UpdateStorageBucketResponses, UpdateStorageBucketErrors, ThrowOnError>({
     security: [{
@@ -503,6 +513,10 @@ export const updateStorageBucket = <ThrowOnError extends boolean = false>(option
 
 /**
  * 测试存储连接
+ *
+ * 提供已有 id 必须具有 storage:update 权限，越权在使用已有秘密及联网之前返回 403 permission_denied。
+ * 无 id 时使用显式提供的新配置。更换端点或账户但未提供新凭证返回 422 credentials_required_for_new_endpoint。
+ *
  */
 export const testStorageConnection = <ThrowOnError extends boolean = false>(options: Options<TestStorageConnectionData, ThrowOnError>): RequestResult<TestStorageConnectionResponses, TestStorageConnectionErrors, ThrowOnError> => (options.client ?? client).post<TestStorageConnectionResponses, TestStorageConnectionErrors, ThrowOnError>({
     security: [{

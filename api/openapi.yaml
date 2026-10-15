@@ -228,6 +228,11 @@ paths:
     post:
       operationId: uploadImages
       summary: 上传图片或已启用的 MP4/WebM 视频
+      description: |
+        每个文件独立返回成功或失败，批量结果仍为 HTTP 200。
+        新增图片只接受真实 JPEG/PNG/GIF/WebP，拒绝 SVG 及伪装内容。
+        默认图像预算为 40000000 像素、单边 16384；服务器可降低预算。
+        忙碌时文件返回 image_processing_busy，客户端应稍后手动重试，不无限自动重试。
       tags: [Images]
       requestBody:
         required: true
@@ -263,12 +268,16 @@ paths:
     post:
       operationId: importImage
       summary: 导入远程图片
+      description: 无效格式或超出图像预算返回 422；处理繁忙返回 503 和 Retry-After，客户端应稍后重试。
       tags: [Images]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/ImageImportRequest' } } }
       responses:
         '201': { $ref: '#/components/responses/ImageResponse' }
+        '409': { $ref: '#/components/responses/ProblemResponse' }
+        '422': { $ref: '#/components/responses/ProblemResponse' }
+        '503': { $ref: '#/components/responses/ImageProcessingBusyResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
   /images/{image_id}/tags/{tag_id}:
     parameters:
@@ -360,6 +369,7 @@ paths:
     patch:
       operationId: updateStorageBucket
       summary: 更新存储桶
+      description: 更换端点或账户时必须显式提供新凭证，否则返回 422 credentials_required_for_new_endpoint。
       tags: [Storage]
       requestBody: { $ref: '#/components/requestBodies/Storage' }
       responses:
@@ -376,10 +386,15 @@ paths:
     post:
       operationId: testStorageConnection
       summary: 测试存储连接
+      description: |
+        提供已有 id 必须具有 storage:update 权限，越权在使用已有秘密及联网之前返回 403 permission_denied。
+        无 id 时使用显式提供的新配置。更换端点或账户但未提供新凭证返回 422 credentials_required_for_new_endpoint。
       tags: [Storage]
       requestBody: { $ref: '#/components/requestBodies/Storage' }
       responses:
         '200': { $ref: '#/components/responses/DataResponse' }
+        '403': { $ref: '#/components/responses/ProblemResponse' }
+        '422': { $ref: '#/components/responses/ProblemResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
   /stats/dashboard:
     get:
@@ -551,6 +566,12 @@ components:
     ProblemResponse:
       description: RFC 9457 问题详情
       headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    ImageProcessingBusyResponse:
+      description: image_processing_busy，图像处理繁忙
+      headers:
+        X-Request-ID: { schema: { type: string } }
+        Retry-After: { schema: { type: integer, minimum: 1 }, description: 重试前至少等待的秒数 }
       content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
     DataResponse:
       description: 请求成功
@@ -759,7 +780,13 @@ components:
         error:
           type: object
           required: [code, detail]
-          properties: { code: { type: string }, detail: { type: string } }
+          properties:
+            code:
+              type: string
+              description: |
+                包含 unsupported_image_format、image_dimensions_exceeded、image_processing_busy、
+                storage_object_conflict、file_too_large、file_upload_failed 及其他文件级错误。
+            detail: { type: string }
     UploadBatch:
       type: object
       required: [files, summary]

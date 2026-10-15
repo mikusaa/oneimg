@@ -9,6 +9,7 @@
     "openapi:check": "pnpm run openapi:generate && git diff --exit-code -- src/api/generated",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",
+    "test:security": "playwright test",
     "preview": "vite preview"
   },
   "keywords": [],
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.99.0",
+    "@playwright/test": "1.56.1",
     "autoprefixer": "^10.5.2",
     "remixicon": "^4.9.1",
     "typescript": "^5.9.3",

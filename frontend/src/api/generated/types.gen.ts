@@ -177,6 +177,11 @@ export type UploadFileResult = {
     duplicate?: boolean;
     image?: Image;
     error?: {
+        /**
+         * 包含 unsupported_image_format、image_dimensions_exceeded、image_processing_busy、
+         * storage_object_conflict、file_too_large、file_upload_failed 及其他文件级错误。
+         *
+         */
         code: string;
         detail: string;
     };
@@ -957,6 +962,18 @@ export type ImportImageErrors = {
     /**
      * RFC 9457 问题详情
      */
+    409: Problem;
+    /**
+     * RFC 9457 问题详情
+     */
+    422: Problem;
+    /**
+     * image_processing_busy，图像处理繁忙
+     */
+    503: Problem;
+    /**
+     * RFC 9457 问题详情
+     */
     default: Problem;
 };
 
@@ -1311,6 +1328,14 @@ export type TestStorageConnectionData = {
 };
 
 export type TestStorageConnectionErrors = {
+    /**
+     * RFC 9457 问题详情
+     */
+    403: Problem;
+    /**
+     * RFC 9457 问题详情
+     */
+    422: Problem;
     /**
      * RFC 9457 问题详情
      */

@@ -1,0 +1,25 @@
+ARG BACKEND_IMAGE=oneimg:security-backend-20261015
+ARG FRONTEND_IMAGE=oneimg:security-frontend-20261015
+ARG RUNTIME_IMAGE=oneimg:security-check-20261015
+
+FROM ${BACKEND_IMAGE} AS checks
+COPY internal/ ./internal/
+RUN go build -o /securityfixture ./internal/securityfixture \
+    && go build -o /imagebudgetprobe ./internal/imagebudgetprobe
+
+FROM ${RUNTIME_IMAGE} AS fixture
+COPY --from=checks /securityfixture /app/securityfixture
+ENTRYPOINT ["/app/securityfixture"]
+
+FROM ${RUNTIME_IMAGE} AS memory-probe
+COPY --from=checks /imagebudgetprobe /app/imagebudgetprobe
+ENTRYPOINT ["/app/imagebudgetprobe"]
+
+FROM ${FRONTEND_IMAGE} AS frontend
+
+FROM mcr.microsoft.com/playwright:v1.56.1-noble AS browsers
+COPY --from=frontend --chown=pwuser:pwuser /app/frontend /work/frontend
+WORKDIR /work/frontend
+USER pwuser
+ENV ONEIMG_SECURITY_EXTERNAL_FIXTURE=1
+CMD ["node", "node_modules/@playwright/test/cli.js", "test"]
