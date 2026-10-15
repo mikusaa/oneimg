@@ -80,7 +80,8 @@ func (s *Server) requireAuth() gin.HandlerFunc {
 			return
 		}
 		user, err := s.services.Accounts.GetActive(userID)
-		if err != nil {
+		version, versionOK := session.Get("auth_version").(int64)
+		if err != nil || !versionOK || version <= 0 || user.AuthVersion != version {
 			session.Clear()
 			_ = session.Save()
 			writeProblem(c, http.StatusUnauthorized, "invalid_session", "登录会话已失效")
@@ -88,6 +89,11 @@ func (s *Server) requireAuth() gin.HandlerFunc {
 			return
 		}
 		setPrincipal(c, &Principal{User: &user, AuthMethod: "session"})
+		if user.PasswordChangeRequired && !((c.Request.URL.Path == "/api/v1/me" && (c.Request.Method == http.MethodGet || c.Request.Method == http.MethodPatch)) || (c.Request.URL.Path == "/api/v1/auth/logout" && c.Request.Method == http.MethodPost)) {
+			writeProblem(c, http.StatusForbidden, "password_change_required", "请先完成密码修改及本地校验")
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }
@@ -277,6 +283,10 @@ func currentUser(c *gin.Context) (*models.User, error) {
 
 func tokenServiceError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, services.ErrAuthVersion):
+		writeProblem(c, http.StatusUnauthorized, "invalid_session", "登录会话已失效，请重新登录")
+	case errors.Is(err, services.ErrPasswordChangeRequired):
+		writeProblem(c, http.StatusForbidden, "password_change_required", "请先修改密码")
 	case errors.Is(err, services.ErrInvalidTokenName):
 		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "Token 名称长度必须为 1-50 个字符")
 	case errors.Is(err, services.ErrTokenScopesRequired), errors.Is(err, services.ErrInvalidTokenScope):

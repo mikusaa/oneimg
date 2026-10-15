@@ -2,10 +2,12 @@ package services
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"unicode/utf8"
 
 	"oneimg/backend/models"
+	"oneimg/backend/utils/localsecret"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -20,7 +22,10 @@ var (
 	ErrCurrentPassword         = errors.New("current password is incorrect")
 )
 
-type AccountService struct{ db *gorm.DB }
+type AccountService struct {
+	db           *gorm.DB
+	recoveryPath string
+}
 
 func NewAccountService(db *gorm.DB) *AccountService { return &AccountService{db: db} }
 
@@ -104,13 +109,23 @@ func (s *AccountService) VerifyPassword(userID int, password string) (models.Use
 	return user, nil
 }
 
-func (s *AccountService) Update(userID int, currentPassword string, username, password *string) (models.User, error) {
+func (s *AccountService) Update(userID int, currentPassword string, username, password *string, bootstrapCode string, authVersion int64) (models.User, error) {
 	if username == nil && password == nil {
 		return models.User{}, ErrAccountFieldsRequired
 	}
 	user, err := s.VerifyPassword(userID, currentPassword)
 	if err != nil {
 		return models.User{}, err
+	}
+	if authVersion <= 0 || user.AuthVersion != authVersion {
+		return models.User{}, ErrAuthVersion
+	}
+	if user.PasswordChangeRequired && password == nil {
+		return models.User{}, ErrPasswordChangeRequired
+	}
+	recovering := user.BootstrapCodeHash != nil
+	if recovering && !localsecret.Matches(bootstrapCode, *user.BootstrapCodeHash) {
+		return models.User{}, ErrInvalidBootstrapCode
 	}
 	updates := map[string]any{}
 	if username != nil {
@@ -124,7 +139,7 @@ func (s *AccountService) Update(userID int, currentPassword string, username, pa
 		updates["username"] = name
 	}
 	if password != nil {
-		if len(*password) < 6 || len(*password) > 100 {
+		if len(*password) < 6 || len(*password) > 100 || *password == "123456" || bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(*password)) == nil {
 			return models.User{}, ErrPasswordInvalid
 		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(*password), bcrypt.DefaultCost)
@@ -132,8 +147,28 @@ func (s *AccountService) Update(userID int, currentPassword string, username, pa
 			return models.User{}, err
 		}
 		updates["password"] = string(hash)
+		updates["password_change_required"] = false
+		updates["bootstrap_code_hash"] = nil
 	}
-	if err := s.db.Model(&user).Updates(updates).Error; err != nil {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		var current models.User
+		if err := tx.First(&current, userID).Error; err != nil {
+			return err
+		}
+		if current.AuthVersion != authVersion || current.Password != user.Password {
+			return ErrAuthVersion
+		}
+		if password != nil {
+			if err := rotatePassword(tx, &current, updates["password"].(string), updates); err != nil {
+				return err
+			}
+			if recovering {
+				return tx.Where("user_id = ?", userID).Delete(&models.PasskeyCredential{}).Error
+			}
+			return nil
+		}
+		return tx.Model(&current).Updates(updates).Error
+	}); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return models.User{}, ErrUsernameConflict
 		}
@@ -141,6 +176,9 @@ func (s *AccountService) Update(userID int, currentPassword string, username, pa
 	}
 	if err := s.db.First(&user, userID).Error; err != nil {
 		return models.User{}, err
+	}
+	if recovering && s.recoveryPath != "" {
+		_ = os.Remove(s.recoveryPath)
 	}
 	return user, nil
 }

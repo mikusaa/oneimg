@@ -59,7 +59,8 @@ func TestPersonalAccessTokenLifecycle(t *testing.T) {
 	service.now = func() time.Time { return now }
 
 	created, err := service.Create(user.ID, CreateTokenInput{
-		Name: "automation", Scopes: []string{"images:read", "images:read", "tags:read"},
+		AuthVersion: user.AuthVersion,
+		Name:        "automation", Scopes: []string{"images:read", "images:read", "tags:read"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +94,7 @@ func TestPersonalAccessTokenLifecycle(t *testing.T) {
 	}
 
 	never := 0
-	permanent, err := service.Create(user.ID, CreateTokenInput{Name: "permanent", Scopes: []string{"stats:read"}, ExpirationDays: &never})
+	permanent, err := service.Create(user.ID, CreateTokenInput{AuthVersion: user.AuthVersion, Name: "permanent", Scopes: []string{"stats:read"}, ExpirationDays: &never})
 	if err != nil {
 		t.Fatal(err)
 	}

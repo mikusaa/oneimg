@@ -47,6 +47,11 @@ export type User = {
     permission: Permission;
     created_at: string;
     updated_at: string;
+    password_change_required: boolean;
+    /**
+     * 改密需要服务器本地一次性校验码
+     */
+    bootstrap_verification_required: boolean;
 };
 
 export type ManagedUser = User & {
@@ -190,6 +195,10 @@ export type UpdateMeRequest = {
     current_password: string;
     username?: string;
     password?: string;
+    /**
+     * 旧默认密码管理员恢复时必填的本地一次性码
+     */
+    bootstrap_code?: string;
 };
 
 export type CreateTokenRequest = {
@@ -552,9 +561,14 @@ export type UpdateMeError = UpdateMeErrors[keyof UpdateMeErrors];
 
 export type UpdateMeResponses = {
     /**
-     * 请求成功
+     * 账户已更新，需要重新登录；改密会撤销全部会话与个人令牌
      */
-    200: DataEnvelope;
+    200: {
+        data: {
+            user: User;
+            reauthentication_required: boolean;
+        };
+    };
 };
 
 export type UpdateMeResponse = UpdateMeResponses[keyof UpdateMeResponses];

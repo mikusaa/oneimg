@@ -398,7 +398,7 @@ func TestBearerScopesAndCurrentUserPermissionsAreIntersected(t *testing.T) {
 	if err := system.Database.DB.Create(&admin).Error; err != nil {
 		t.Fatal(err)
 	}
-	created, err := system.Services.Tokens.Create(admin.ID, services.CreateTokenInput{Name: "users", Scopes: []string{"users:read"}})
+	created, err := system.Services.Tokens.Create(admin.ID, services.CreateTokenInput{AuthVersion: admin.AuthVersion, Name: "users", Scopes: []string{"users:read"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -495,7 +495,7 @@ func TestBearerCannotManagePersonalTokens(t *testing.T) {
 	if err := system.Database.DB.Create(&user).Error; err != nil {
 		t.Fatal(err)
 	}
-	created, err := system.Services.Tokens.Create(user.ID, services.CreateTokenInput{Name: "self", Scopes: []string{"images:read"}})
+	created, err := system.Services.Tokens.Create(user.ID, services.CreateTokenInput{AuthVersion: user.AuthVersion, Name: "self", Scopes: []string{"images:read"}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -40,6 +40,7 @@ type TokenService struct {
 }
 
 type CreateTokenInput struct {
+	AuthVersion    int64
 	Name           string
 	Scopes         []string
 	ExpirationDays *int
@@ -93,14 +94,30 @@ func (s *TokenService) Create(userID int, input CreateTokenInput) (CreatedToken,
 		expiresAt = &value
 	}
 	record := models.PersonalAccessToken{
-		UserID:     userID,
-		Name:       input.Name,
-		Prefix:     prefix,
-		SecretHash: s.hash(plain),
-		Scopes:     models.StringList(scopes),
-		ExpiresAt:  expiresAt,
+		UserID:      userID,
+		Name:        input.Name,
+		Prefix:      prefix,
+		SecretHash:  s.hash(plain),
+		Scopes:      models.StringList(scopes),
+		ExpiresAt:   expiresAt,
+		AuthVersion: input.AuthVersion,
 	}
-	if err := s.db.Create(&record).Error; err != nil {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.First(&user, userID).Error; err != nil {
+			return err
+		}
+		if input.AuthVersion <= 0 || user.AuthVersion != input.AuthVersion {
+			return ErrAuthVersion
+		}
+		if user.PasswordChangeRequired {
+			return ErrPasswordChangeRequired
+		}
+		if !activeRole(user.Role) {
+			return ErrAccountDisabled
+		}
+		return tx.Create(&record).Error
+	}); err != nil {
 		return CreatedToken{}, err
 	}
 	return CreatedToken{Token: record, Plain: plain}, nil
@@ -145,6 +162,9 @@ func (s *TokenService) Authenticate(plain string) (*models.PersonalAccessToken, 
 		return nil, nil, ErrInvalidToken
 	}
 	if user.Role != models.RoleAdmin && user.Role != models.RoleUser {
+		return nil, nil, ErrInvalidToken
+	}
+	if token.AuthVersion <= 0 || token.AuthVersion != user.AuthVersion || user.PasswordChangeRequired {
 		return nil, nil, ErrInvalidToken
 	}
 	now := s.now().UTC()

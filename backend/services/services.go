@@ -3,6 +3,7 @@ package services
 import (
 	"oneimg/backend/config"
 	"oneimg/backend/database"
+	"path/filepath"
 )
 
 type Services struct {
@@ -25,6 +26,7 @@ func New(db *database.Database, cfg *config.Config) *Services {
 		Tokens: NewTokenService(db.DB, cfg.ConfigSecret),
 	}
 	result.Accounts = NewAccountService(db.DB)
+	result.Accounts.recoveryPath = filepath.Join(filepath.Dir(cfg.SqlitePath), ".admin_recovery_code")
 	result.Passkeys = NewPasskeyService(db.DB, result.Accounts)
 	result.Tags = NewTagService(db.DB)
 	result.Images = NewImageService(db.DB)

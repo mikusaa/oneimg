@@ -39,17 +39,18 @@ func (s *StringList) Scan(src any) error {
 }
 
 type PersonalAccessToken struct {
-	ID         uint       `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserID     int        `json:"user_id" gorm:"not null;index"`
-	Name       string     `json:"name" gorm:"not null;size:50"`
-	Prefix     string     `json:"prefix" gorm:"not null;size:32;uniqueIndex"`
-	SecretHash string     `json:"-" gorm:"not null;size:64"`
-	Scopes     StringList `json:"scopes" gorm:"type:text;not null"`
-	ExpiresAt  *time.Time `json:"expires_at" gorm:"index"`
-	LastUsedAt *time.Time `json:"last_used_at"`
-	RevokedAt  *time.Time `json:"revoked_at" gorm:"index"`
-	CreatedAt  time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt  time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+	ID          uint       `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserID      int        `json:"user_id" gorm:"not null;index"`
+	AuthVersion int64      `json:"-" gorm:"not null;default:0"`
+	Name        string     `json:"name" gorm:"not null;size:50"`
+	Prefix      string     `json:"prefix" gorm:"not null;size:32;uniqueIndex"`
+	SecretHash  string     `json:"-" gorm:"not null;size:64"`
+	Scopes      StringList `json:"scopes" gorm:"type:text;not null"`
+	ExpiresAt   *time.Time `json:"expires_at" gorm:"index"`
+	LastUsedAt  *time.Time `json:"last_used_at"`
+	RevokedAt   *time.Time `json:"revoked_at" gorm:"index"`
+	CreatedAt   time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt   time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 func (t PersonalAccessToken) HasScope(scope string) bool {

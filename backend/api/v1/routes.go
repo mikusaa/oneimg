@@ -24,7 +24,7 @@ func (s *Server) Register(engine *gin.Engine) {
 	auth.Use(s.requireAuth(), s.limitBearer, s.csrfProtection())
 	auth.POST("/auth/logout", requireSession(), s.logout)
 	auth.GET("/me", s.me)
-	auth.PATCH("/me", requireSession(), s.updateMe)
+	auth.PATCH("/me", requireSession(), s.limitByPrincipal("password-change", 5, 5*time.Minute), s.updateMe)
 	auth.GET("/me/passkeys", requireSession(), s.listPasskeys)
 	auth.POST("/me/passkeys/registration/options", requireSession(), s.passkeyRegistrationOptions)
 	auth.POST("/me/passkeys/registration/verify", requireSession(), s.passkeyRegistrationVerify)

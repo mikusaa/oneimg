@@ -9,8 +9,6 @@ import (
 	"oneimg/backend/services"
 	"oneimg/backend/utils/images"
 	"oneimg/backend/utils/passkeys"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 type System struct {
@@ -37,25 +35,30 @@ func Init() *System {
 	}
 
 	// 初始化默认用户
-	InitDefaultUser(cfg, db)
+	if err := InitDefaultUser(cfg, db); err != nil {
+		log.Fatalf("管理员初始化失败: %v", err)
+	}
+	if err := MigrateAuthenticationState(db.DB, cfg); err != nil {
+		log.Fatalf("认证状态迁移失败: %v", err)
+	}
 	if err := MigrateLegacyUserPermissions(db.DB); err != nil {
-		log.Printf("用户权限兼容迁移失败: %v", err)
+		log.Fatalf("用户权限兼容迁移失败: %v", err)
 	}
 
 	// 初始化系统设置
 	InitSettings(db)
 	if err := InvalidateLegacyAPIAccess(db.DB); err != nil {
-		log.Printf("旧 API Token 清理失败: %v", err)
+		log.Fatalf("旧 API Token 清理失败: %v", err)
 	}
 
 	// 初始化默认存储配置
 	InitDefaultStorage(db)
 	if err := services.MigrateStorageAccounting(db.DB, "uploads", "data"); err != nil {
-		log.Printf("存储计量迁移失败: %v", err)
+		log.Fatalf("存储计量迁移失败: %v", err)
 	}
 
 	if err := ResetRemovedStorageDefaults(db.DB); err != nil {
-		log.Printf("已移除存储的默认配置修复失败: %v", err)
+		log.Fatalf("已移除存储的默认配置修复失败: %v", err)
 	}
 
 	r := &System{
@@ -65,52 +68,6 @@ func Init() *System {
 	}
 
 	return r
-}
-
-// hashPassword 对密码进行加密
-func hashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	return string(bytes), err
-}
-
-// InitDefaultUser 初始化默认用户
-func InitDefaultUser(cfg *config.Config, db *database.Database) {
-	// 检查是否已存在用户
-	var count int64
-	db.DB.Model(&models.User{}).Count(&count)
-
-	if count > 0 {
-		log.Println("用户已存在，跳过默认用户初始化")
-		return
-	}
-
-	// 从配置中读取默认用户信息
-	defaultUsername := cfg.DefaultUser
-	defaultPassword := cfg.DefaultPass
-
-	// 加密密码
-	hashedPassword, err := hashPassword(defaultPassword)
-	if err != nil {
-		log.Fatal("密码加密失败:", err)
-	}
-
-	// 创建默认用户
-	defaultUser := models.User{
-		Username: defaultUsername,
-		Role:     1,
-		Password: hashedPassword,
-		Permission: models.Permission{
-			Codes:   []string{},
-			Buckets: []int{},
-		},
-	}
-
-	result := db.DB.Create(&defaultUser)
-	if result.Error != nil {
-		log.Fatal("创建默认用户失败:", result.Error)
-	}
-
-	log.Printf("默认用户创建成功 - 用户名: %s", defaultUser.Username)
 }
 
 // InitDefaultStorage 初始化默认存储配置

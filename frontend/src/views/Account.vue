@@ -1,6 +1,9 @@
 <template>
   <div class="page-shell text-slate-800 dark:text-slate-200">
     <PageHeader title="账户设置" description="管理账户资料、密码、Passkey 和 API 令牌" />
+    <p v-if="restricted" role="alert" class="section-card mb-6 text-amber-700 dark:text-amber-300">
+      请先修改初始密码。{{ bootstrapRequired ? '此账户存在旧默认密码风险，需要服务器数据目录中的 .admin_recovery_code；恢复后全部历史 Passkey 和令牌将失效。' : '改密后请重新登录。' }}
+    </p>
 
     <div class="grid grid-cols-1 gap-6 pb-16 xl:grid-cols-2">
       <section class="section-card !p-0 overflow-hidden xl:col-start-1 xl:row-start-1">
@@ -16,7 +19,7 @@
           </div>
 
           <form class="space-y-6" @submit.prevent="updateAccount">
-            <div v-if="isAdmin" class="setting-group">
+            <div v-if="isAdmin && !restricted" class="setting-group">
               <label class="field-label" for="newUsername">新用户名</label>
               <input
                 id="newUsername"
@@ -66,6 +69,10 @@
                 autocomplete="new-password"
               />
             </div>
+            <div v-if="bootstrapRequired" class="setting-group">
+              <label class="field-label" for="bootstrapCode">服务器本地一次性校验码</label>
+              <input id="bootstrapCode" v-model="accountForm.bootstrapCode" type="password" class="input-modern" autocomplete="off" required />
+            </div>
 
             <button type="submit" :disabled="isUpdatingAccount" class="primary-button w-full px-6 py-3">
               <i v-if="isUpdatingAccount" class="ri-loader-4-line animate-spin" aria-hidden="true"></i>
@@ -75,7 +82,7 @@
         </div>
       </section>
 
-      <section class="section-card !p-0 overflow-hidden xl:col-span-2 xl:col-start-1 xl:row-start-2">
+      <section v-if="!restricted" class="section-card !p-0 overflow-hidden xl:col-span-2 xl:col-start-1 xl:row-start-2">
         <div class="panel-content p-6 md:p-8">
           <div class="mb-6 flex items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-3">
@@ -129,7 +136,7 @@
         </div>
       </section>
 
-      <section class="section-card !p-0 overflow-hidden xl:col-start-2 xl:row-start-1">
+      <section v-if="!restricted" class="section-card !p-0 overflow-hidden xl:col-start-2 xl:row-start-1">
         <div class="panel-content p-6 md:p-8">
           <div class="mb-6 flex items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-3">
@@ -255,12 +262,14 @@ import type { CreateTokenRequest } from '@/api/generated/types.gen'
 type TokenScope = CreateTokenRequest['scopes'][number]
 
 const router = useRouter()
+const restricted = !!getStoredUser()?.password_change_required
+const bootstrapRequired = !!getStoredUser()?.bootstrap_verification_required
 const isAdmin = Number(getStoredUser()?.role) === ROLE_ADMIN
 const browserSupportsPasskeys = ref(false)
 const serverSupportsPasskeys = ref(false)
 const passkeyReady = computed(() => browserSupportsPasskeys.value && serverSupportsPasskeys.value)
 
-const accountForm = ref({ newUsername: '', currentPassword: '', newPassword: '', confirmPassword: '' })
+const accountForm = ref({ newUsername: '', currentPassword: '', newPassword: '', confirmPassword: '', bootstrapCode: '' })
 const isUpdatingAccount = ref(false)
 const passkeys = ref([])
 const loadingPasskeys = ref(true)
@@ -478,20 +487,22 @@ const deletePasskey = async (item) => {
 
 const updateAccount = async () => {
   const { newUsername, currentPassword, newPassword, confirmPassword } = accountForm.value
-  const hasUsernameChange = isAdmin && newUsername.trim() !== ''
+  const hasUsernameChange = isAdmin && !restricted && newUsername.trim() !== ''
   const hasPasswordChange = newPassword.trim() !== ''
   if (!hasUsernameChange && !hasPasswordChange) return message.error('请输入要修改的用户名或密码')
   if (hasUsernameChange && (newUsername.length < 3 || newUsername.length > 50)) return message.error('用户名长度必须在 3-50 位之间')
   if (hasPasswordChange && newPassword.length < 6) return message.error('新密码长度至少为 6 位')
   if (hasPasswordChange && newPassword !== confirmPassword) return message.error('两次输入的新密码不一致')
   if (!currentPassword) return message.error('请输入当前密码以确认修改')
+  if (restricted && !hasPasswordChange) return message.error('请设置新密码以解除账户限制')
+  if (bootstrapRequired && !accountForm.value.bootstrapCode) return message.error('请输入服务器本地一次性校验码')
 
   isUpdatingAccount.value = true
   try {
     await readJSON(await apiFetch('/api/v1/me', {
       method: 'PATCH',
       headers: authHeaders(true),
-      body: JSON.stringify({ username: hasUsernameChange ? newUsername : undefined, current_password: currentPassword, password: hasPasswordChange ? newPassword : undefined })
+      body: JSON.stringify({ username: hasUsernameChange ? newUsername : undefined, current_password: currentPassword, password: hasPasswordChange ? newPassword : undefined, bootstrap_code: accountForm.value.bootstrapCode || undefined })
     }))
     message.success('修改成功，请重新登录')
     localStorage.removeItem('userInfo')
@@ -504,6 +515,7 @@ const updateAccount = async () => {
 }
 
 onMounted(async () => {
+  if (restricted) return
   browserSupportsPasskeys.value = browserSupportsWebAuthn()
   await Promise.all([loadPasskeyAvailability(), loadPasskeys()])
   await loadTokens()

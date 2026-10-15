@@ -7,6 +7,8 @@ type SeoSettings = Record<'seo_title' | 'seo_description' | 'seo_keywords' | 'se
 interface StoredUser {
   username?: string
   role?: number
+  password_change_required?: boolean
+  bootstrap_verification_required?: boolean
   permission?: { codes?: string[]; bucket_ids?: number[] }
 }
 
@@ -227,8 +229,11 @@ router.beforeEach(async (to, from, next) => {
     const currentRole = result.data.role;
     userInfo.role = currentRole;
     userInfo.permission = result.data.permission || { codes: [], bucket_ids: [] };
+    userInfo.password_change_required = result.data.password_change_required;
+    userInfo.bootstrap_verification_required = result.data.bootstrap_verification_required;
     localStorage.setItem('userInfo', JSON.stringify(userInfo));
     window.refreshNavItems && window.refreshNavItems();
+    if (userInfo.password_change_required && to.path !== '/account') return next('/account');
     if (Array.isArray(to.meta.permissions)) {
       if (Number(currentRole) !== ROLE_ADMIN || !hasAnyPermission(to.meta.permissions, userInfo)) return next('/');
     }

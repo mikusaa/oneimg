@@ -65,7 +65,8 @@ func (s *Server) createToken(c *gin.Context) {
 	}
 	user, _ := currentUser(c)
 	created, err := s.services.Tokens.Create(user.ID, services.CreateTokenInput{
-		Name: input.Name, Scopes: input.Scopes, ExpirationDays: input.ExpirationDays,
+		AuthVersion: user.AuthVersion,
+		Name:        input.Name, Scopes: input.Scopes, ExpirationDays: input.ExpirationDays,
 	})
 	if err != nil {
 		tokenServiceError(c, err)

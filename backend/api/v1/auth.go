@@ -15,12 +15,14 @@ import (
 )
 
 type userDTO struct {
-	ID         int           `json:"id"`
-	Username   string        `json:"username"`
-	Role       int           `json:"role"`
-	Permission permissionDTO `json:"permission"`
-	CreatedAt  time.Time     `json:"created_at"`
-	UpdatedAt  time.Time     `json:"updated_at"`
+	ID                            int           `json:"id"`
+	Username                      string        `json:"username"`
+	Role                          int           `json:"role"`
+	Permission                    permissionDTO `json:"permission"`
+	CreatedAt                     time.Time     `json:"created_at"`
+	UpdatedAt                     time.Time     `json:"updated_at"`
+	PasswordChangeRequired        bool          `json:"password_change_required"`
+	BootstrapVerificationRequired bool          `json:"bootstrap_verification_required"`
 }
 
 type permissionDTO struct {
@@ -33,6 +35,7 @@ func toUserDTO(user models.User) userDTO {
 		ID: user.ID, Username: user.Username, Role: user.Role,
 		Permission: permissionDTO{Codes: user.Permission.Codes, BucketIDs: user.Permission.Buckets},
 		CreatedAt:  user.CreatedAt.UTC(), UpdatedAt: user.UpdatedAt.UTC(),
+		PasswordChangeRequired: user.PasswordChangeRequired, BootstrapVerificationRequired: user.BootstrapCodeHash != nil,
 	}
 }
 
@@ -133,6 +136,8 @@ func (s *Server) logout(c *gin.Context) {
 		writeProblem(c, http.StatusInternalServerError, "session_clear_failed", "无法退出登录")
 		return
 	}
+	session.Options(sessions.Options{MaxAge: -1, Path: "/", HttpOnly: true, Secure: strings.HasPrefix(strings.ToLower(s.services.Config.AppURL), "https://"), SameSite: http.SameSiteStrictMode})
+	_ = session.Save()
 	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie(csrfCookieName, "", -1, "/", "", strings.HasPrefix(strings.ToLower(s.services.Config.AppURL), "https://"), false)
 	writeNoContent(c)
@@ -162,12 +167,22 @@ func (s *Server) updateMe(c *gin.Context) {
 		CurrentPassword string  `json:"current_password"`
 		Username        *string `json:"username"`
 		Password        *string `json:"password"`
+		BootstrapCode   string  `json:"bootstrap_code"`
 	}
 	if !bindJSON(c, &input) {
 		return
 	}
-	updated, err := s.services.Accounts.Update(principal.User.ID, input.CurrentPassword, input.Username, input.Password)
+	updated, err := s.services.Accounts.Update(principal.User.ID, input.CurrentPassword, input.Username, input.Password, input.BootstrapCode, principal.User.AuthVersion)
 	switch {
+	case errors.Is(err, services.ErrAuthVersion):
+		writeProblem(c, http.StatusUnauthorized, "invalid_session", "登录会话已失效")
+		return
+	case errors.Is(err, services.ErrPasswordChangeRequired):
+		writeProblem(c, http.StatusForbidden, "password_change_required", "受限账户必须修改密码")
+		return
+	case errors.Is(err, services.ErrInvalidBootstrapCode):
+		writeProblem(c, http.StatusForbidden, "invalid_bootstrap_code", "本地一次性校验码无效")
+		return
 	case errors.Is(err, services.ErrAccountFieldsRequired):
 		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "至少需要修改一个字段")
 		return
@@ -195,7 +210,10 @@ func (s *Server) updateMe(c *gin.Context) {
 	}
 	session := sessions.Default(c)
 	session.Clear()
+	session.Options(sessions.Options{MaxAge: -1, Path: "/", HttpOnly: true, Secure: strings.HasPrefix(strings.ToLower(s.services.Config.AppURL), "https://"), SameSite: http.SameSiteStrictMode})
 	_ = session.Save()
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(csrfCookieName, "", -1, "/", "", strings.HasPrefix(strings.ToLower(s.services.Config.AppURL), "https://"), false)
 	writeData(c, http.StatusOK, gin.H{"user": toUserDTO(updated), "reauthentication_required": true}, nil)
 }
 
@@ -205,6 +223,7 @@ func (s *Server) saveSession(c *gin.Context, user *models.User) error {
 	session.Set("user_role", user.Role)
 	session.Set("username", user.Username)
 	session.Set("logged_in", true)
+	session.Set("auth_version", user.AuthVersion)
 	session.Options(sessions.Options{MaxAge: 24 * 60 * 60, HttpOnly: true,
 		Secure:   strings.HasPrefix(strings.ToLower(s.services.Config.AppURL), "https://"),
 		SameSite: http.SameSiteStrictMode, Path: "/"})

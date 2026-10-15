@@ -90,7 +90,7 @@ SQLITE_PATH=./data/data.db
 
 # 默认用户配置
 DEFAULT_USER=admin
-DEFAULT_PASS=123456
+DEFAULT_PASS=
 
 # Session配置
 SESSION_SECRET=
@@ -164,7 +164,7 @@ func NewConfig() {
 
 	// 默认用户配置
 	defaultUser := getEnv("DEFAULT_USER", "admin")
-	defaultPass := getEnv("DEFAULT_PASS", "123456")
+	defaultPass := getEnv("DEFAULT_PASS", "")
 
 	// Session配置（读取.env中的值，无则生成）
 	sessionSecret := getEnv("SESSION_SECRET", generateRandomSecret(32))

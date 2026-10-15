@@ -187,6 +187,10 @@ const refreshNavItems = () => {
     navItems.value.push({ path: '/login', icon: 'login-circle-line', name: '登录' })
     return
   }
+  if (userInfo.password_change_required) {
+    navItems.value.push({ path: '/account', icon: 'shield-user-line', name: '安全改密' })
+    return
+  }
 
   navItems.value.push(
     { path: '/', icon: 'home-5-line', name: '控制中心' },

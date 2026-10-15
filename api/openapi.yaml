@@ -111,7 +111,7 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/UpdateMeRequest' } } }
       responses:
-        '200': { $ref: '#/components/responses/DataResponse' }
+        '200': { $ref: '#/components/responses/UpdatedAccountResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
   /me/passkeys:
     get:
@@ -523,6 +523,21 @@ components:
       required: true
       content: { application/json: { schema: { $ref: '#/components/schemas/StorageRequest' } } }
   responses:
+    UpdatedAccountResponse:
+      description: 账户已更新，需要重新登录；改密会撤销全部会话与个人令牌
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [user, reauthentication_required]
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  reauthentication_required: { type: boolean }
     UploadOptionsResponse:
       headers: { X-Request-ID: { schema: { type: string } } }
       description: 实际允许的文件类型、分类大小限制和可用存储
@@ -626,7 +641,7 @@ components:
       properties: { codes: { type: array, items: { type: string } }, bucket_ids: { type: array, items: { type: integer, minimum: 1 } } }
     User:
       type: object
-      required: [id, username, role, permission, created_at, updated_at]
+      required: [id, username, role, permission, created_at, updated_at, password_change_required, bootstrap_verification_required]
       properties:
         id: { type: integer }
         username: { type: string }
@@ -634,6 +649,8 @@ components:
         permission: { $ref: '#/components/schemas/Permission' }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        password_change_required: { type: boolean }
+        bootstrap_verification_required: { type: boolean, description: 改密需要服务器本地一次性校验码 }
     ManagedUser:
       allOf:
         - { $ref: '#/components/schemas/User' }
@@ -758,7 +775,7 @@ components:
     UpdateMeRequest:
       type: object
       required: [current_password]
-      properties: { current_password: { type: string, format: password }, username: { type: string }, password: { type: string, format: password } }
+      properties: { current_password: { type: string, format: password }, username: { type: string }, password: { type: string, format: password }, bootstrap_code: { type: string, description: 旧默认密码管理员恢复时必填的本地一次性码 } }
     CreateTokenRequest:
       type: object
       required: [name, scopes]

@@ -224,7 +224,13 @@ func (s *UserService) ResetPassword(actorID, id int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := s.db.Model(&user).Update("password", string(hash)).Error; err != nil {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		var current models.User
+		if err := tx.First(&current, id).Error; err != nil {
+			return err
+		}
+		return rotatePassword(tx, &current, string(hash), map[string]any{})
+	}); err != nil {
 		return "", err
 	}
 	return plain, nil
