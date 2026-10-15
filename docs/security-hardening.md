@@ -62,16 +62,20 @@ Cache-Control: no-cache, max-age=0, must-revalidate
 ## 自动与隔离验证
 
 ```bash
-go test ./...
-go test -race ./...
-go vet ./...
 cd frontend
 pnpm install --frozen-lockfile
 pnpm run openapi:check
 pnpm run build
+cd ..
+go test ./...
+go test -race ./...
+go vet ./...
+cd frontend
 pnpm exec playwright install --with-deps chromium firefox webkit
 pnpm run test:security
 ```
+
+干净检出时先构建前端，再执行 Go 检查；`main.go` 使用 `go:embed` 嵌入 `frontend/dist`，不能依赖开发机上残留的产物。
 
 浏览器测试使用 `internal/securityfixture`：仅监听 `127.0.0.1:18089`，临时 SQLite/媒体，固定测试账号，禁止作为生产入口。用真实前端构建验证 Home/Gallery 恶意历史元数据、预览操作、移动端和历史 SVG。不会访问生产凭证或真实远端。
 

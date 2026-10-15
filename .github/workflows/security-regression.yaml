@@ -20,16 +20,17 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10
-      - name: 后端和竞态回归
-        run: |
-          go test ./...
-          go test -race ./...
       - name: 前端及接口契约
         working-directory: frontend
         run: |
           pnpm install --frozen-lockfile
           pnpm run openapi:check
           pnpm run build
+      - name: 后端和竞态回归
+        run: |
+          go test ./...
+          go test -race ./...
+          go vet ./...
       - name: 浏览器安全回归
         working-directory: frontend
         run: |
