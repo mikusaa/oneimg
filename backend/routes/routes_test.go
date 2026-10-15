@@ -90,6 +90,36 @@ func TestOpenAPIDocuments(t *testing.T) {
 	}
 }
 
+func TestPublicWriteMethodsAndForwardedIP(t *testing.T) {
+	for _, trusted := range []bool{false, true} {
+		cfg := &config.Config{SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test", ConfigSecret: "test"}
+		if trusted {
+			cfg.TrustedProxies = []string{"192.0.2.1"}
+		}
+		router, _ := setupTestRouter(t, cfg)
+		for _, method := range []string{"DELETE", "PUT", "POST", "PATCH"} {
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(method, "/uploads/missing.png", nil))
+			if w.Code != 405 || w.Header().Get("Allow") != "GET, HEAD" {
+				t.Fatalf("%s: %d %v", method, w.Code, w.Header())
+			}
+		}
+		router.GET("/client-ip", func(c *gin.Context) { c.String(200, c.ClientIP()) })
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/client-ip", nil)
+		req.RemoteAddr = "192.0.2.1:1234"
+		req.Header.Set("X-Forwarded-For", "198.51.100.9")
+		router.ServeHTTP(w, req)
+		expected := "192.0.2.1"
+		if trusted {
+			expected = "198.51.100.9"
+		}
+		if w.Body.String() != expected {
+			t.Fatal(w.Body.String())
+		}
+	}
+}
+
 func TestExternalAuthenticationRoutesAreRemoved(t *testing.T) {
 	cfg := &config.Config{
 		SqlitePath:    filepath.Join(t.TempDir(), "oneimg.db"),

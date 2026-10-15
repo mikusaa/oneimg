@@ -15,9 +15,12 @@ type rateWindow struct {
 }
 
 type rateLimiter struct {
-	mu      sync.Mutex
-	windows map[string]rateWindow
+	mu          sync.Mutex
+	windows     map[string]rateWindow
+	lastCleanup time.Time
 }
+
+const maxRateWindows = 10000
 
 func newRateLimiter() *rateLimiter { return &rateLimiter{windows: make(map[string]rateWindow)} }
 
@@ -25,7 +28,18 @@ func (l *rateLimiter) allow(key string, limit int, duration time.Duration) (bool
 	now := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if now.Sub(l.lastCleanup) >= time.Minute || len(l.windows) >= maxRateWindows {
+		for identity, window := range l.windows {
+			if !window.Reset.After(now) {
+				delete(l.windows, identity)
+			}
+		}
+		l.lastCleanup = now
+	}
 	window, exists := l.windows[key]
+	if !exists && len(l.windows) >= maxRateWindows {
+		return false, time.Minute
+	}
 	if !exists || !window.Reset.After(now) {
 		l.windows[key] = rateWindow{Count: 1, Reset: now.Add(duration)}
 		return true, duration

@@ -264,6 +264,9 @@ func (c *WebDAVClient) WebDAVGetFile(ctx context.Context, path string) (*http.Re
 
 // WebDAVMedia bounds connection/header waits but leaves streaming lifetime to the request context.
 func (c *WebDAVClient) WebDAVMedia(ctx context.Context, path, method, byteRange, ifRange string) (*http.Response, error) {
+	if method != http.MethodGet && method != http.MethodHead {
+		return nil, errors.New("public media is read-only")
+	}
 	req, err := http.NewRequestWithContext(ctx, method, c.config.BaseURL+c.NormalizePath(path), nil)
 	if err != nil {
 		return nil, err
@@ -281,7 +284,7 @@ func (c *WebDAVClient) WebDAVMedia(ctx context.Context, path, method, byteRange,
 	return mediaClient.Do(req)
 }
 
-var mediaClient = &http.Client{Transport: &http.Transport{
+var mediaClient = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Transport: &http.Transport{
 	Proxy:               http.ProxyFromEnvironment,
 	DialContext:         (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 	TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 30 * time.Second, IdleConnTimeout: 90 * time.Second,

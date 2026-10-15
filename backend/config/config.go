@@ -3,7 +3,9 @@ package config
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"log"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +35,7 @@ type Config struct {
 	PasskeyRPID    string
 	PasskeyOrigins []string
 	PasskeyRPName  string
+	TrustedProxies []string
 }
 
 // 全局配置实例
@@ -80,6 +83,7 @@ func CreateDefaultEnv() {
 	envTemplate := `# 服务器配置
 SERVER_PORT=8080
 APP_URL=http://localhost:8080
+TRUSTED_PROXIES=
 
 # SQLite 数据库
 SQLITE_PATH=./data/data.db
@@ -169,6 +173,10 @@ func NewConfig() {
 	passkeyRPID := strings.TrimSpace(getEnv("PASSKEY_RP_ID", ""))
 	passkeyOrigins := splitCommaSeparated(getEnv("PASSKEY_ORIGINS", ""))
 	passkeyRPName := strings.TrimSpace(getEnv("PASSKEY_RP_NAME", "OneImg"))
+	trustedProxies, err := ParseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// 初始化全局配置
 	App = &Config{
@@ -182,9 +190,27 @@ func NewConfig() {
 		PasskeyRPID:    passkeyRPID,
 		PasskeyOrigins: passkeyOrigins,
 		PasskeyRPName:  passkeyRPName,
+		TrustedProxies: trustedProxies,
 	}
 
 	log.Println("✅ 配置初始化完成")
+}
+
+// ParseTrustedProxies accepts explicit addresses only, never hostnames or the entire Internet.
+func ParseTrustedProxies(value string) ([]string, error) {
+	result := splitCommaSeparated(value)
+	for _, item := range result {
+		if prefix, err := netip.ParsePrefix(item); err == nil {
+			if prefix.Bits() == 0 || (prefix.Addr().Is4In6() && prefix.Bits() <= 96) {
+				return nil, fmt.Errorf("TRUSTED_PROXIES must not trust all addresses")
+			}
+			continue
+		}
+		if _, err := netip.ParseAddr(item); err != nil {
+			return nil, fmt.Errorf("TRUSTED_PROXIES contains an invalid IP/CIDR")
+		}
+	}
+	return result, nil
 }
 
 func splitCommaSeparated(value string) []string {

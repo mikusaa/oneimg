@@ -59,6 +59,19 @@ func TestCreateDefaultEnvUsesDataDirectory(t *testing.T) {
 	}
 }
 
+func TestTrustedProxiesValidation(t *testing.T) {
+	for _, value := range []string{"localhost", "invalid/24", "0.0.0.0/0", "::/0", "::ffff:0.0.0.0/96"} {
+		if _, err := ParseTrustedProxies(value); err == nil {
+			t.Fatalf("accepted %q", value)
+		}
+	}
+	for _, value := range []string{"", "127.0.0.1,192.0.2.0/24,2001:db8::/32"} {
+		if _, err := ParseTrustedProxies(value); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestExistingRootEnvTakesPrecedence(t *testing.T) {
 	originalWorkingDirectory, err := os.Getwd()
 	if err != nil {

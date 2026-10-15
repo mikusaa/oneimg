@@ -20,6 +20,16 @@ import (
 	"oneimg/backend/utils/webdav"
 )
 
+// AllowReadMethod runs before any lookup or storage access, including unknown SPA paths.
+func AllowReadMethod(c *gin.Context) bool {
+	if c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead {
+		return true
+	}
+	c.Header("Allow", "GET, HEAD")
+	c.AbortWithStatus(http.StatusMethodNotAllowed)
+	return false
+}
+
 func mediaHeaders(c *gin.Context, mime, storage string) {
 	c.Header("Content-Type", mime)
 	c.Header("Cache-Control", "public, max-age=31536000")

@@ -9,6 +9,7 @@ import (
 
 	apiV1 "oneimg/backend/api/v1"
 	"oneimg/backend/app"
+	"oneimg/backend/config"
 	"oneimg/backend/media"
 	"oneimg/backend/middlewares"
 
@@ -23,6 +24,13 @@ func SetupRoutes(frontendFS fs.FS, system *app.System) *gin.Engine {
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	proxies, err := config.ParseTrustedProxies(strings.Join(cfg.TrustedProxies, ","))
+	if err != nil {
+		panic(err)
+	}
+	if err := r.SetTrustedProxies(proxies); err != nil {
+		panic(err)
+	}
 	r.HandleMethodNotAllowed = true
 	v1Server := apiV1.NewServer(system.Services)
 
@@ -87,6 +95,9 @@ func SetupRoutes(frontendFS fs.FS, system *app.System) *gin.Engine {
 		// 1. API路径返回404
 		if strings.HasPrefix(c.Request.URL.Path, "/api") {
 			v1Server.NotFound(c)
+			return
+		}
+		if !media.AllowReadMethod(c) {
 			return
 		}
 

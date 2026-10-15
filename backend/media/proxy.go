@@ -29,6 +29,9 @@ func mediaError(status int, detail string) mediaProxyError {
 }
 
 func ImageProxy(c *gin.Context) bool {
+	if !AllowReadMethod(c) {
+		return true
+	}
 	// 获取并清理路径
 	cleanPath := c.Request.URL.Path
 	if cleanPath == "" || cleanPath == "/" {

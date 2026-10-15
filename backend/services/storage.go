@@ -24,10 +24,12 @@ import (
 )
 
 var (
-	ErrStorageTypeInvalid   = errors.New("invalid storage type")
-	ErrStorageConfigInvalid = errors.New("invalid storage configuration")
-	ErrDefaultStorage       = errors.New("default storage cannot be modified")
-	ErrStorageCapacity      = errors.New("storage capacity is invalid")
+	ErrStorageTypeInvalid     = errors.New("invalid storage type")
+	ErrStorageConfigInvalid   = errors.New("invalid storage configuration")
+	ErrDefaultStorage         = errors.New("default storage cannot be modified")
+	ErrStorageCapacity        = errors.New("storage capacity is invalid")
+	ErrPermissionDenied       = errors.New("permission denied")
+	ErrNewEndpointCredentials = errors.New("credentials required for new endpoint")
 )
 
 type FilesystemMetrics struct {
@@ -205,17 +207,11 @@ func (s *StorageService) Update(id int, input StorageInput) (models.Buckets, err
 	if input.Type != existing.Type {
 		return existing, ErrStorageTypeInvalid
 	}
-	decrypted, err := secureconfig.DecryptBucketConfigValues(existing.Config)
+	merged, err := mergeStorageConfig(existing, input.Config)
 	if err != nil {
 		return existing, err
 	}
-	for key, value := range input.Config {
-		if secureconfig.IsBucketSensitiveKey(key) && strings.TrimSpace(fmt.Sprint(value)) == "" {
-			continue
-		}
-		decrypted[key] = value
-	}
-	input.Config = decrypted
+	input.Config = merged
 	input, err = validateStorageInput(input, false)
 	if err != nil {
 		return existing, err
@@ -283,21 +279,24 @@ func (s *StorageService) Delete(ctx context.Context, id int) error {
 	})
 }
 
-func (s *StorageService) TestConnection(ctx context.Context, input StorageInput, existingID *int) (string, error) {
+func (s *StorageService) TestConnection(ctx context.Context, actor models.User, input StorageInput, existingID *int) (string, error) {
+	can := func(code string) bool {
+		return actor.ID == models.SuperAdminID || (actor.Role == models.RoleAdmin && actor.Permission.HasPermission(code))
+	}
+	if (existingID != nil && !can("storage:update")) || (existingID == nil && !can("storage:create") && !can("storage:update")) {
+		return "", ErrPermissionDenied
+	}
 	if existingID != nil {
 		var existing models.Buckets
 		if err := s.db.First(&existing, *existingID).Error; err != nil {
 			return "", err
 		}
-		decrypted, err := secureconfig.DecryptBucketConfigValues(existing.Config)
+		if input.Type != "" && input.Type != existing.Type {
+			return "", ErrStorageTypeInvalid
+		}
+		merged, err := mergeStorageConfig(existing, input.Config)
 		if err != nil {
 			return "", err
-		}
-		for key, value := range input.Config {
-			if secureconfig.IsBucketSensitiveKey(key) && strings.TrimSpace(fmt.Sprint(value)) == "" {
-				continue
-			}
-			decrypted[key] = value
 		}
 		if input.Name == "" {
 			input.Name = existing.Name
@@ -308,7 +307,7 @@ func (s *StorageService) TestConnection(ctx context.Context, input StorageInput,
 		if input.CapacityBytes == 0 {
 			input.CapacityBytes = existing.Capacity
 		}
-		input.Config = decrypted
+		input.Config = merged
 	}
 	input, err := validateStorageInput(input, true)
 	if err != nil {

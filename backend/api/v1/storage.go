@@ -148,13 +148,22 @@ func (s *Server) testStorageConnection(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 25*time.Second)
 	defer cancel()
-	detail, err := s.services.Storage.TestConnection(ctx, services.StorageInput{Name: input.Name, Type: input.Type, CapacityBytes: input.CapacityBytes, Config: input.Config}, input.ID)
+	actor, _ := currentUser(c)
+	detail, err := s.services.Storage.TestConnection(ctx, *actor, services.StorageInput{Name: input.Name, Type: input.Type, CapacityBytes: input.CapacityBytes, Config: input.Config}, input.ID)
 	if errors.Is(err, context.DeadlineExceeded) {
 		c.Header("Retry-After", "5")
 		writeProblem(c, http.StatusGatewayTimeout, "storage_connection_timeout", "存储连接测试超时")
 		return
 	}
 	if err != nil {
+		if errors.Is(err, services.ErrPermissionDenied) {
+			writeProblem(c, http.StatusForbidden, "permission_denied", "没有测试已有存储的权限")
+			return
+		}
+		if errors.Is(err, services.ErrNewEndpointCredentials) {
+			writeProblem(c, http.StatusUnprocessableEntity, "credentials_required_for_new_endpoint", "更换存储端点或账户必须提供新凭证")
+			return
+		}
 		if errors.Is(err, services.ErrStorageTypeInvalid) || errors.Is(err, services.ErrStorageConfigInvalid) {
 			writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "存储配置无效")
 			return
@@ -194,6 +203,8 @@ func handleStorageError(c *gin.Context, err error) bool {
 		return false
 	}
 	switch {
+	case errors.Is(err, services.ErrNewEndpointCredentials):
+		writeProblem(c, http.StatusUnprocessableEntity, "credentials_required_for_new_endpoint", "更换存储端点或账户必须提供新凭证")
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		writeProblem(c, http.StatusNotFound, "storage_not_found", "存储桶不存在")
 	case errors.Is(err, services.ErrDefaultStorage):
