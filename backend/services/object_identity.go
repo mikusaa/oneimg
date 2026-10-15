@@ -12,9 +12,13 @@ import (
 
 	"gorm.io/gorm"
 	"oneimg/backend/models"
+	"oneimg/backend/utils/ftp"
 	"oneimg/backend/utils/secureconfig"
 	"oneimg/backend/utils/storageobject"
 )
+
+// Endpoint changes must not race a reference snapshot or redirect an in-flight upload's record.
+var storageTopology sync.RWMutex
 
 type identityLock struct {
 	mu   sync.Mutex
@@ -139,7 +143,7 @@ func physicalIdentity(bucket models.Buckets, key string) (string, error) {
 			return "", errors.New("unknown FTP identity")
 		}
 		// Ignore account identity conservatively: different accounts may expose the same filesystem.
-		return "ftp:" + host + ":" + strconv.Itoa(port) + path.Clean("/"+strings.ReplaceAll(key, "\\", "/")), nil
+		return "ftp:" + host + ":" + strconv.Itoa(port) + "/" + ftp.ObjectPath(key), nil
 	}
 	return "", errors.New("unsupported physical identity")
 }
@@ -152,6 +156,9 @@ func normalizedPhysicalEndpoint(raw string) (string, error) {
 	host := strings.ToLower(u.Host)
 	if (u.Scheme == "http" && u.Port() == "80") || (u.Scheme == "https" && u.Port() == "443") {
 		host = strings.ToLower(u.Hostname())
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
 	}
 	return u.Scheme + "://" + host + strings.TrimRight(u.EscapedPath(), "/"), nil
 }

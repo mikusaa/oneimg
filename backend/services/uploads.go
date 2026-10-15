@@ -35,6 +35,8 @@ func NewUploadService(db *gorm.DB) *UploadService {
 }
 
 func (s *UploadService) UploadBatch(c *gin.Context, user models.User, files []*multipart.FileHeader, bucketID int, tagIDs []int) ([]UploadFileResult, error) {
+	storageTopology.RLock()
+	defer storageTopology.RUnlock()
 	var setting models.Settings
 	if err := s.db.First(&setting).Error; err != nil {
 		return nil, err

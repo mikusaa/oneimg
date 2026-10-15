@@ -32,7 +32,7 @@ func AllowReadMethod(c *gin.Context) bool {
 }
 
 func mediaHeaders(c *gin.Context, mime, storage string) {
-	if strings.EqualFold(strings.SplitN(mime, ";", 2)[0], "image/svg+xml") || strings.EqualFold(filepath.Ext(c.Request.URL.Path), ".svg") {
+	if isSVGMIME(mime) || strings.EqualFold(filepath.Ext(c.Request.URL.Path), ".svg") {
 		mime = "image/svg+xml"
 		svgHeaders(c.Writer.Header())
 		if _, wrapped := c.Writer.(*svgPolicyWriter); !wrapped {
@@ -45,6 +45,10 @@ func mediaHeaders(c *gin.Context, mime, storage string) {
 	c.Header("X-Storage-Type", storage)
 	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length")
+}
+
+func isSVGMIME(mime string) bool {
+	return strings.EqualFold(strings.TrimSpace(strings.SplitN(mime, ";", 2)[0]), "image/svg+xml")
 }
 
 func svgHeaders(header http.Header) {
@@ -160,6 +164,9 @@ func proxyObject(c *gin.Context, key, mime string, bucket models.Buckets, client
 		return
 	}
 	size := aws.ToInt64(meta.ContentLength)
+	if isSVGMIME(aws.ToString(meta.ContentType)) {
+		mime = "image/svg+xml"
+	}
 	mediaHeaders(c, mime, bucket.Type)
 	c.Header("Accept-Ranges", "bytes")
 	c.Header("ETag", aws.ToString(meta.ETag))
@@ -218,6 +225,9 @@ func proxyWebDAVFile(c *gin.Context, path, mime string, _ int64, bucket models.B
 		return
 	}
 	defer resp.Body.Close()
+	if isSVGMIME(resp.Header.Get("Content-Type")) {
+		mime = "image/svg+xml"
+	}
 	mediaHeaders(c, mime, "webdav")
 	for _, key := range []string{"Content-Range", "Accept-Ranges", "ETag", "Last-Modified"} {
 		if value := resp.Header.Get(key); value != "" {

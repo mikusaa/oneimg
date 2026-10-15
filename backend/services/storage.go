@@ -197,6 +197,8 @@ func (s *StorageService) Create(input StorageInput) (models.Buckets, error) {
 }
 
 func (s *StorageService) Update(id int, input StorageInput) (models.Buckets, error) {
+	storageTopology.Lock()
+	defer storageTopology.Unlock()
 	if id == 1 {
 		return models.Buckets{}, ErrDefaultStorage
 	}
@@ -223,7 +225,8 @@ func (s *StorageService) Update(id int, input StorageInput) (models.Buckets, err
 	if err != nil {
 		return existing, err
 	}
-	if err := s.db.Model(&existing).Updates(map[string]any{"name": input.Name, "capacity": input.CapacityBytes, "config": encrypted}).Error; err != nil {
+	changes := models.Buckets{Name: input.Name, Capacity: input.CapacityBytes, Config: encrypted}
+	if err := s.db.Model(&existing).Select("Name", "Capacity", "Config").Updates(&changes).Error; err != nil {
 		return existing, err
 	}
 	existing.Name, existing.Capacity, existing.Config = input.Name, input.CapacityBytes, secureconfig.MaskBucketConfigValues(encrypted)
@@ -231,6 +234,8 @@ func (s *StorageService) Update(id int, input StorageInput) (models.Buckets, err
 }
 
 func (s *StorageService) Delete(ctx context.Context, id int) error {
+	storageTopology.RLock()
+	defer storageTopology.RUnlock()
 	if id == 1 {
 		return ErrDefaultStorage
 	}

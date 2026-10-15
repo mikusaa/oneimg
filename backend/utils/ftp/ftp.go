@@ -9,12 +9,18 @@ import (
 	"math"
 	"net"
 	"oneimg/backend/utils/storageobject"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/jlaffaye/ftp"
 )
+
+// FTP keys are relative to the login directory in every object lifecycle operation.
+func ObjectPath(key string) string {
+	return path.Clean(strings.TrimLeft(strings.ReplaceAll(key, "\\", "/"), "/"))
+}
 
 // FTPConfig FTP 配置结构体
 type FTPConfig struct {
@@ -34,7 +40,7 @@ func (f *FTPUtil) UploadCreate(ctx context.Context, path string, body io.Reader)
 	if err != nil {
 		return err
 	}
-	path = strings.ReplaceAll(path, "\\", "/")
+	path = ObjectPath(path)
 	dir := filepath.Dir(path)
 	if err := f.makeDirRecursive(client, dir); err != nil {
 		return err
@@ -131,6 +137,7 @@ func (f *FTPUtil) GetClient() (*ftp.ServerConn, error) {
 // imgBytes: 图片字节流
 // contentType: 图片MIME类型（可选，仅日志用）
 func (f *FTPUtil) UploadImage(remotePath string, imgBytes []byte, contentType string) error {
+	remotePath = ObjectPath(remotePath)
 	// 获取客户端
 	client, err := f.GetClient()
 	if err != nil {
@@ -156,6 +163,7 @@ func (f *FTPUtil) UploadImage(remotePath string, imgBytes []byte, contentType st
 // remotePath: 远程文件路径
 // 返回值: 文件字节流、文件大小、错误
 func (f *FTPUtil) GetFileStream(remotePath string) ([]byte, int64, error) {
+	remotePath = ObjectPath(remotePath)
 	// 获取客户端
 	client, err := f.GetClient()
 	if err != nil {
@@ -181,6 +189,7 @@ func (f *FTPUtil) GetFileStream(remotePath string) ([]byte, int64, error) {
 // DeleteImage 删除FTP服务器上的图片
 // remotePath: 远程文件路径
 func (f *FTPUtil) DeleteImage(remotePath string) error {
+	remotePath = ObjectPath(remotePath)
 	// 获取客户端
 	client, err := f.GetClient()
 	if err != nil {

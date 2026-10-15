@@ -187,6 +187,8 @@ func CanAccessImage(user models.User, image models.Image, permission string) boo
 }
 
 func (s *ImageService) Delete(ctx context.Context, id int) error {
+	storageTopology.RLock()
+	defer storageTopology.RUnlock()
 	var image models.Image
 	if err := s.db.First(&image, id).Error; err != nil {
 		return err

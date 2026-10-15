@@ -12,6 +12,7 @@ import (
 
 	"oneimg/backend/database"
 	"oneimg/backend/models"
+	"oneimg/backend/utils/ftp"
 	"oneimg/backend/utils/s3"
 	"oneimg/backend/utils/settings"
 	"oneimg/backend/utils/storageobject"
@@ -136,6 +137,7 @@ func ImageProxy(c *gin.Context) bool {
 
 // proxyLocalFile 本地文件代理
 func proxyLocalFile(c *gin.Context, realPath string, mimeType string) {
+	mediaHeaders(c, mimeType, "default")
 	if c.Request.Method == http.MethodHead || strings.Contains(c.GetHeader("Range"), ",") {
 		c.Request.Header.Del("Range")
 	}
@@ -162,9 +164,6 @@ func proxyLocalFile(c *gin.Context, realPath string, mimeType string) {
 		rangeError(c, fileInfo.Size())
 		return
 	}
-	// 设置响应头
-	mediaHeaders(c, mimeType, "default")
-
 	// 流式传输
 	c.File(fullPath)
 }
@@ -180,11 +179,7 @@ func isThumbnailPath(path string) bool {
 
 // 辅助函数
 func cleanFTPPath(path string) string {
-	path = strings.ReplaceAll(path, "\\", "/")
-	path = strings.TrimPrefix(path, "/")
-	path = strings.ReplaceAll(path, "//", "/")
-	path = strings.TrimSuffix(path, "/")
-	return path
+	return ftp.ObjectPath(path)
 }
 
 // 辅助函数，校验来源

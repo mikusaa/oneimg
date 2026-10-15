@@ -334,7 +334,8 @@ func (s *Server) uploadImages(c *gin.Context) {
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
-	if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
+	// Spool encoded files to disk; no request may retain a full raster buffer before its slot.
+	if err := c.Request.ParseMultipartForm(0); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
 			writeProblem(c, http.StatusRequestEntityTooLarge, "upload_batch_too_large", "上传批次超过允许大小")
