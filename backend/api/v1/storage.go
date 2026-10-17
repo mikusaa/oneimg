@@ -23,6 +23,7 @@ type storageDTO struct {
 	UsageExact    bool                  `json:"usage_exact"`
 	Filesystem    *storageFilesystemDTO `json:"filesystem,omitempty"`
 	Config        map[string]any        `json:"config,omitempty"`
+	Disabled      bool                  `json:"disabled"`
 }
 
 type storageFilesystemDTO struct {
@@ -43,6 +44,7 @@ func toStorageDTO(item services.StorageBucketSummary) storageDTO {
 		ID: item.Bucket.Id, Name: item.Bucket.Name, Type: item.Bucket.Type,
 		CapacityBytes: item.Bucket.Capacity, UsageBytes: item.UsageBytes,
 		UsageExact: item.UsageExact, Config: item.Bucket.Config,
+		Disabled: item.Bucket.Disabled,
 	}
 	if item.Filesystem != nil {
 		result.Filesystem = &storageFilesystemDTO{
@@ -127,12 +129,41 @@ func (s *Server) deleteStorage(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// 默认只删除数据库记录并保留远端对象；显式 purge_objects=true 才清除物理文件。
+	purgeObjects := false
+	switch raw, exists := c.GetQuery("purge_objects"); {
+	case !exists, raw == "false":
+	case raw == "true":
+		purgeObjects = true
+	default:
+		writeProblem(c, http.StatusUnprocessableEntity, "invalid_query_parameter", "purge_objects 只能是 true 或 false")
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
-	if err := s.services.Storage.Delete(ctx, id); handleStorageError(c, err) {
+	if err := s.services.Storage.Delete(ctx, id, purgeObjects); handleStorageError(c, err) {
 		return
 	}
 	writeNoContent(c)
+}
+
+func (s *Server) disableStorage(c *gin.Context) { s.setStorageDisabled(c, true) }
+
+func (s *Server) enableStorage(c *gin.Context) { s.setStorageDisabled(c, false) }
+
+func (s *Server) setStorageDisabled(c *gin.Context, disabled bool) {
+	id, ok := parsePositiveID(c, "id")
+	if !ok {
+		return
+	}
+	if _, err := s.services.Storage.SetDisabled(id, disabled); handleStorageError(c, err) {
+		return
+	}
+	summary, err := s.services.Storage.Get(id)
+	if handleStorageError(c, err) {
+		return
+	}
+	writeData(c, http.StatusOK, toStorageDTO(summary), nil)
 }
 
 func (s *Server) testStorageConnection(c *gin.Context) {
@@ -209,6 +240,8 @@ func handleStorageError(c *gin.Context, err error) bool {
 		writeProblem(c, http.StatusNotFound, "storage_not_found", "存储桶不存在")
 	case errors.Is(err, services.ErrDefaultStorage):
 		writeProblem(c, http.StatusForbidden, "default_storage_protected", "本地默认存储不能修改或删除")
+	case errors.Is(err, services.ErrStorageInUseAsDefault):
+		writeProblem(c, http.StatusConflict, "storage_is_upload_default", "该存储是当前系统默认存储，请先在“系统设置 → 存储设置”中切换默认存储后再删除或停用")
 	case errors.Is(err, services.ErrStorageTypeInvalid), errors.Is(err, services.ErrStorageConfigInvalid), errors.Is(err, services.ErrStorageCapacity):
 		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "存储配置无效")
 	case errors.Is(err, services.ErrStorageDelete):

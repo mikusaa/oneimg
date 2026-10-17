@@ -21,6 +21,9 @@
           <span class="text-xs bg-gray-100 dark:bg-dark-300 text-gray-500 dark:text-gray-300 px-2 py-0.5 rounded-full">
             {{ storage.type === 'default' ? '默认存储' : storage.type.toUpperCase() }}
           </span>
+          <span v-if="storage.disabled" class="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+            已停用
+          </span>
         </h3>
 
         <div class="mb-5 grid grid-cols-3 divide-x divide-slate-200/80 border-y border-slate-200/80 py-3 dark:divide-white/10 dark:border-white/10">
@@ -90,8 +93,15 @@
             编辑
           </button>
           <button
+            v-if="canUpdateStorage"
+            @click="storage.disabled ? EnableBucket(storage) : DisableBucketModal(storage)"
+            class="soft-button text-sm">
+            <i :class="storage.disabled ? 'ri-play-circle-line' : 'ri-pause-circle-line'"></i>
+            {{ storage.disabled ? '启用' : '停用' }}
+          </button>
+          <button
             v-if="canDeleteStorage"
-            @click="DeleteBucketModal(storage.id)"
+            @click="DeleteBucketModal(storage)"
             class="danger-button text-sm">
             <i class="ri-delete-bin-7-fill"></i>
             删除存储
@@ -398,13 +408,71 @@ const testBucketConnection = async (formData) => {
   }
 }
 
+const escapeHTML = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[char] as string));
+
+// 查询存储下的图片与视频记录数；无法获取时返回 null，弹窗仍提示删除范围。
+const countBucketRecords = async (id: number): Promise<number | null> => {
+  try {
+    const response = await apiFetch(`/api/v1/images?bucket_id=${id}&page_size=1`);
+    const result = await response.json();
+    const total = result?.meta?.pagination?.total;
+    return response.ok && typeof total === 'number' ? total : null;
+  } catch {
+    return null;
+  }
+};
+
+const fetchDefaultStorageID = async (): Promise<number | null> => {
+  try {
+    const response = await apiFetch('/api/v1/upload-options');
+    const result = await response.json();
+    const id = result?.data?.default_storage;
+    return response.ok && typeof id === 'number' ? id : null;
+  } catch {
+    return null;
+  }
+};
+
+const showDefaultStorageNotice = (name: string, action: '删除' | '停用') => {
+  new PopupModal({
+    title: `无法${action}默认存储`,
+    content: `<p>「${escapeHTML(name)}」是当前系统默认存储，${action}后上传默认值将失效。</p><p class="mt-2">请先在“系统设置 → 存储设置”中切换系统默认存储，再${action}该存储。</p>`,
+    type: 'confirm',
+    buttons: [{ text: '知道了', type: 'primary', callback: (modal) => modal.close() }]
+  }).open();
+};
+
 // 删除存储弹窗
-const DeleteBucketModal = (id) => {
+const DeleteBucketModal = async (storage: StorageView) => {
+  const { id, name } = storage;
+  const [recordCount, defaultStorageID] = await Promise.all([countBucketRecords(id), fetchDefaultStorageID()]);
+  if (defaultStorageID === id) {
+    showDefaultStorageNotice(name, '删除');
+    return;
+  }
+  const countText = recordCount === null
+    ? '该存储下的全部图片与视频记录'
+    : `该存储下的 <strong>${recordCount}</strong> 条图片与视频记录`;
+  const inputID = `delete-storage-confirm-${id}`;
+  const purgeID = `delete-storage-purge-${id}`;
   const modal = new PopupModal({
     title: '删除存储',
     content: `
-      <p>确定要删除该存储吗？</p>
-      <p class="text-red-500">注意：存储下的图片存储信息也会一并删除（源文件除外），请谨慎操作！</p>
+      <p>即将删除存储「${escapeHTML(name)}」。此操作<strong>无法撤销</strong>：</p>
+      <ul class="mt-2 list-disc space-y-1 pl-5 text-sm">
+        <li>删除${countText}及相关标签关联，这些文件的外链将立即失效。</li>
+        <li>所有用户对该存储的使用授权将被移除。</li>
+        <li>默认保留存储端的源文件和缩略图，便于自行备份或迁移。</li>
+      </ul>
+      <p class="mt-3 text-sm text-slate-500 dark:text-slate-400">只想停止新上传、保留外链时，请改用“停用”。</p>
+      <label class="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300" for="${purgeID}">
+        <input id="${purgeID}" type="checkbox" class="mt-0.5">
+        <span>同时删除存储端文件：清理这些记录对应、且未被其他记录引用的源文件和缩略图，无法恢复。</span>
+      </label>
+      <label class="field-label mt-4" for="${inputID}">请输入存储名称「${escapeHTML(name)}」以确认</label>
+      <input id="${inputID}" type="text" class="input-modern w-full" autocomplete="off">
     `,
     type: 'confirm',
     buttons: [
@@ -417,9 +485,17 @@ const DeleteBucketModal = (id) => {
         text: '确认删除',
         type: 'danger',
         callback: async (modal) => {
+          const input = document.getElementById(inputID) as HTMLInputElement | null;
+          const purgeObjects = (document.getElementById(purgeID) as HTMLInputElement | null)?.checked === true;
+          if (!input || input.value.trim() !== name) {
+            message.error('存储名称不匹配，未执行删除');
+            input?.focus();
+            return;
+          }
           modal.close();
           try {
-            const response = await apiFetch(`/api/v1/storage-buckets/${id}`, {
+            const query = purgeObjects ? '?purge_objects=true' : '';
+            const response = await apiFetch(`/api/v1/storage-buckets/${id}${query}`, {
               method: 'DELETE',
               headers: {
                 'Content-Type': 'application/json',
@@ -427,8 +503,7 @@ const DeleteBucketModal = (id) => {
             });
             const result = response.status === 204 ? null : await response.json();
             if (response.ok) {
-              message.success('存储删除成功');
-              modal.close();
+              message.success(purgeObjects ? '存储及存储端文件已删除' : '存储已删除，存储端文件已保留');
               GetBuckets();
             } else {
               message.error(result?.detail || '删除存储失败');
@@ -442,6 +517,56 @@ const DeleteBucketModal = (id) => {
     ]
   });
   modal.open();
+};
+
+const setBucketDisabled = async (storage: StorageView, disabled: boolean) => {
+  try {
+    const action = disabled ? 'disable' : 'enable';
+    const response = await apiFetch(`/api/v1/storage-buckets/${storage.id}/${action}`, { method: 'POST' });
+    const result = await response.json();
+    if (response.ok) {
+      message.success(disabled ? '存储已停用' : '存储已启用');
+      GetBuckets();
+    } else {
+      message.error(result?.detail || (disabled ? '停用存储失败' : '启用存储失败'));
+    }
+  } catch (error) {
+    console.error('切换存储状态失败:', error);
+    message.error('操作失败，请稍后重试');
+  }
+};
+
+const EnableBucket = (storage: StorageView) => setBucketDisabled(storage, false);
+
+// 停用存储弹窗
+const DisableBucketModal = async (storage: StorageView) => {
+  if (await fetchDefaultStorageID() === storage.id) {
+    showDefaultStorageNotice(storage.name, '停用');
+    return;
+  }
+  new PopupModal({
+    title: '停用存储',
+    content: `
+      <p>停用存储「${escapeHTML(storage.name)}」后：</p>
+      <ul class="mt-2 list-disc space-y-1 pl-5 text-sm">
+        <li>不再出现在上传选项中，上传和 URL 导入都会被拒绝。</li>
+        <li>已有图片、外链、用户授权和存储端文件保持不变。</li>
+        <li>可以随时重新启用。</li>
+      </ul>
+    `,
+    type: 'confirm',
+    buttons: [
+      { text: '取消', type: 'default', callback: (modal) => modal.close() },
+      {
+        text: '停用',
+        type: 'primary',
+        callback: async (modal) => {
+          modal.close();
+          await setBucketDisabled(storage, true);
+        }
+      }
+    ]
+  }).open();
 };
 
 // 获取存储列表

@@ -54,6 +54,8 @@ func (s *Server) Register(engine *gin.Engine) {
 	auth.GET("/storage-buckets/:id", requireScope("storage:read"), requireAnyPermission("storage:create", "storage:update", "storage:delete"), s.getStorage)
 	auth.PATCH("/storage-buckets/:id", requireScope("storage:write"), requirePermission("storage:update"), s.updateStorage)
 	auth.DELETE("/storage-buckets/:id", requireScope("storage:write"), requirePermission("storage:delete"), s.deleteStorage)
+	auth.POST("/storage-buckets/:id/disable", requireScope("storage:write"), requirePermission("storage:update"), s.disableStorage)
+	auth.POST("/storage-buckets/:id/enable", requireScope("storage:write"), requirePermission("storage:update"), s.enableStorage)
 	auth.POST("/storage-connection-tests", requireScope("storage:write"), requireAnyPermission("storage:create", "storage:update"), s.testStorageConnection)
 
 	auth.GET("/stats/dashboard", requireScope("stats:read"), s.dashboardStats)

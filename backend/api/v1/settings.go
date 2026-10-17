@@ -98,6 +98,10 @@ func (s *Server) patchSettings(c *gin.Context) {
 		SEOTitle: input.SEOTitle, SEODescription: input.SEODescription, SEOKeywords: input.SEOKeywords,
 		SEOICP: input.SEOICP, PublicSecurity: input.PublicSecurity, SEOIcon: input.SEOIcon,
 	})
+	if errors.Is(err, services.ErrStorageDisabled) {
+		writeProblem(c, http.StatusUnprocessableEntity, "storage_disabled", "已停用的存储不能设为系统默认存储")
+		return
+	}
 	if errors.Is(err, services.ErrSettingsValidation) || errors.Is(err, services.ErrBucketNotFound) {
 		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "设置值无效，事务已回滚")
 		return

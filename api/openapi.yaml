@@ -233,6 +233,7 @@ paths:
         新增图片只接受真实 JPEG/PNG/GIF/WebP，拒绝 SVG 及伪装内容。
         默认图像预算为 40000000 像素、单边 16384；服务器可降低预算。
         忙碌时文件返回 image_processing_busy，客户端应稍后手动重试，不无限自动重试。
+        目标存储已停用时整批返回 409 storage_disabled。
       tags: [Images]
       requestBody:
         required: true
@@ -268,7 +269,7 @@ paths:
     post:
       operationId: importImage
       summary: 导入远程图片
-      description: 无效格式或超出图像预算返回 422；处理繁忙返回 503 和 Retry-After，客户端应稍后重试。
+      description: 无效格式或超出图像预算返回 422；目标存储已停用返回 409 storage_disabled；处理繁忙返回 503 和 Retry-After，客户端应稍后重试。
       tags: [Images]
       requestBody:
         required: true
@@ -378,9 +379,44 @@ paths:
     delete:
       operationId: deleteStorageBucket
       summary: 删除存储桶
+      description: |
+        删除存储桶的图片记录、标签关联及所有用户对该存储的授权，外链随之失效；操作不可撤销。
+        默认保留远端物理文件；仅当 purge_objects=true 时才删除其中未被其他记录引用的物理文件。
+        只想停止新上传、保留外链时应使用停用接口。
+        id 为 1 的本地存储返回 403 default_storage_protected；当前系统默认存储返回 409 storage_is_upload_default，需先切换默认存储。
+        物理文件删除失败返回 502 storage_delete_failed，存储桶和数据库记录保留。
       tags: [Storage]
+      parameters:
+        - { name: purge_objects, in: query, description: 为 true 时同时删除远端物理文件；省略或 false 时保留, schema: { type: boolean, default: false } }
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
+        '403': { $ref: '#/components/responses/ProblemResponse' }
+        '409': { $ref: '#/components/responses/ProblemResponse' }
+        '502': { $ref: '#/components/responses/ProblemResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /storage-buckets/{id}/disable:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: disableStorageBucket
+      summary: 停用存储桶
+      description: |
+        停用后不接受新上传或导入，也不出现在上传选项中；已有记录、外链、授权和物理文件保持不变，可随时启用。
+        id 为 1 的本地存储返回 403 default_storage_protected；当前系统默认存储返回 409 storage_is_upload_default。
+      tags: [Storage]
+      responses:
+        '200': { $ref: '#/components/responses/StorageBucketResponse' }
+        '403': { $ref: '#/components/responses/ProblemResponse' }
+        '409': { $ref: '#/components/responses/ProblemResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+  /storage-buckets/{id}/enable:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: enableStorageBucket
+      summary: 启用存储桶
+      tags: [Storage]
+      responses:
+        '200': { $ref: '#/components/responses/StorageBucketResponse' }
+        '403': { $ref: '#/components/responses/ProblemResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
   /storage-connection-tests:
     post:
@@ -733,7 +769,7 @@ components:
         size_distribution: { type: array, items: { $ref: '#/components/schemas/SizeStats' } }
     StorageBucket:
       type: object
-      required: [id, name, type, capacity_bytes, usage_bytes, usage_exact]
+      required: [id, name, type, capacity_bytes, usage_bytes, usage_exact, disabled]
       properties:
         id: { type: integer }
         name: { type: string }
@@ -743,6 +779,7 @@ components:
         usage_exact: { type: boolean, description: false 表示 usage_bytes 包含历史数据的保守估算 }
         filesystem: { $ref: '#/components/schemas/StorageFilesystem' }
         config: { type: object, additionalProperties: true }
+        disabled: { type: boolean, description: true 表示已停用，不接受新上传且不出现在上传选项中，已有媒体照常读取 }
     StorageFilesystem:
       type: object
       description: 默认本地存储 uploads 所在文件系统的容量信息
@@ -847,7 +884,7 @@ components:
         thumbnail: { type: boolean }
         registration_enabled: { type: boolean }
         save_original_name: { type: boolean }
-        default_storage: { type: integer }
+        default_storage: { type: integer, minimum: 1, description: 必须是已存在且未停用的存储，指向已停用存储返回 422 storage_disabled }
         max_file_size: { type: integer, description: 图片单文件字节上限 }
         video_upload_enabled: { type: boolean, default: false }
         max_video_file_size: { type: integer, minimum: 1048576, maximum: 1073741824, default: 104857600 }

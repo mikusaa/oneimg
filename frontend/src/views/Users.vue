@@ -740,7 +740,7 @@ function openProfileModal(user) {
     ? '<div class="w-full rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center text-sm text-slate-400 dark:border-white/10">暂无可配置的存储源</div>'
     : bucketOptions.map(item => {
         const checked = selectedIds.includes(item.id)
-        return `<button type="button" data-bucket-id="${item.id}" class="bucket-card rounded-lg border px-3 py-2 text-sm ${checked ? 'border-primary bg-primary/10 text-primary' : 'border-slate-200 dark:border-white/10'}">${checked ? '<i class="ri-checkbox-circle-fill"></i> ' : ''}${escapeHtml(item.name)}</button>`
+        return `<button type="button" data-bucket-id="${item.id}" class="bucket-card rounded-lg border px-3 py-2 text-sm ${checked ? 'border-primary bg-primary/10 text-primary' : 'border-slate-200 dark:border-white/10'}">${checked ? '<i class="ri-checkbox-circle-fill"></i> ' : ''}${escapeHtml(item.name)}${item.disabled ? ' <span class="text-xs text-amber-600 dark:text-amber-300">（已停用）</span>' : ''}</button>`
       }).join('')
 
   const renderCodeCards = () => PERMISSION_GROUPS.map(group => `

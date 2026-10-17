@@ -76,12 +76,15 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 			if *input.DefaultStorage <= 0 {
 				return ErrSettingsValidation
 			}
-			var count int64
-			if err := tx.Model(&models.Buckets{}).Where("id = ?", *input.DefaultStorage).Count(&count).Error; err != nil {
+			var target models.Buckets
+			if err := tx.Select("id", "disabled").First(&target, *input.DefaultStorage).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return ErrBucketNotFound
+				}
 				return err
 			}
-			if count == 0 {
-				return ErrBucketNotFound
+			if target.Disabled {
+				return ErrStorageDisabled
 			}
 			put("default_storage", *input.DefaultStorage)
 		}
