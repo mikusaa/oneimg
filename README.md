@@ -35,7 +35,7 @@ docker run -d \
   -e APP_URL=http://localhost:8080 \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/uploads:/app/uploads" \
-  ghcr.io/mikusaa/oneimg:v4.1.3
+  ghcr.io/mikusaa/oneimg:v4.2.0
 ```
 
 访问 `http://localhost:8080`。镜像支持 `linux/amd64` 和 `linux/arm64`；`data` 保存数据库、配置和本地缩略图，`uploads` 保存本地媒体主文件，两者都需要持久化和备份。
@@ -66,6 +66,6 @@ docker exec oneimg cat /app/data/.initial_admin_password
 
 ## 升级与发布
 
-升级前应备份一致的数据库、配置和媒体。升级至 v4.1.3 后需重新登录；改密或管理员重置会使旧会话和 PAT 失效。历史默认密码账号、可信代理、SVG 出口与缓存、图像限制及单实例运行要求，请按[升级指南](docs/upgrading.md)检查，不要直接用旧数据库撤销已完成的凭证撤销。
+升级前应备份一致的数据库、配置和媒体。v4.2.0 起删除存储默认保留远端文件，删除或停用当前默认存储会被拒绝，见[升级指南](docs/upgrading.md#升级至-v420-的存储停用与删除)。升级至 v4.1.3 后需重新登录；改密或管理员重置会使旧会话和 PAT 失效。历史默认密码账号、可信代理、SVG 出口与缓存、图像限制及单实例运行要求，请按[升级指南](docs/upgrading.md)检查，不要直接用旧数据库撤销已完成的凭证撤销。
 
-查看 [v4.1.3 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.1.3)或[所有 Releases](https://github.com/mikusaa/oneimg/releases)。
+查看 [v4.2.0 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.2.0)或[所有 Releases](https://github.com/mikusaa/oneimg/releases)。
