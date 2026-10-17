@@ -129,6 +129,27 @@ func (s *Server) listImages(c *gin.Context) {
 	writeData(c, http.StatusOK, dtos, &Meta{Pagination: &Pagination{Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages}})
 }
 
+type imageStorageDTO struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Disabled bool   `json:"disabled"`
+}
+
+func (s *Server) listImageStorages(c *gin.Context) {
+	principal, _ := principalFrom(c)
+	items, err := s.services.Images.Storages(*principal.User)
+	if err != nil {
+		writeProblem(c, http.StatusInternalServerError, "image_storage_list_failed", "读取媒体存储列表失败")
+		return
+	}
+	result := make([]imageStorageDTO, 0, len(items))
+	for _, item := range items {
+		result = append(result, imageStorageDTO{ID: item.Id, Name: item.Name, Type: item.Type, Disabled: item.Disabled})
+	}
+	writeData(c, http.StatusOK, result, nil)
+}
+
 func (s *Server) getImage(c *gin.Context) {
 	id, ok := parsePositiveID(c, "id")
 	if !ok {

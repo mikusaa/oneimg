@@ -72,7 +72,7 @@
               v-for="bucket in presetBuckets" 
               :key="bucket.id"
               :value="bucket.id"
-            >{{ bucket.name }}</option>
+            >{{ bucket.disabled ? `${bucket.name}（已停用）` : bucket.name }}</option>
           </select>
             </div>
 
@@ -572,11 +572,11 @@ const getTagsList = async () => {
 };
 
 /**
- * 获取存储列表
+ * 获取媒体所在存储列表（含已停用、已满或无上传权限的存储）
  */
 const getBucketsList = async () => {
   try {
-    const response = await apiFetch(`${API_BASE_URL}/api/v1/upload-options`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/v1/image-storages`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -584,8 +584,8 @@ const getBucketsList = async () => {
     });
     
     const result = await response.json();
-    if (response.ok && result.data) {
-      presetBuckets.value = result.data.storage_buckets || [];
+    if (response.ok && Array.isArray(result.data)) {
+      presetBuckets.value = result.data;
     } else {
       throw new Error(result.detail || '获取存储列表失败');
     }

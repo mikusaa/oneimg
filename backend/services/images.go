@@ -99,6 +99,18 @@ func (s *ImageService) List(input ImageListQuery) ([]ImageRecord, int64, error) 
 	return records, total, nil
 }
 
+// Storages 返回当前用户可见媒体实际引用的存储名称，供图库展示与筛选；
+// 与上传选项不同，已停用、容量已满或无上传权限的存储同样返回。
+func (s *ImageService) Storages(user models.User) ([]models.Buckets, error) {
+	referenced := s.db.Model(&models.Image{}).Distinct("bucket_id")
+	if user.Role != models.RoleAdmin {
+		referenced = referenced.Where("user_id = ?", user.ID)
+	}
+	items := make([]models.Buckets, 0)
+	err := s.db.Select("id", "name", "type", "disabled").Where("id IN (?)", referenced).Order("id ASC").Find(&items).Error
+	return items, err
+}
+
 func (s *ImageService) Get(id int) (ImageRecord, error) {
 	var image models.Image
 	if err := s.db.First(&image, id).Error; err != nil {

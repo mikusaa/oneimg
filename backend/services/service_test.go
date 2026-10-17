@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -517,5 +518,68 @@ func TestStorageSetDisabledGuardsAndBlocksUploads(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("re-enabled storage is not offered for upload")
+	}
+}
+
+func TestImageStoragesIncludesUnavailableUploadTargets(t *testing.T) {
+	db := newServiceTestDB(t)
+	if err := db.Create(&models.Settings{DefaultStorage: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, bucket := range []models.Buckets{
+		{Id: 1, Name: "local", Type: "default", Config: map[string]any{}},
+		{Id: 2, Name: "disabled", Type: "webdav", Config: map[string]any{"webdav_pass": "secret"}, Disabled: true},
+		{Id: 3, Name: "full", Type: "webdav", Config: map[string]any{}, Capacity: 10, Usage: 10},
+		{Id: 4, Name: "unreferenced", Type: "webdav", Config: map[string]any{}},
+		{Id: 5, Name: "other-user-only", Type: "webdav", Config: map[string]any{}},
+	} {
+		if err := db.Create(&bucket).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, image := range []models.Image{
+		{FileName: "a.png", Url: "a.png", BucketId: 2, UserId: 7},
+		{FileName: "b.png", Url: "b.png", BucketId: 3, UserId: 7},
+		{FileName: "c.png", Url: "c.png", BucketId: 3, UserId: 7},
+		{FileName: "d.png", Url: "d.png", BucketId: 5, UserId: 8},
+	} {
+		if err := db.Create(&image).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 普通用户无任何存储权限：上传选项只剩默认存储，图库仍需拿到自己媒体所在存储。
+	user := models.User{ID: 7, Role: models.RoleUser}
+	_, options, err := NewStorageService(db).UploadOptions(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(options) != 1 || options[0].Id != 1 {
+		t.Fatalf("upload options = %+v, want only default storage", options)
+	}
+	images := NewImageService(db)
+	items, err := images.Storages(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].Id != 2 || items[0].Name != "disabled" || !items[0].Disabled || items[1].Id != 3 || items[1].Name != "full" {
+		t.Fatalf("user storages = %+v", items)
+	}
+	for _, item := range items {
+		if item.Config != nil {
+			t.Fatalf("storage %d leaks config: %+v", item.Id, item.Config)
+		}
+	}
+
+	items, err = images.Storages(models.User{ID: 1, Role: models.RoleAdmin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]int, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.Id)
+	}
+	if fmt.Sprint(ids) != "[2 3 5]" {
+		t.Fatalf("admin storage ids = %v, want [2 3 5]", ids)
 	}
 }

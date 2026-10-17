@@ -55,6 +55,8 @@ curl -sS "${ONEIMG_URL}/api/v1/upload-options" \
 
 `upload-options` 返回当前允许的 MIME 类型、图片 / 视频分类大小上限、每批数量及可用存储桶。`allowed_types` 设置项只配置图片类型，视频是否可用由 `video_upload_enabled` 决定。
 
+`GET /api/v1/image-storages`（需要 `images:read`）返回当前用户可见媒体实际所在的存储 `id`、`name`、`type` 和 `disabled`，管理员包含全部媒体。已停用、容量已满或无上传权限的存储同样返回，适合显示存储名称和填充 `bucket_id` 筛选；选择上传目标仍应使用 `upload-options`。
+
 ### 上传图片或视频
 
 先确认 PAT 有 `images:write`，并将本地文件名替换为实际存在的文件：

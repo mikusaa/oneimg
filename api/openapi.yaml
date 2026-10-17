@@ -206,6 +206,17 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/UploadOptionsResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
+  /image-storages:
+    get:
+      operationId: listImageStorages
+      summary: 获取媒体所在存储
+      description: |
+        返回当前用户可见媒体实际引用的存储名称，管理员包含全部媒体，普通用户仅含自己的媒体。
+        已停用、容量已满或当前无上传权限的存储同样返回，用于图库显示与筛选；可上传的存储请使用 /upload-options。
+      tags: [Images]
+      responses:
+        '200': { $ref: '#/components/responses/ImageStorageCollectionResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
   /images:
     get:
       operationId: listImages
@@ -632,6 +643,10 @@ components:
       description: 分页图片列表
       headers: { X-Request-ID: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data, meta], properties: { data: { type: array, items: { $ref: '#/components/schemas/Image' } }, meta: { $ref: '#/components/schemas/Meta' } } } } }
+    ImageStorageCollectionResponse:
+      description: 媒体所在存储列表
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/ImageStorage' } } } } } }
     TagResponse:
       description: 标签信息
       headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
@@ -780,6 +795,14 @@ components:
         filesystem: { $ref: '#/components/schemas/StorageFilesystem' }
         config: { type: object, additionalProperties: true }
         disabled: { type: boolean, description: true 表示已停用，不接受新上传且不出现在上传选项中，已有媒体照常读取 }
+    ImageStorage:
+      type: object
+      required: [id, name, type, disabled]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        disabled: { type: boolean, description: true 表示已停用，已有媒体照常读取 }
     StorageFilesystem:
       type: object
       description: 默认本地存储 uploads 所在文件系统的容量信息

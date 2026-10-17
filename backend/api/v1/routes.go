@@ -39,6 +39,7 @@ func (s *Server) Register(engine *gin.Engine) {
 	auth.POST("/images", requireScope("images:write"), s.limitByPrincipal("upload", 30, time.Minute), s.uploadImages)
 	auth.GET("/images/:id", requireScope("images:read"), s.getImage)
 	auth.DELETE("/images/:id", requireScope("images:delete"), s.deleteImage)
+	auth.GET("/image-storages", requireScope("images:read"), s.listImageStorages)
 	auth.POST("/image-imports", requireScope("images:write"), s.limitByPrincipal("upload", 30, time.Minute), s.importImage)
 	auth.PUT("/images/:id/tags/:tag_id", requireScope("images:write"), s.putImageTag)
 	auth.DELETE("/images/:id/tags/:tag_id", requireScope("images:write"), s.deleteImageTag)
