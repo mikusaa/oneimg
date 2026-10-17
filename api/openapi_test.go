@@ -40,6 +40,7 @@ func TestOpenAPIContract(t *testing.T) {
 		"/me/tokens":                        {"get", "post"},
 		"/me/tokens/{id}/revoke":            {"post"},
 		"/upload-options":                   {"get"},
+		"/image-storages":                   {"get"},
 		"/images":                           {"get", "post"},
 		"/images/{id}":                      {"get", "delete"},
 		"/image-imports":                    {"post"},

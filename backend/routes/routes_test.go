@@ -354,6 +354,7 @@ func TestV1OperationRoutesAreRegistered(t *testing.T) {
 		{http.MethodGet, "/api/v1/me/tokens"}, {http.MethodPost, "/api/v1/me/tokens"},
 		{http.MethodPost, "/api/v1/me/tokens/1/revoke"},
 		{http.MethodGet, "/api/v1/upload-options"},
+		{http.MethodGet, "/api/v1/image-storages"},
 		{http.MethodGet, "/api/v1/images"}, {http.MethodPost, "/api/v1/images"},
 		{http.MethodGet, "/api/v1/images/1"}, {http.MethodDelete, "/api/v1/images/1"},
 		{http.MethodPost, "/api/v1/image-imports"},
@@ -427,6 +428,78 @@ func TestBearerScopesAndCurrentUserPermissionsAreIntersected(t *testing.T) {
 	}
 	if recorder := request("/api/v1/users"); recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("deleted user status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestImageStoragesListsDisabledAndFullStoragesWithReadScope(t *testing.T) {
+	cfg := &config.Config{SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
+	router, system := setupTestRouter(t, cfg)
+	db := system.Database.DB
+	user := models.User{Username: "gallery-reader", Password: "unused", Role: models.RoleUser, Permission: models.Permission{Codes: []string{}, Buckets: []int{}}}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	disabled := models.Buckets{Name: "gallery-disabled", Type: "webdav", Config: map[string]any{"webdav_pass": "secret"}, Disabled: true}
+	full := models.Buckets{Name: "gallery-full", Type: "webdav", Config: map[string]any{}, Capacity: 1, Usage: 1}
+	hidden := models.Buckets{Name: "gallery-unused", Type: "webdav", Config: map[string]any{}}
+	for _, bucket := range []*models.Buckets{&disabled, &full, &hidden} {
+		if err := db.Create(bucket).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	images := []models.Image{
+		{FileName: "disabled.png", Url: "disabled.png", BucketId: disabled.Id, UserId: user.ID},
+		{FileName: "full.png", Url: "full.png", BucketId: full.Id, UserId: user.ID},
+	}
+	if err := db.Create(&images).Error; err != nil {
+		t.Fatal(err)
+	}
+	request := func(scope, path string) *httptest.ResponseRecorder {
+		created, err := system.Services.Tokens.Create(user.ID, services.CreateTokenInput{AuthVersion: user.AuthVersion, Name: scope, Scopes: []string{scope}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+created.Plain)
+		router.ServeHTTP(recorder, req)
+		return recorder
+	}
+
+	response := request("images:read", "/api/v1/image-storages")
+	if response.Code != http.StatusOK {
+		t.Fatalf("image storages status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "config") || strings.Contains(response.Body.String(), "secret") {
+		t.Fatalf("image storages leaks configuration: %s", response.Body.String())
+	}
+	var payload struct {
+		Data []struct {
+			ID       int    `json:"id"`
+			Name     string `json:"name"`
+			Type     string `json:"type"`
+			Disabled bool   `json:"disabled"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Data) != 2 || payload.Data[0].ID != disabled.Id || payload.Data[0].Name != "gallery-disabled" || !payload.Data[0].Disabled || payload.Data[1].ID != full.Id || payload.Data[1].Name != "gallery-full" || payload.Data[1].Disabled {
+		t.Fatalf("image storages = %+v", payload.Data)
+	}
+
+	// upload-options 仍只表示当前可上传的存储。
+	options := request("images:write", "/api/v1/upload-options")
+	if options.Code != http.StatusOK {
+		t.Fatalf("upload options status = %d, body = %s", options.Code, options.Body.String())
+	}
+	for _, name := range []string{"gallery-disabled", "gallery-full", "gallery-unused"} {
+		if strings.Contains(options.Body.String(), name) {
+			t.Fatalf("upload options offers %s: %s", name, options.Body.String())
+		}
+	}
+	if denied := request("images:write", "/api/v1/image-storages"); denied.Code != http.StatusForbidden {
+		t.Fatalf("image storages without images:read status = %d, body = %s", denied.Code, denied.Body.String())
 	}
 }
 

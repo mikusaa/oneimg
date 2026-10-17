@@ -150,6 +150,16 @@ export type StorageBucket = {
     disabled: boolean;
 };
 
+export type ImageStorage = {
+    id: number;
+    name: string;
+    type: string;
+    /**
+     * true 表示已停用，已有媒体照常读取
+     */
+    disabled: boolean;
+};
+
 /**
  * 默认本地存储 uploads 所在文件系统的容量信息
  */
@@ -825,6 +835,33 @@ export type GetUploadOptionsResponses = {
 };
 
 export type GetUploadOptionsResponse = GetUploadOptionsResponses[keyof GetUploadOptionsResponses];
+
+export type ListImageStoragesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/image-storages';
+};
+
+export type ListImageStoragesErrors = {
+    /**
+     * RFC 9457 问题详情
+     */
+    default: Problem;
+};
+
+export type ListImageStoragesError = ListImageStoragesErrors[keyof ListImageStoragesErrors];
+
+export type ListImageStoragesResponses = {
+    /**
+     * 媒体所在存储列表
+     */
+    200: {
+        data: Array<ImageStorage>;
+    };
+};
+
+export type ListImageStoragesResponse = ListImageStoragesResponses[keyof ListImageStoragesResponses];
 
 export type ListImagesData = {
     body?: never;
