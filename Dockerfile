@@ -1,5 +1,6 @@
 # 阶段1：构建前端
-FROM node:22-alpine AS frontend-builder
+# 前端产物与目标架构无关，固定在构建机原生平台运行，避免 arm64 在 QEMU 下执行 pnpm 时崩溃挂起
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 # 安装pnpm并构建前端
