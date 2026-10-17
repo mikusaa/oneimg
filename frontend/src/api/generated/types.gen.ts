@@ -144,6 +144,10 @@ export type StorageBucket = {
     config?: {
         [key: string]: unknown;
     };
+    /**
+     * true 表示已停用，不接受新上传且不出现在上传选项中，已有媒体照常读取
+     */
+    disabled: boolean;
 };
 
 /**
@@ -273,6 +277,9 @@ export type SettingsPatch = {
     thumbnail?: boolean;
     registration_enabled?: boolean;
     save_original_name?: boolean;
+    /**
+     * 必须是已存在且未停用的存储，指向已停用存储返回 422 storage_disabled
+     */
     default_storage?: number;
     /**
      * 图片单文件字节上限
@@ -1240,11 +1247,28 @@ export type DeleteStorageBucketData = {
     path: {
         id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * 为 true 时同时删除远端物理文件；省略或 false 时保留
+         */
+        purge_objects?: boolean;
+    };
     url: '/storage-buckets/{id}';
 };
 
 export type DeleteStorageBucketErrors = {
+    /**
+     * RFC 9457 问题详情
+     */
+    403: Problem;
+    /**
+     * RFC 9457 问题详情
+     */
+    409: Problem;
+    /**
+     * RFC 9457 问题详情
+     */
+    502: Problem;
     /**
      * RFC 9457 问题详情
      */
@@ -1319,6 +1343,76 @@ export type UpdateStorageBucketResponses = {
 };
 
 export type UpdateStorageBucketResponse = UpdateStorageBucketResponses[keyof UpdateStorageBucketResponses];
+
+export type DisableStorageBucketData = {
+    body?: never;
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/storage-buckets/{id}/disable';
+};
+
+export type DisableStorageBucketErrors = {
+    /**
+     * RFC 9457 问题详情
+     */
+    403: Problem;
+    /**
+     * RFC 9457 问题详情
+     */
+    409: Problem;
+    /**
+     * RFC 9457 问题详情
+     */
+    default: Problem;
+};
+
+export type DisableStorageBucketError = DisableStorageBucketErrors[keyof DisableStorageBucketErrors];
+
+export type DisableStorageBucketResponses = {
+    /**
+     * 存储桶信息
+     */
+    200: {
+        data: StorageBucket;
+    };
+};
+
+export type DisableStorageBucketResponse = DisableStorageBucketResponses[keyof DisableStorageBucketResponses];
+
+export type EnableStorageBucketData = {
+    body?: never;
+    path: {
+        id: number;
+    };
+    query?: never;
+    url: '/storage-buckets/{id}/enable';
+};
+
+export type EnableStorageBucketErrors = {
+    /**
+     * RFC 9457 问题详情
+     */
+    403: Problem;
+    /**
+     * RFC 9457 问题详情
+     */
+    default: Problem;
+};
+
+export type EnableStorageBucketError = EnableStorageBucketErrors[keyof EnableStorageBucketErrors];
+
+export type EnableStorageBucketResponses = {
+    /**
+     * 存储桶信息
+     */
+    200: {
+        data: StorageBucket;
+    };
+};
+
+export type EnableStorageBucketResponse = EnableStorageBucketResponses[keyof EnableStorageBucketResponses];
 
 export type TestStorageConnectionData = {
     body: Storage;

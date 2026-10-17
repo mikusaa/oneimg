@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddImageTagData, AddImageTagErrors, AddImageTagResponses, CreatePasskeyLoginOptionsData, CreatePasskeyLoginOptionsErrors, CreatePasskeyLoginOptionsResponses, CreatePasskeyRegistrationOptionsData, CreatePasskeyRegistrationOptionsErrors, CreatePasskeyRegistrationOptionsResponses, CreatePersonalTokenData, CreatePersonalTokenErrors, CreatePersonalTokenResponses, CreateStorageBucketData, CreateStorageBucketErrors, CreateStorageBucketResponses, CreateTagData, CreateTagErrors, CreateTagResponses, CreateUserData, CreateUserErrors, CreateUserResponses, DeleteImageData, DeleteImageErrors, DeleteImageResponses, DeleteStorageBucketData, DeleteStorageBucketErrors, DeleteStorageBucketResponses, DeleteTagData, DeleteTagErrors, DeleteTagResponses, DeleteUserData, DeleteUserErrors, DeleteUserResponses, GetDashboardStatsData, GetDashboardStatsErrors, GetDashboardStatsResponses, GetImageData, GetImageErrors, GetImageResponses, GetImageStatsData, GetImageStatsErrors, GetImageStatsResponses, GetMeData, GetMeErrors, GetMeResponses, GetPublicConfigData, GetPublicConfigErrors, GetPublicConfigResponses, GetRandomImageData, GetRandomImageErrors, GetRandomImageResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetStorageBucketData, GetStorageBucketErrors, GetStorageBucketResponses, GetUploadOptionsData, GetUploadOptionsErrors, GetUploadOptionsResponses, ImportImageData, ImportImageErrors, ImportImageResponses, ListImagesData, ListImagesErrors, ListImagesResponses, ListPasskeysData, ListPasskeysErrors, ListPasskeysResponses, ListPersonalTokensData, ListPersonalTokensErrors, ListPersonalTokensResponses, ListStorageBucketsData, ListStorageBucketsErrors, ListStorageBucketsResponses, ListTagsData, ListTagsErrors, ListTagsResponses, ListUsersData, ListUsersErrors, ListUsersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveImageTagData, RemoveImageTagErrors, RemoveImageTagResponses, RenamePasskeyData, RenamePasskeyErrors, RenamePasskeyResponses, ResetUserPasswordData, ResetUserPasswordErrors, ResetUserPasswordResponses, RevokePasskeyData, RevokePasskeyErrors, RevokePasskeyResponses, RevokePersonalTokenData, RevokePersonalTokenErrors, RevokePersonalTokenResponses, RevokeUserPasskeysData, RevokeUserPasskeysErrors, RevokeUserPasskeysResponses, TestStorageConnectionData, TestStorageConnectionErrors, TestStorageConnectionResponses, UpdateImageTagsData, UpdateImageTagsErrors, UpdateImageTagsResponses, UpdateMeData, UpdateMeErrors, UpdateMeResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UpdateStorageBucketData, UpdateStorageBucketErrors, UpdateStorageBucketResponses, UpdateTagData, UpdateTagErrors, UpdateTagResponses, UpdateUserData, UpdateUserErrors, UpdateUserPermissionsData, UpdateUserPermissionsErrors, UpdateUserPermissionsResponses, UpdateUserResponses, UploadImagesData, UploadImagesErrors, UploadImagesResponses, VerifyPasskeyLoginData, VerifyPasskeyLoginErrors, VerifyPasskeyLoginResponses, VerifyPasskeyRegistrationData, VerifyPasskeyRegistrationErrors, VerifyPasskeyRegistrationResponses } from './types.gen';
+import type { AddImageTagData, AddImageTagErrors, AddImageTagResponses, CreatePasskeyLoginOptionsData, CreatePasskeyLoginOptionsErrors, CreatePasskeyLoginOptionsResponses, CreatePasskeyRegistrationOptionsData, CreatePasskeyRegistrationOptionsErrors, CreatePasskeyRegistrationOptionsResponses, CreatePersonalTokenData, CreatePersonalTokenErrors, CreatePersonalTokenResponses, CreateStorageBucketData, CreateStorageBucketErrors, CreateStorageBucketResponses, CreateTagData, CreateTagErrors, CreateTagResponses, CreateUserData, CreateUserErrors, CreateUserResponses, DeleteImageData, DeleteImageErrors, DeleteImageResponses, DeleteStorageBucketData, DeleteStorageBucketErrors, DeleteStorageBucketResponses, DeleteTagData, DeleteTagErrors, DeleteTagResponses, DeleteUserData, DeleteUserErrors, DeleteUserResponses, DisableStorageBucketData, DisableStorageBucketErrors, DisableStorageBucketResponses, EnableStorageBucketData, EnableStorageBucketErrors, EnableStorageBucketResponses, GetDashboardStatsData, GetDashboardStatsErrors, GetDashboardStatsResponses, GetImageData, GetImageErrors, GetImageResponses, GetImageStatsData, GetImageStatsErrors, GetImageStatsResponses, GetMeData, GetMeErrors, GetMeResponses, GetPublicConfigData, GetPublicConfigErrors, GetPublicConfigResponses, GetRandomImageData, GetRandomImageErrors, GetRandomImageResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetStorageBucketData, GetStorageBucketErrors, GetStorageBucketResponses, GetUploadOptionsData, GetUploadOptionsErrors, GetUploadOptionsResponses, ImportImageData, ImportImageErrors, ImportImageResponses, ListImagesData, ListImagesErrors, ListImagesResponses, ListPasskeysData, ListPasskeysErrors, ListPasskeysResponses, ListPersonalTokensData, ListPersonalTokensErrors, ListPersonalTokensResponses, ListStorageBucketsData, ListStorageBucketsErrors, ListStorageBucketsResponses, ListTagsData, ListTagsErrors, ListTagsResponses, ListUsersData, ListUsersErrors, ListUsersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveImageTagData, RemoveImageTagErrors, RemoveImageTagResponses, RenamePasskeyData, RenamePasskeyErrors, RenamePasskeyResponses, ResetUserPasswordData, ResetUserPasswordErrors, ResetUserPasswordResponses, RevokePasskeyData, RevokePasskeyErrors, RevokePasskeyResponses, RevokePersonalTokenData, RevokePersonalTokenErrors, RevokePersonalTokenResponses, RevokeUserPasskeysData, RevokeUserPasskeysErrors, RevokeUserPasskeysResponses, TestStorageConnectionData, TestStorageConnectionErrors, TestStorageConnectionResponses, UpdateImageTagsData, UpdateImageTagsErrors, UpdateImageTagsResponses, UpdateMeData, UpdateMeErrors, UpdateMeResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UpdateStorageBucketData, UpdateStorageBucketErrors, UpdateStorageBucketResponses, UpdateTagData, UpdateTagErrors, UpdateTagResponses, UpdateUserData, UpdateUserErrors, UpdateUserPermissionsData, UpdateUserPermissionsErrors, UpdateUserPermissionsResponses, UpdateUserResponses, UploadImagesData, UploadImagesErrors, UploadImagesResponses, VerifyPasskeyLoginData, VerifyPasskeyLoginErrors, VerifyPasskeyLoginResponses, VerifyPasskeyRegistrationData, VerifyPasskeyRegistrationErrors, VerifyPasskeyRegistrationResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -271,6 +271,7 @@ export const listImages = <ThrowOnError extends boolean = false>(options?: Optio
  * 新增图片只接受真实 JPEG/PNG/GIF/WebP，拒绝 SVG 及伪装内容。
  * 默认图像预算为 40000000 像素、单边 16384；服务器可降低预算。
  * 忙碌时文件返回 image_processing_busy，客户端应稍后手动重试，不无限自动重试。
+ * 目标存储已停用时整批返回 409 storage_disabled。
  *
  */
 export const uploadImages = <ThrowOnError extends boolean = false>(options: Options<UploadImagesData, ThrowOnError>): RequestResult<UploadImagesResponses, UploadImagesErrors, ThrowOnError> => (options.client ?? client).post<UploadImagesResponses, UploadImagesErrors, ThrowOnError>({
@@ -317,7 +318,7 @@ export const getImage = <ThrowOnError extends boolean = false>(options: Options<
 /**
  * 导入远程图片
  *
- * 无效格式或超出图像预算返回 422；处理繁忙返回 503 和 Retry-After，客户端应稍后重试。
+ * 无效格式或超出图像预算返回 422；目标存储已停用返回 409 storage_disabled；处理繁忙返回 503 和 Retry-After，客户端应稍后重试。
  */
 export const importImage = <ThrowOnError extends boolean = false>(options: Options<ImportImageData, ThrowOnError>): RequestResult<ImportImageResponses, ImportImageErrors, ThrowOnError> => (options.client ?? client).post<ImportImageResponses, ImportImageErrors, ThrowOnError>({
     security: [{
@@ -468,6 +469,13 @@ export const createStorageBucket = <ThrowOnError extends boolean = false>(option
 
 /**
  * 删除存储桶
+ *
+ * 删除存储桶的图片记录、标签关联及所有用户对该存储的授权，外链随之失效；操作不可撤销。
+ * 默认保留远端物理文件；仅当 purge_objects=true 时才删除其中未被其他记录引用的物理文件。
+ * 只想停止新上传、保留外链时应使用停用接口。
+ * id 为 1 的本地存储返回 403 default_storage_protected；当前系统默认存储返回 409 storage_is_upload_default，需先切换默认存储。
+ * 物理文件删除失败返回 502 storage_delete_failed，存储桶和数据库记录保留。
+ *
  */
 export const deleteStorageBucket = <ThrowOnError extends boolean = false>(options: Options<DeleteStorageBucketData, ThrowOnError>): RequestResult<DeleteStorageBucketResponses, DeleteStorageBucketErrors, ThrowOnError> => (options.client ?? client).delete<DeleteStorageBucketResponses, DeleteStorageBucketErrors, ThrowOnError>({
     security: [{
@@ -509,6 +517,36 @@ export const updateStorageBucket = <ThrowOnError extends boolean = false>(option
         'Content-Type': 'application/json',
         ...options.headers
     }
+});
+
+/**
+ * 停用存储桶
+ *
+ * 停用后不接受新上传或导入，也不出现在上传选项中；已有记录、外链、授权和物理文件保持不变，可随时启用。
+ * id 为 1 的本地存储返回 403 default_storage_protected；当前系统默认存储返回 409 storage_is_upload_default。
+ *
+ */
+export const disableStorageBucket = <ThrowOnError extends boolean = false>(options: Options<DisableStorageBucketData, ThrowOnError>): RequestResult<DisableStorageBucketResponses, DisableStorageBucketErrors, ThrowOnError> => (options.client ?? client).post<DisableStorageBucketResponses, DisableStorageBucketErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'oneimg-session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/storage-buckets/{id}/disable',
+    ...options
+});
+
+/**
+ * 启用存储桶
+ */
+export const enableStorageBucket = <ThrowOnError extends boolean = false>(options: Options<EnableStorageBucketData, ThrowOnError>): RequestResult<EnableStorageBucketResponses, EnableStorageBucketErrors, ThrowOnError> => (options.client ?? client).post<EnableStorageBucketResponses, EnableStorageBucketErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'oneimg-session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/storage-buckets/{id}/enable',
+    ...options
 });
 
 /**

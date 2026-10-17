@@ -380,6 +380,10 @@ func (s *Server) uploadImages(c *gin.Context) {
 	}
 	principal, _ := principalFrom(c)
 	results, err := s.services.Uploads.UploadBatch(c, *principal.User, files, bucketID, tagIDs)
+	if errors.Is(err, services.ErrStorageDisabled) {
+		writeProblem(c, http.StatusConflict, "storage_disabled", "该存储已停用，不能上传新文件")
+		return
+	}
 	if errors.Is(err, services.ErrBucketAccess) {
 		writeProblem(c, http.StatusForbidden, "storage_access_denied", "无权使用该存储桶")
 		return
@@ -472,6 +476,10 @@ func (s *Server) importImage(c *gin.Context) {
 	}
 	principal, _ := principalFrom(c)
 	results, err := s.services.Uploads.UploadBatch(c, *principal.User, []*multipart.FileHeader{header}, bucketID, positiveUnique(input.TagIDs))
+	if errors.Is(err, services.ErrStorageDisabled) {
+		writeProblem(c, http.StatusConflict, "storage_disabled", "该存储已停用，不能上传新文件")
+		return
+	}
 	if errors.Is(err, services.ErrBucketAccess) {
 		writeProblem(c, http.StatusForbidden, "storage_access_denied", "无权使用该存储桶")
 		return

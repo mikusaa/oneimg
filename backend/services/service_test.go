@@ -227,7 +227,7 @@ func TestStorageDeleteFailureKeepsDatabaseRecords(t *testing.T) {
 	if err := db.Create(&image).Error; err != nil {
 		t.Fatal(err)
 	}
-	err := NewStorageService(db).Delete(context.Background(), bucket.Id)
+	err := NewStorageService(db).Delete(context.Background(), bucket.Id, true)
 	if !errors.Is(err, ErrStorageDelete) {
 		t.Fatalf("error = %v", err)
 	}
@@ -309,5 +309,213 @@ func TestRemoteImportRejectsNonPublicAddresses(t *testing.T) {
 				t.Fatalf("error = %v", err)
 			}
 		})
+	}
+}
+
+func TestStorageDeleteRejectsCurrentDefaultStorage(t *testing.T) {
+	db := newServiceTestDB(t)
+	if err := db.Create(&models.Settings{DefaultStorage: 2}).Error; err != nil {
+		t.Fatal(err)
+	}
+	bucket := models.Buckets{Id: 2, Name: "remote-default", Type: "unsupported", Capacity: 1024}
+	if err := db.Create(&bucket).Error; err != nil {
+		t.Fatal(err)
+	}
+	image := models.Image{FileName: "image.png", Url: "remote/image.png", Storage: bucket.Type, BucketId: bucket.Id, UserId: 1}
+	if err := db.Create(&image).Error; err != nil {
+		t.Fatal(err)
+	}
+	user := createServiceTestUser(t, db, "granted", "password", models.RoleUser)
+	user.Permission.Buckets = []int{bucket.Id}
+	if err := db.Model(&user).Update("permission", user.Permission).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	err := NewStorageService(db).Delete(context.Background(), bucket.Id, true)
+	if !errors.Is(err, ErrStorageInUseAsDefault) {
+		t.Fatalf("error = %v, want ErrStorageInUseAsDefault", err)
+	}
+	// 拒绝发生在物理删除之前：不可删除的 unsupported 类型不会触发 ErrStorageDelete。
+	for model, id := range map[any]int{&models.Buckets{}: bucket.Id, &models.Image{}: image.Id} {
+		var count int64
+		if err := db.Model(model).Where("id = ?", id).Count(&count).Error; err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%T record was deleted", model)
+		}
+	}
+	var setting models.Settings
+	if err := db.First(&setting).Error; err != nil {
+		t.Fatal(err)
+	}
+	if setting.DefaultStorage != bucket.Id {
+		t.Fatalf("default storage = %d, want %d", setting.DefaultStorage, bucket.Id)
+	}
+	var stored models.User
+	if err := db.First(&stored, user.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Permission.Buckets) != 1 || stored.Permission.Buckets[0] != bucket.Id {
+		t.Fatalf("bucket permission changed: %v", stored.Permission.Buckets)
+	}
+}
+
+func TestStorageDeleteNonDefaultStorageStillSucceeds(t *testing.T) {
+	db := newServiceTestDB(t)
+	if err := db.Create(&models.Settings{DefaultStorage: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	bucket := models.Buckets{Id: 3, Name: "secondary", Type: "unsupported", Capacity: 1024}
+	if err := db.Create(&bucket).Error; err != nil {
+		t.Fatal(err)
+	}
+	user := createServiceTestUser(t, db, "granted", "password", models.RoleUser)
+	user.Permission.Buckets = []int{1, bucket.Id}
+	if err := db.Model(&user).Update("permission", user.Permission).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := NewStorageService(db).Delete(context.Background(), bucket.Id, false); err != nil {
+		t.Fatalf("delete non-default storage: %v", err)
+	}
+	var count int64
+	if err := db.Model(&models.Buckets{}).Where("id = ?", bucket.Id).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("non-default storage was not deleted")
+	}
+	var setting models.Settings
+	if err := db.First(&setting).Error; err != nil {
+		t.Fatal(err)
+	}
+	if setting.DefaultStorage != 1 {
+		t.Fatalf("default storage = %d, want 1", setting.DefaultStorage)
+	}
+	var stored models.User
+	if err := db.First(&stored, user.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Permission.Buckets) != 1 || stored.Permission.Buckets[0] != 1 {
+		t.Fatalf("bucket permission = %v, want [1]", stored.Permission.Buckets)
+	}
+}
+
+func TestStorageDeleteWithoutPurgeKeepsObjectsAndRemovesRecords(t *testing.T) {
+	db := newServiceTestDB(t)
+	if err := db.Create(&models.Settings{DefaultStorage: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// unsupported 类型无法执行物理删除；若未传 purge 仍尝试删除对象会返回 ErrStorageDelete。
+	bucket := models.Buckets{Id: 4, Name: "keep-objects", Type: "unsupported", Capacity: 1024}
+	if err := db.Create(&bucket).Error; err != nil {
+		t.Fatal(err)
+	}
+	image := models.Image{FileName: "image.png", Url: "remote/image.png", Storage: bucket.Type, BucketId: bucket.Id, UserId: 1}
+	if err := db.Create(&image).Error; err != nil {
+		t.Fatal(err)
+	}
+	tag := models.Tags{Name: "kept"}
+	if err := db.Create(&tag).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.ImageToTags{ImageId: image.Id, TagId: tag.Id}).Error; err != nil {
+		t.Fatal(err)
+	}
+	user := createServiceTestUser(t, db, "granted", "password", models.RoleUser)
+	user.Permission.Buckets = []int{bucket.Id}
+	if err := db.Model(&user).Update("permission", user.Permission).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := NewStorageService(db).Delete(context.Background(), bucket.Id, false); err != nil {
+		t.Fatalf("delete without purge attempted physical deletion: %v", err)
+	}
+	for model, where := range map[any][]any{
+		&models.Buckets{}:     {"id = ?", bucket.Id},
+		&models.Image{}:       {"id = ?", image.Id},
+		&models.ImageToTags{}: {"image_id = ?", image.Id},
+	} {
+		var count int64
+		if err := db.Model(model).Where(where[0], where[1:]...).Count(&count).Error; err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("%T record was kept", model)
+		}
+	}
+	var stored models.User
+	if err := db.First(&stored, user.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Permission.Buckets) != 0 {
+		t.Fatalf("bucket permission = %v, want empty", stored.Permission.Buckets)
+	}
+}
+
+func TestStorageSetDisabledGuardsAndBlocksUploads(t *testing.T) {
+	db := newServiceTestDB(t)
+	if err := db.Create(&models.Settings{DefaultStorage: 2}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, bucket := range []models.Buckets{
+		{Id: 1, Name: "local", Type: "default", Config: map[string]any{}},
+		{Id: 2, Name: "remote-default", Type: "webdav", Config: map[string]any{}},
+		{Id: 3, Name: "remote-secondary", Type: "webdav", Config: map[string]any{}},
+	} {
+		if err := db.Create(&bucket).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := NewStorageService(db)
+	if _, err := service.SetDisabled(1, true); !errors.Is(err, ErrDefaultStorage) {
+		t.Fatalf("disable local storage error = %v", err)
+	}
+	if _, err := service.SetDisabled(2, true); !errors.Is(err, ErrStorageInUseAsDefault) {
+		t.Fatalf("disable default storage error = %v", err)
+	}
+	bucket, err := service.SetDisabled(3, true)
+	if err != nil || !bucket.Disabled {
+		t.Fatalf("disable secondary = %+v, %v", bucket, err)
+	}
+
+	admin := models.User{ID: 1, Role: models.RoleAdmin}
+	_, options, err := service.UploadOptions(admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, option := range options {
+		if option.Id == 3 {
+			t.Fatal("disabled storage is offered for upload")
+		}
+	}
+	if _, err := NewUploadService(db).UploadBatch(nil, admin, nil, 3, nil); !errors.Is(err, ErrStorageDisabled) {
+		t.Fatalf("upload to disabled storage error = %v", err)
+	}
+	title := "unchanged"
+	if _, err := NewSettingsService(db).Update(SettingsPatch{SEOTitle: &title, DefaultStorage: &bucket.Id}); !errors.Is(err, ErrStorageDisabled) {
+		t.Fatalf("set disabled default error = %v", err)
+	}
+	var setting models.Settings
+	if err := db.First(&setting).Error; err != nil {
+		t.Fatal(err)
+	}
+	if setting.DefaultStorage != 2 || setting.SEOTitle == title {
+		t.Fatalf("settings changed after rejected update: %+v", setting)
+	}
+
+	if bucket, err = service.SetDisabled(3, false); err != nil || bucket.Disabled {
+		t.Fatalf("enable secondary = %+v, %v", bucket, err)
+	}
+	if _, options, err = service.UploadOptions(admin); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, option := range options {
+		found = found || option.Id == 3
+	}
+	if !found {
+		t.Fatal("re-enabled storage is not offered for upload")
 	}
 }

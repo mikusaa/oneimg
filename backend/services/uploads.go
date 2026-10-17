@@ -46,6 +46,13 @@ func (s *UploadService) UploadBatch(c *gin.Context, user models.User, files []*m
 	}
 	unlockBucket := lockBucket(bucketID, false)
 	defer unlockBucket()
+	var disabledCount int64
+	if err := s.db.Model(&models.Buckets{}).Where("id = ? AND disabled = ?", bucketID, true).Count(&disabledCount).Error; err != nil {
+		return nil, err
+	}
+	if disabledCount > 0 {
+		return nil, ErrStorageDisabled
+	}
 	_, allowedBuckets, err := NewStorageService(s.db).UploadOptions(user)
 	if err != nil {
 		return nil, err

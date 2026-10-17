@@ -49,6 +49,8 @@ func TestOpenAPIContract(t *testing.T) {
 		"/tags/{id}":                        {"patch", "delete"},
 		"/storage-buckets":                  {"get", "post"},
 		"/storage-buckets/{id}":             {"get", "patch", "delete"},
+		"/storage-buckets/{id}/disable":     {"post"},
+		"/storage-buckets/{id}/enable":      {"post"},
 		"/storage-connection-tests":         {"post"},
 		"/stats/dashboard":                  {"get"},
 		"/stats/images":                     {"get"},

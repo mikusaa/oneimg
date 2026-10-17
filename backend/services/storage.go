@@ -27,6 +27,8 @@ var (
 	ErrStorageTypeInvalid     = errors.New("invalid storage type")
 	ErrStorageConfigInvalid   = errors.New("invalid storage configuration")
 	ErrDefaultStorage         = errors.New("default storage cannot be modified")
+	ErrStorageInUseAsDefault  = errors.New("storage is the current upload default")
+	ErrStorageDisabled        = errors.New("storage is disabled")
 	ErrStorageCapacity        = errors.New("storage capacity is invalid")
 	ErrPermissionDenied       = errors.New("permission denied")
 	ErrNewEndpointCredentials = errors.New("credentials required for new endpoint")
@@ -81,6 +83,9 @@ func (s *StorageService) UploadOptions(user models.User) (models.Settings, []mod
 	}
 	result := make([]models.Buckets, 0, len(buckets))
 	for _, bucket := range buckets {
+		if bucket.Disabled {
+			continue
+		}
 		if bucket.Id != setting.DefaultStorage {
 			if bucket.Capacity > 0 && bucket.Usage >= bucket.Capacity {
 				continue
@@ -233,7 +238,38 @@ func (s *StorageService) Update(id int, input StorageInput) (models.Buckets, err
 	return existing, nil
 }
 
-func (s *StorageService) Delete(ctx context.Context, id int) error {
+// SetDisabled 停用或启用存储。停用只拒绝新上传，不改动已有记录、授权和物理对象。
+func (s *StorageService) SetDisabled(id int, disabled bool) (models.Buckets, error) {
+	storageTopology.Lock()
+	defer storageTopology.Unlock()
+	if id == 1 {
+		return models.Buckets{}, ErrDefaultStorage
+	}
+	var bucket models.Buckets
+	if err := s.db.First(&bucket, id).Error; err != nil {
+		return bucket, err
+	}
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if disabled {
+			var defaultRefs int64
+			if err := tx.Model(&models.Settings{}).Where("default_storage = ?", id).Count(&defaultRefs).Error; err != nil {
+				return err
+			}
+			if defaultRefs > 0 {
+				return ErrStorageInUseAsDefault
+			}
+		}
+		return tx.Model(&models.Buckets{}).Where("id = ?", id).Update("disabled", disabled).Error
+	})
+	if err != nil {
+		return bucket, err
+	}
+	bucket.Disabled = disabled
+	return bucket, nil
+}
+
+// Delete 删除存储及其图片记录、标签关联和用户授权。purgeObjects 为 false 时保留远端物理对象。
+func (s *StorageService) Delete(ctx context.Context, id int, purgeObjects bool) error {
 	storageTopology.RLock()
 	defer storageTopology.RUnlock()
 	if id == 1 {
@@ -245,25 +281,53 @@ func (s *StorageService) Delete(ctx context.Context, id int) error {
 	if err := s.db.First(&bucket, id).Error; err != nil {
 		return err
 	}
-	var images []models.Image
-	if err := s.db.Where("bucket_id = ?", id).Find(&images).Error; err != nil {
+	// 删除前拒绝当前上传默认存储，避免上传默认值被静默改回本地存储。
+	var defaultRefs int64
+	if err := s.db.Model(&models.Settings{}).Where("default_storage = ?", id).Count(&defaultRefs).Error; err != nil {
 		return err
 	}
+	if defaultRefs > 0 {
+		return ErrStorageInUseAsDefault
+	}
+	if purgeObjects {
+		images, keys, err := bucketImageKeys(s.db, bucket)
+		if err != nil {
+			return err
+		}
+		unlock := lockObjects(keys)
+		defer unlock()
+		if err := purgeBucketObjects(ctx, s.db, bucket, images); err != nil {
+			return err
+		}
+	}
+	return s.deleteBucketRecords(id, bucket)
+}
+
+func bucketImageKeys(db *gorm.DB, bucket models.Buckets) ([]models.Image, []string, error) {
+	var images []models.Image
+	if err := db.Where("bucket_id = ?", bucket.Id).Find(&images).Error; err != nil {
+		return nil, nil, err
+	}
 	var keys []string
-	var ids []int
 	for _, image := range images {
 		imageKeys, err := imageObjectKeys(image, bucket)
 		if err != nil {
-			return fmt.Errorf("%w: physical identity is unavailable", ErrStorageDelete)
+			return nil, nil, fmt.Errorf("%w: physical identity is unavailable", ErrStorageDelete)
 		}
 		keys = append(keys, imageKeys...)
+	}
+	return images, keys, nil
+}
+
+// purgeBucketObjects 删除桶内未被其他记录引用的物理对象；调用方需持有对象锁。
+func purgeBucketObjects(ctx context.Context, db *gorm.DB, bucket models.Buckets, images []models.Image) error {
+	ids := make([]int, 0, len(images))
+	for _, image := range images {
 		ids = append(ids, image.Id)
 	}
-	unlock := lockObjects(keys)
-	defer unlock()
 	deleted := map[string]bool{}
 	for _, image := range images {
-		target, err := unreferencedImageObjects(s.db, image, bucket, ids)
+		target, err := unreferencedImageObjects(db, image, bucket, ids)
 		if err != nil {
 			return err
 		}
@@ -275,6 +339,10 @@ func (s *StorageService) Delete(ctx context.Context, id int) error {
 			return fmt.Errorf("%w: %v", ErrStorageDelete, err)
 		}
 	}
+	return nil
+}
+
+func (s *StorageService) deleteBucketRecords(id int, bucket models.Buckets) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("image_id IN (SELECT id FROM images WHERE bucket_id = ?)", id).Delete(&models.ImageToTags{}).Error; err != nil {
 			return err

@@ -114,6 +114,7 @@ unset ONEIMG_TOKEN
 | `401`：令牌无效、过期、撤销或会话失效 | 重新登录或创建合适的新 PAT，不循环重放旧凭据 |
 | `403`：scope / 用户权限不足或 `password_change_required` | 检查 scope、用户授权，或先在浏览器完成改密 / 恢复 |
 | `409` / 文件级 `storage_object_conflict` | 保留失败信息，核对存储，不使用覆盖写绕过冲突 |
+| `409`：`storage_disabled` / `storage_is_upload_default` | 目标存储已停用，或操作的是当前默认存储；改用其他存储或先调整设置，重试不会成功 |
 | `413`、`422` 或文件级格式 / 大小 / 尺寸错误 | 调整请求或输入；SVG、不支持的格式及超限图像不会因重试变合法 |
 | `429`：限流 | 遵循 `Retry-After` 等待，减少调用频率 |
 | `503` 或文件级 `image_processing_busy` | 稍后重试失败项；请求级繁忙响应可带 `Retry-After`，不要无限自动重试 |
