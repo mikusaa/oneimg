@@ -608,30 +608,6 @@
     @apply flex flex-col gap-2.5 sm:flex-row;
   }
 
-  .dashboard-summary {
-    @apply grid grid-cols-2 overflow-hidden sm:grid-cols-3 xl:grid-cols-6;
-  }
-
-  .dashboard-summary-item {
-    @apply flex min-w-0 items-center gap-2 px-3 py-3.5 border-b border-r border-slate-200/80 dark:border-white/10;
-  }
-
-  .dashboard-summary-item:nth-child(odd) {
-    @apply border-r border-slate-200/80 sm:border-r-0 dark:border-white/10;
-  }
-
-  .dashboard-summary-icon {
-    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-base text-slate-500 dark:bg-slate-800 dark:text-slate-300;
-  }
-
-  .dashboard-summary-label {
-    @apply block truncate text-xs text-slate-500 dark:text-slate-400;
-  }
-
-  .dashboard-summary-value {
-    @apply mt-1 block truncate text-base font-semibold text-slate-900 dark:text-white;
-  }
-
   .view-tabs {
     @apply inline-flex max-w-full gap-1 overflow-x-auto rounded-lg border border-slate-200/80 bg-white p-1 dark:border-white/10 dark:bg-slate-900;
   }
@@ -686,10 +662,6 @@
     .settings-tabs {
       mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
       padding-inline: 8px;
-    }
-
-    .dashboard-summary-item:nth-child(-n + 2) {
-      @apply border-b border-slate-200/80 dark:border-white/10;
     }
 
     .result-card-layout {
