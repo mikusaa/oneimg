@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { UiButton, UiDialog, UiDrawer, UiField, UiInput, UiMenu, UiMenuItem, UiMenuLabel, UiMenuSegmented, UiMenuSeparator, UiSegmented, UiSwitch, confirm, toast } from '@/components/ui'
+import { UiButton, UiDialog, UiDrawer, UiField, UiInput, UiMenu, UiMenuItem, UiMenuLabel, UiMenuRadioGroup, UiMenuRadioItem, UiMenuSegmented, UiMenuSeparator, UiPopover, UiSegmented, UiSwitch, confirm, toast } from '@/components/ui'
 import { useTheme } from '@/composables/useTheme'
 
 // 开发环境专用预览页（/_ui），用来核对基础组件在浅色 / 深色下的外观和键盘交互
@@ -11,6 +11,8 @@ const variants = ['default', 'primary', 'accent', 'ghost', 'danger', 'danger-sol
 const { isDark: dark, setTheme } = useTheme()
 const toggleDark = (value: boolean) => setTheme(value ? 'dark' : 'light')
 const menuView = ref('grid')
+const storage = ref('2')
+const popoverNote = ref('')
 
 const name = ref('')
 const domain = ref('img.example.com')
@@ -155,7 +157,7 @@ const askNormal = async () => {
     </section>
 
     <section class="mb-6 rounded-oi-lg border border-oi-line bg-oi-sheet p-5">
-      <h2 class="mb-3 text-[15px] font-[650] text-oi-ink">下拉菜单</h2>
+      <h2 class="mb-3 text-[15px] font-[650] text-oi-ink">下拉菜单与气泡</h2>
       <div class="flex flex-wrap gap-2.5">
         <UiMenu>
           <template #trigger><UiButton><i class="ri-more-fill" />更多操作</UiButton></template>
@@ -176,6 +178,24 @@ const askNormal = async () => {
             :options="[{ value: 'grid', icon: 'ri-grid-line', title: '网格' }, { value: 'list', icon: 'ri-list-check', title: '列表' }]"
           />
         </UiMenu>
+        <UiMenu>
+          <template #trigger><UiButton><i class="ri-database-2-line" />单选：存储 {{ storage }}</UiButton></template>
+          <UiMenuLabel>选择存储</UiMenuLabel>
+          <UiMenuRadioGroup v-model="storage">
+            <UiMenuRadioItem value="1">本地存储</UiMenuRadioItem>
+            <UiMenuRadioItem value="2">Cloudflare R2</UiMenuRadioItem>
+            <UiMenuRadioItem value="3" disabled>FTP 旧站（已停用）</UiMenuRadioItem>
+          </UiMenuRadioGroup>
+        </UiMenu>
+        <UiPopover label="气泡示例">
+          <template #trigger><UiButton variant="ghost"><i class="ri-chat-3-line" />气泡</UiButton></template>
+          <template #default="{ close }">
+            <div class="flex w-[260px] flex-col gap-2.5 p-3.5">
+              <UiField label="备注" for="popover-note"><UiInput id="popover-note" v-model="popoverNote" placeholder="Esc 或点外部关闭" /></UiField>
+              <UiButton size="sm" variant="primary" class="self-end" @click="close">完成</UiButton>
+            </div>
+          </template>
+        </UiPopover>
       </div>
     </section>
   </div>

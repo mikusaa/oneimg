@@ -25,3 +25,12 @@ export const hasPermission = (code, user = getStoredUser()) => {
 }
 
 export const hasAnyPermission = (codes, user = getStoredUser()) => codes.some(code => hasPermission(code, user))
+
+/** 与后端 CanAccessImage 一致：超级管理员的文件只有本人能管理，他人的文件需要对应权限码 */
+export const canManageImage = (image, permission, user = getStoredUser()) => {
+  if (!image) return false
+  if (isSuperAdmin(user)) return true
+  if (Number(image.user_id) === SUPER_ADMIN_ID) return false
+  if (Number(image.user_id) === Number(user?.id)) return true
+  return hasPermission(permission, user)
+}

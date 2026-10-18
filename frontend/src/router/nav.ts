@@ -12,11 +12,13 @@ export interface NavItem {
   group: NavGroup
   /** 拥有其中任一权限码的管理员可以访问 */
   permissions?: string[]
+  /** 单键快捷键，由外壳统一处理 */
+  shortcut?: string
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { name: 'Upload', path: '/upload', label: '上传', title: '上传', icon: 'ri-upload-cloud-2-line', group: 'workspace' },
-  { name: 'Gallery', path: '/gallery', label: '图库', title: '图库', icon: 'ri-image-2-line', group: 'workspace' },
+  { name: 'Upload', path: '/upload', label: '上传', title: '上传', icon: 'ri-upload-cloud-2-line', group: 'workspace', shortcut: 'U' },
+  { name: 'Gallery', path: '/gallery', label: '图库', title: '图库', icon: 'ri-image-2-line', group: 'workspace', shortcut: 'G' },
   { name: 'Stats', path: '/stats', label: '统计', title: '统计', icon: 'ri-bar-chart-box-line', group: 'workspace' },
   {
     name: 'Storage', path: '/storage', label: '存储', title: '存储', icon: 'ri-database-2-line', group: 'admin',
