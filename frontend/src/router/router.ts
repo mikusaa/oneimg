@@ -1,14 +1,14 @@
 import { apiFetch } from "@/api/client.ts"
-import { createRouter, createWebHistory, type RouteComponent, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHistory, type RouteComponent, type RouteLocationNormalized, type RouteMeta, type RouteRecordRaw } from 'vue-router'
 import { canAccessRoute, setSessionUser, clearSession, type SessionUser } from '@/composables/useSession'
 import { loadSiteConfig, useSite } from '@/composables/useSite'
 import { navItem } from './nav'
 
 const site = useSite()
 
-const navRoute = (name: string, component: () => Promise<RouteComponent>): RouteRecordRaw => {
+const navRoute = (name: string, component: () => Promise<RouteComponent>, meta: RouteMeta = {}): RouteRecordRaw => {
   const item = navItem(name)
-  return { path: item.path, name, component, meta: { title: item.title, permissions: item.permissions } }
+  return { path: item.path, name, component, meta: { title: item.title, permissions: item.permissions, ...meta } }
 }
 
 const routes: RouteRecordRaw[] = [
@@ -24,9 +24,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Register.vue'),
     meta: { title: '注册', public: true }
   },
-  // 上传暂时沿用原控制中心页面，统计拆到独立页面；页面本身在后续步骤重做
-  navRoute('Upload', () => import('@/views/Home.vue')),
+  navRoute('Upload', () => import('@/views/Upload.vue'), { bleed: true }),
   navRoute('Gallery', () => import('@/views/Gallery.vue')),
+  // 统计页暂时只有原控制中心的概览，在后续步骤重做
   navRoute('Stats', () => import('@/views/Stats.vue')),
   navRoute('Storage', () => import('@/views/Buckets.vue')),
   navRoute('Users', () => import('@/views/Users.vue')),

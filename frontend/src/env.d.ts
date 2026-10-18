@@ -14,6 +14,8 @@ declare module 'vue-router' {
     public?: boolean
     /** 拥有其中任一权限码的管理员可以访问 */
     permissions?: string[]
+    /** 页面自己控制内边距，内容铺满内容面板（如上传页的右侧栏） */
+    bleed?: boolean
   }
 }
 

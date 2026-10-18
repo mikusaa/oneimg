@@ -1,8 +1,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/api/client.ts'
+import { confirm } from '@/components/ui/confirm'
 import { toast } from '@/components/ui/toast'
 import { clearSession } from '@/composables/useSession'
+import { hasPendingUploads } from '@/composables/useUploadQueue'
 
 export const useLogout = () => {
   const router = useRouter()
@@ -10,6 +12,13 @@ export const useLogout = () => {
 
   const logout = async () => {
     if (pending.value) return
+    // 退出后上传队列会清空
+    if (hasPendingUploads() && !await confirm({
+      title: '退出登录？',
+      description: '待上传列表里还有文件，退出后会清空，正在上传的文件可能没有保存。',
+      danger: true,
+      confirmText: '退出登录',
+    })) return
     pending.value = true
     try {
       const response = await apiFetch('/api/v1/auth/logout', { method: 'POST' })

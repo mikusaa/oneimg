@@ -6,6 +6,7 @@ import { canAccessRoute, useSession } from '@/composables/useSession'
 import { THEME_OPTIONS, useTheme, type ThemePreference } from '@/composables/useTheme'
 import { NAV_ITEMS, navItem, type NavItem } from '@/router/nav'
 import AppBrand from './AppBrand.vue'
+import GlobalUploadInput from './GlobalUploadInput.vue'
 import SiteFooter from './SiteFooter.vue'
 import UserMenu from './UserMenu.vue'
 import { useLogout } from './useLogout'
@@ -24,6 +25,8 @@ const account = navItem('Account')
 const isActive = (item: NavItem) => route.path === item.path || route.path.startsWith(`${item.path}/`)
 const inAdmin = computed(() => adminItems.value.some(isActive))
 const onAccount = computed(() => isActive(account))
+// 上传页等自己控制内边距的页面铺满内容面板
+const bleed = computed(() => !!route.meta.bleed)
 
 // 手机底部标签栏：图库、统计、上传（中间）、管理、我的
 const tabs = computed(() => {
@@ -62,8 +65,14 @@ const navItemClass = (item: NavItem) => [
           :to="item.path"
           :class="navItemClass(item)"
           :aria-current="isActive(item) ? 'page' : undefined"
+          :aria-keyshortcuts="item.shortcut"
         >
           <i :class="item.icon" aria-hidden="true" />{{ item.label }}
+          <kbd
+            v-if="item.shortcut"
+            class="ml-auto inline-flex h-[18px] items-center rounded-[5px] border border-oi-line bg-oi-panel px-[5px] font-oi-mono text-[11px] font-normal text-oi-muted"
+            :title="`快捷键 ${item.shortcut}`"
+          >{{ item.shortcut }}</kbd>
         </RouterLink>
       </nav>
 
@@ -110,6 +119,7 @@ const navItemClass = (item: NavItem) => [
     <!-- 内容面板；旧页面迁移完成前仍使用页面滚动，不在面板内部滚动 -->
     <div class="min-[900px]:pl-[212px] min-[1081px]:pl-[236px]">
       <main
+        :class="bleed && 'overflow-clip'"
         class="flex min-h-dvh min-w-0 flex-col bg-oi-sheet pb-[calc(64px+env(safe-area-inset-bottom))] min-[900px]:m-2 min-[900px]:ml-0 min-[900px]:min-h-[calc(100dvh-16px)] min-[900px]:rounded-oi-lg min-[900px]:border min-[900px]:border-oi-line min-[900px]:pb-0 min-[900px]:shadow-oi"
       >
         <!-- 手机端：管理页面之间的切换 -->
@@ -148,7 +158,7 @@ const navItemClass = (item: NavItem) => [
           <SiteFooter class="mt-3.5" />
         </section>
 
-        <div class="min-w-0 flex-1 px-4 pb-8 pt-4 min-[900px]:px-6 min-[900px]:pb-10 min-[900px]:pt-6 xl:px-8">
+        <div :class="['flex min-w-0 flex-1 flex-col', !bleed && 'px-4 pb-8 pt-4 min-[900px]:px-6 min-[900px]:pb-10 min-[900px]:pt-6 xl:px-8']">
           <slot />
         </div>
       </main>
@@ -191,5 +201,7 @@ const navItemClass = (item: NavItem) => [
         <i class="ri-user-3-line" aria-hidden="true" />我的
       </RouterLink>
     </nav>
+
+    <GlobalUploadInput />
   </div>
 </template>
