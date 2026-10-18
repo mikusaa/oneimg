@@ -16,7 +16,7 @@ test.beforeEach(async ({ context, page }) => {
   }, user)
 })
 
-for (const path of ['/', '/gallery']) {
+for (const path of ['/upload', '/gallery']) {
   test(`historical metadata stays data on ${path}`, async ({ page }) => {
     await page.goto(path)
     const target = page.locator('img[src*="legacy%22"]').first()

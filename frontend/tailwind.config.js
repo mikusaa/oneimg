@@ -78,6 +78,7 @@ module.exports = {
         'oi-drawer-in': 'oi-drawer-in 0.25s cubic-bezier(0.3, 0.7, 0.4, 1)',
         'oi-toast-in': 'oi-toast-in 0.22s cubic-bezier(0.3, 0.7, 0.4, 1)',
         'oi-toast-out': 'oi-toast-out 0.18s ease-in forwards',
+        'oi-pop-in': 'oi-pop-in 0.14s ease-out',
       },
       keyframes: {
         'oi-fade': { from: { opacity: '0' } },
@@ -89,6 +90,7 @@ module.exports = {
         'oi-drawer-in': { from: { opacity: '0', transform: 'translateX(24px)' } },
         'oi-toast-in': { from: { opacity: '0', transform: 'translateY(-10px) scale(0.97)' } },
         'oi-toast-out': { to: { opacity: '0', transform: 'translateY(-10px) scale(0.97)' } },
+        'oi-pop-in': { from: { opacity: '0', transform: 'translateY(4px) scale(0.98)' } },
       },
     },
   },

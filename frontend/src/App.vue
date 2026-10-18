@@ -1,127 +1,31 @@
 <template>
-  <div
-    class="app-shell min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100"
-    :class="{ 'lg:pl-[var(--app-sidebar-width)]': useSidebarLayout }"
-  >
-    <Navbar />
+  <component :is="layout" v-if="layout">
+    <router-view v-slot="{ Component, route: currentRoute }">
+      <transition name="route-view" mode="out-in">
+        <component :is="Component" :key="currentRoute.name" class="route-view" />
+      </transition>
+    </router-view>
+  </component>
 
-    <main class="min-h-[calc(100vh-53px)] px-2.5 pb-3 pt-[calc(var(--app-header-height-mobile)+8px)] sm:px-4 sm:pb-4 md:px-5 md:pb-5 md:pt-[calc(var(--app-header-height)+10px)] xl:px-6 2xl:px-8">
-      <div class="mx-auto min-w-0">
-        <router-view v-slot="{ Component, route: currentRoute }">
-          <transition name="route-view" mode="out-in">
-            <component :is="Component" :key="currentRoute.name" class="route-view" />
-          </transition>
-        </router-view>
-      </div>
-    </main>
-
-    <footer class="px-3 pb-4 sm:px-4 md:px-6 md:pb-5 xl:px-8">
-      <div class="mx-auto">
-        <div class="flex flex-col gap-1.5 border-t border-slate-200/80 px-1 pt-3 text-center text-[11px] text-slate-500 dark:border-white/10 dark:text-slate-400 sm:text-xs md:flex-row md:items-center md:justify-between md:gap-2.5 md:text-sm">
-          <div>
-            © {{ year }}
-            <a href="/" class="font-medium text-slate-700 transition hover:text-primary dark:text-slate-200 dark:hover:text-primary">
-              {{ seoSetting.seo_title || '初春图床' }}
-            </a>
-            <span> · </span>
-            <a
-              :href="releaseUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="whitespace-nowrap font-medium text-slate-600 transition hover:text-primary dark:text-slate-300 dark:hover:text-primary"
-            >
-              OneImg v{{ appVersion }}
-            </a>
-          </div>
-          <div class="flex flex-wrap items-center justify-center gap-2 md:justify-end md:gap-2.5">
-            <a
-              v-if="seoSetting.seo_icp"
-              href="http://beian.miit.gov.cn/"
-              target="_blank"
-              class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 transition hover:border-slate-300 hover:text-slate-900 sm:px-3 dark:border-white/10 dark:bg-slate-900 dark:hover:border-white/20 dark:hover:text-white"
-            >
-              <img class="h-4 w-4" :src="icpImg" alt="ICP" />
-              <span>{{ seoSetting.seo_icp }}</span>
-            </a>
-            <a
-              v-if="seoSetting.public_security"
-              href="https://beian.mps.gov.cn/#/query/webSearch"
-              target="_blank"
-              class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 transition hover:border-slate-300 hover:text-slate-900 sm:px-3 dark:border-white/10 dark:bg-slate-900 dark:hover:border-white/20 dark:hover:text-white"
-            >
-              <img class="h-4 w-4" :src="securityImg" alt="公安备案" />
-              <span>{{ seoSetting.public_security }}</span>
-            </a>
-          </div>
-        </div>
-      </div>
-    </footer>
-
-    <!-- 新界面的提示条和确认弹窗，页面里调用 toast() / confirm() -->
-    <UiToaster />
-    <UiConfirmHost />
-  </div>
+  <!-- 新界面的提示条和确认弹窗，页面里调用 toast() / confirm() -->
+  <UiToaster />
+  <UiConfirmHost />
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, onMounted, onUnmounted } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
-import Navbar from '@/components/NavBar.vue'
-// 异步加载，避免 Reka UI 进入首屏主包；加载前调用的 toast() / confirm() 会在加载后显示
+import PublicLayout from '@/components/shell/PublicLayout.vue'
+import '@/composables/useTheme'
+// 异步加载，避免 Reka UI 进入首屏主包；登录页不加载应用外壳。加载前调用的 toast() / confirm() 会在加载后显示
+const AppShell = defineAsyncComponent(() => import('@/components/shell/AppShell.vue'))
 const UiToaster = defineAsyncComponent(() => import('@/components/ui/UiToaster.vue'))
 const UiConfirmHost = defineAsyncComponent(() => import('@/components/ui/UiConfirmHost.vue'))
-import icpImg from '@/assets/images/icp.svg'
-import securityImg from '@/assets/images/gongan.png'
-import packageInfo from '../package.json'
 
 const route = useRoute()
-const useSidebarLayout = computed(() => !route.meta.public)
-
-const seoSetting = ref({
-  seo_title: '初春图床',
-  seo_description: '',
-  seo_keywords: '',
-  seo_icp: '',
-  public_security: '',
-  seo_icon: ''
-})
-
-const year = new Date().getFullYear()
-const appVersion = packageInfo.version
-const releaseUrl = `https://github.com/mikusaa/oneimg/releases/tag/v${appVersion}`
-
-const handleSeoUpdate = (data) => {
-  if (!data || typeof data !== 'object') return
-  seoSetting.value = { ...seoSetting.value, ...data }
-
-  const setMetaTag = (name, content) => {
-    let tag = document.querySelector(`meta[name="${name}"]`)
-    if (!tag) {
-      tag = document.createElement('meta')
-      tag.setAttribute('name', name)
-      document.head.appendChild(tag)
-    }
-    if (content && content.trim()) {
-      tag.setAttribute('content', content.trim())
-    } else {
-      tag.removeAttribute('content')
-    }
-  }
-
-  setMetaTag('description', seoSetting.value.seo_description)
-  setMetaTag('keywords', seoSetting.value.seo_keywords)
-}
-
-onMounted(() => {
-  window.seoBus?.onUpdate(handleSeoUpdate)
-  if (window.seoStting) {
-    Object.assign(seoSetting.value, window.seoStting)
-  }
-})
-
-onUnmounted(() => {
-  if (window.seoBus?.callbacks) {
-    window.seoBus.callbacks = window.seoBus.callbacks.filter((cb) => cb !== handleSeoUpdate)
-  }
+// 首次导航完成前不渲染，避免登录页闪出应用外壳
+const layout = computed(() => {
+  if (!route.matched.length) return null
+  return route.meta.public ? PublicLayout : AppShell
 })
 </script>

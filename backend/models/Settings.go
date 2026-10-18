@@ -35,13 +35,30 @@ type Settings struct {
 	RefererWhiteEnable bool   `gorm:"column:referer_white_enable;default:false" json:"referer_white_enable"` // 是否启用白名单
 	RefererWhiteList   string `gorm:"column:referer_white_list;default:''" json:"referer_white_list"`        // 白名单（多个用逗号分隔）
 
-	// SEO 设置
-	SEOTitle       string `gorm:"column:seo_title;default:'初春图床'" json:"seo_title"`                             // SEO标题（默认为初春图床）
-	SEODescription string `gorm:"column:seo_description;default:'初春图床，一个免费、稳定、高效的图床服务'" json:"seo_description"` // SEO描述（默认为初春图床，一个免费、稳定、高效的图床服务）
-	SEOKeywords    string `gorm:"column:seo_keywords;default:'初春网络,雾创岛,初春图床,图床,免费,稳定,高效'" json:"seo_keywords"`  // SEO关键词（默认为初春网络,雾创岛,初春图床,图床,免费,稳定,高效）
+	// SEO 设置。新安装的标题、描述和关键词由 NewSettings 写入；这里的 default 是早期版本建表时的列默认值，
+	// 保持不变，否则启动迁移会在已有安装上重建 settings 表
+	SEOTitle       string `gorm:"column:seo_title;default:'初春图床'" json:"seo_title"`                             // SEO标题
+	SEODescription string `gorm:"column:seo_description;default:'初春图床，一个免费、稳定、高效的图床服务'" json:"seo_description"` // SEO描述
+	SEOKeywords    string `gorm:"column:seo_keywords;default:'初春网络,雾创岛,初春图床,图床,免费,稳定,高效'" json:"seo_keywords"`  // SEO关键词
 	SEOICP         string `gorm:"column:seo_icp;default:''" json:"seo_icp"`                                     // SEO ICP备案（默认为空）
 	PublicSecurity string `gorm:"column:public_security;default:''" json:"public_security"`                     // SEO 公安备案（默认为空）
 	SEOicon        string `gorm:"column:seo_icon;default:''" json:"seo_icon"`                                   // SEO ICON（默认为空）
+}
+
+// 新安装的默认站点信息；已有安装保留原值
+const (
+	DefaultSEOTitle       = "OneImg"
+	DefaultSEODescription = "OneImg：自托管的图片与视频外链服务"
+	DefaultSEOKeywords    = "OneImg,图床,图片托管,视频托管"
+)
+
+// NewSettings 返回新安装使用的系统配置，其余字段使用列默认值
+func NewSettings() Settings {
+	return Settings{
+		SEOTitle:       DefaultSEOTitle,
+		SEODescription: DefaultSEODescription,
+		SEOKeywords:    DefaultSEOKeywords,
+	}
 }
 
 // TableName 指定表名（避免GORM自动复数）

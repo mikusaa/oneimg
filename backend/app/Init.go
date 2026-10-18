@@ -129,7 +129,8 @@ func InitSettings(db *database.Database) {
 		log.Println("系统配置已存在，跳过系统配置初始化")
 		return
 	}
-	result := db.DB.Create(&models.Settings{})
+	settings := models.NewSettings()
+	result := db.DB.Create(&settings)
 	if result.Error != nil {
 		log.Fatal("创建系统配置失败:", result.Error)
 	}
