@@ -101,7 +101,7 @@
                                         @blur="handleFieldBlur('default_path', systemSettings.default_path)"
                                     >
                                     <p class="field-hint">
-                                        支持 {year}、{month}、{day}、{hour}、{minute}、{random}、{uuid} 和 {role}。
+                                        支持 {year}、{month}、{day}、{hour}、{minute}、{second}、{role}、{random}、{uuid} 和 {filename}，变量区分大小写；不能包含空格、\、. 或 .. 目录。本地存储的文件始终放在 uploads 目录下。
                                     </p>
                                 </div>
 
@@ -119,7 +119,7 @@
                                         @blur="handleFieldBlur('file_name', systemSettings.file_name)"
                                     >
                                     <p class="field-hint">
-                                        支持 {random}、{year}、{month}、{day}、{hour}、{minute} 和 {second}。
+                                        支持 {filename}、{year}、{month}、{day}、{hour}、{minute}、{second}、{role}、{random} 和 {uuid}。除单独的 {random} / {uuid} 外，生成的名字后面都会自动加 -随机ID，避免重名。
                                     </p>
                                 </div>
                             </div>
@@ -127,7 +127,7 @@
                             <div class="settings-toggle-row mt-5">
                                 <div>
                                     <p class="setting-row-title">保留原文件名</p>
-                                    <p class="setting-row-hint">使用上传文件的基础名称，扩展名仍按最终图片格式调整；启用后文件名模板不生效。</p>
+                                    <p class="setting-row-hint">使用上传文件的基础名称并自动加 -随机ID，扩展名仍按最终图片格式调整；启用后文件名模板不生效。</p>
                                 </div>
                                 <label class="settings-switch" title="保留原文件名">
                                     <input

@@ -303,7 +303,18 @@ export type SettingsPatch = {
     allowed_types?: string;
     main_image_quality?: number;
     skip_compress_formats?: string;
+    /**
+     * 存储路径模板，留空时使用 uploads/{year}/{month}。可用变量 {year} {month} {day} {hour} {minute} {second} {role} {random} {uuid} {filename}，{moon} 为 {month} 的旧写法，变量区分大小写。
+     * 修改时不能包含空格、控制字符、\、. 或 .. 目录、不成对的花括号或不支持的变量，否则返回 422 validation_error，errors[].field 为 default_path；未修改的已保存值不重新校验。
+     * 本地存储的文件始终写在 uploads 目录下，路径不以 uploads 开头时自动补上；远端存储按原样作为对象前缀。
+     *
+     */
     default_path?: string;
+    /**
+     * 文件名模板，留空、{random} 或 {uuid} 时只使用随机 ID；其他模板生成「名字-随机ID.扩展名」。可用变量同 default_path。
+     * 修改时不能包含控制字符、不成对的花括号或不支持的变量，否则返回 422 validation_error，errors[].field 为 file_name。
+     *
+     */
     file_name?: string;
     public_image_domain?: string;
     cdn_domain?: string;

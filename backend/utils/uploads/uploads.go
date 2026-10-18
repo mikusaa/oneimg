@@ -90,6 +90,25 @@ func findDuplicateUploadResult(c *gin.Context, bucket *models.Buckets, contentHa
 	}
 }
 
+// objectDir 生成对象所在目录：\ 按 / 处理，去掉首尾 / 以及 "."、".." 目录段。
+// 本地存储始终写在 uploads 目录下，保证文件位于持久化挂载内，本地 CDN 域名也能生效；
+// 远端存储保持配置的前缀不变。
+func objectDir(dir, storageType string) string {
+	parts := strings.Split(strings.ReplaceAll(dir, `\`, "/"), "/")
+	kept := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "." || part == ".." {
+			continue
+		}
+		kept = append(kept, part)
+	}
+	dir = strings.Trim(strings.Join(kept, "/"), "/")
+	if storageType == "default" && dir != "uploads" && !strings.HasPrefix(dir, "uploads/") {
+		return strings.TrimSuffix(PathJoin("uploads", dir), "/")
+	}
+	return dir
+}
+
 func ensureLeadingSlash(path string) string {
 	if path == "" || strings.HasPrefix(path, "/") {
 		return path

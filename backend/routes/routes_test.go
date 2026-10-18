@@ -503,6 +503,51 @@ func TestImageStoragesListsDisabledAndFullStoragesWithReadScope(t *testing.T) {
 	}
 }
 
+func TestPatchSettingsRejectsInvalidPathTemplateWithFieldProblem(t *testing.T) {
+	cfg := &config.Config{SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
+	router, system := setupTestRouter(t, cfg)
+	admin := models.User{Username: "settings-admin", Password: "unused", Role: models.RoleAdmin, Permission: models.Permission{Codes: models.AllPermissionCodes(), Buckets: []int{}}}
+	if err := system.Database.DB.Create(&admin).Error; err != nil {
+		t.Fatal(err)
+	}
+	created, err := system.Services.Tokens.Create(admin.ID, services.CreateTokenInput{AuthVersion: admin.AuthVersion, Name: "settings", Scopes: []string{"settings:write"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch := func(body string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/settings", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+created.Plain)
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(recorder, req)
+		return recorder
+	}
+
+	rejected := patch(`{"default_path":"/uploads/../data/{yaer}"}`)
+	if rejected.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid path status = %d, body = %s", rejected.Code, rejected.Body.String())
+	}
+	var problem struct {
+		Code   string `json:"code"`
+		Errors []struct {
+			Field string `json:"field"`
+			Code  string `json:"code"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(rejected.Body.Bytes(), &problem); err != nil {
+		t.Fatal(err)
+	}
+	if problem.Code != "validation_error" || len(problem.Errors) != 1 || problem.Errors[0].Field != "default_path" {
+		t.Fatalf("problem = %s", rejected.Body.String())
+	}
+	if accepted := patch(`{"default_path":"/uploads/{role}/{year}","file_name":"{filename}-{year}"}`); accepted.Code != http.StatusOK {
+		t.Fatalf("valid templates status = %d, body = %s", accepted.Code, accepted.Body.String())
+	}
+	if rejected := patch(`{"file_name":"{date}"}`); rejected.Code != http.StatusUnprocessableEntity || !strings.Contains(rejected.Body.String(), `"field":"file_name"`) {
+		t.Fatalf("invalid file name status = %d, body = %s", rejected.Code, rejected.Body.String())
+	}
+}
+
 func TestDashboardStatsWithSession(t *testing.T) {
 	cfg := &config.Config{AppURL: "http://localhost:8080", SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
 	router, system := setupTestRouter(t, cfg)

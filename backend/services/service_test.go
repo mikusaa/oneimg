@@ -218,6 +218,43 @@ func TestSettingsUpdateRollsBackAtomically(t *testing.T) {
 	}
 }
 
+func TestSettingsUpdateValidatesChangedPathAndNameTemplates(t *testing.T) {
+	db := newServiceTestDB(t)
+	// 升级前保存的旧值不合规，只要不改动就不阻止保存其他设置。
+	setting := models.Settings{SEOTitle: "before", DefaultStorage: 1, DefaultPath: "/uploads/{yaer}", FileName: "{date}"}
+	if err := db.Create(&setting).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewSettingsService(db)
+	str := func(v string) *string { return &v }
+	if _, err := service.Update(SettingsPatch{SEOTitle: str("after"), DefaultPath: str("/uploads/{yaer}"), FileName: str(" {date} ")}); err != nil {
+		t.Fatalf("unchanged legacy templates blocked update: %v", err)
+	}
+	for _, tt := range []struct {
+		patch SettingsPatch
+		field string
+	}{
+		{SettingsPatch{DefaultPath: str("/uploads/{year}/ {month}")}, "default_path"},
+		{SettingsPatch{DefaultPath: str("/uploads/../data")}, "default_path"},
+		{SettingsPatch{DefaultPath: str("/uploads/{Year}")}, "default_path"},
+		{SettingsPatch{FileName: str("{filename")}, "file_name"},
+		{SettingsPatch{SEOTitle: str("rolled back"), FileName: str("{day}{hours}")}, "file_name"},
+	} {
+		_, err := service.Update(tt.patch)
+		var fieldErr *SettingsFieldError
+		if !errors.As(err, &fieldErr) || fieldErr.Field != tt.field || !errors.Is(err, ErrSettingsValidation) {
+			t.Fatalf("update %+v error = %v, want field %s", tt.patch, err, tt.field)
+		}
+	}
+	stored, err := service.Update(SettingsPatch{DefaultPath: str(" /img/{year}/{month} "), FileName: str("{filename}-{year}")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.DefaultPath != "/img/{year}/{month}" || stored.FileName != "{filename}-{year}" || stored.SEOTitle != "after" {
+		t.Fatalf("stored settings = %#v", stored)
+	}
+}
+
 func TestStorageDeleteFailureKeepsDatabaseRecords(t *testing.T) {
 	db := newServiceTestDB(t)
 	bucket := models.Buckets{Id: 2, Name: "broken", Type: "unsupported", Capacity: 1024}

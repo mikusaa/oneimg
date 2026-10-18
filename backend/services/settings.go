@@ -5,12 +5,22 @@ import (
 	"strings"
 
 	"oneimg/backend/models"
+	"oneimg/backend/utils/images"
 	"oneimg/backend/utils/publicurl"
 
 	"gorm.io/gorm"
 )
 
 var ErrSettingsValidation = errors.New("invalid settings value")
+
+// SettingsFieldError 描述单个设置字段校验失败的原因，可用 errors.Is 匹配 ErrSettingsValidation。
+type SettingsFieldError struct {
+	Field   string
+	Message string
+}
+
+func (e *SettingsFieldError) Error() string { return e.Field + ": " + e.Message }
+func (e *SettingsFieldError) Unwrap() error { return ErrSettingsValidation }
 
 type SettingsService struct{ db *gorm.DB }
 
@@ -129,11 +139,24 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 			}
 			put("skip_compress_formats", value)
 		}
+		// 只校验发生变化的模板：升级前保存的旧值即使不合规，也不阻止保存其他设置。
 		if input.DefaultPath != nil {
-			put("default_path", strings.TrimSpace(*input.DefaultPath))
+			value := strings.TrimSpace(*input.DefaultPath)
+			if value != result.DefaultPath {
+				if err := images.ValidatePathTemplate(value); err != nil {
+					return &SettingsFieldError{Field: "default_path", Message: err.Error()}
+				}
+			}
+			put("default_path", value)
 		}
 		if input.FileName != nil {
-			put("file_name", strings.TrimSpace(*input.FileName))
+			value := strings.TrimSpace(*input.FileName)
+			if value != result.FileName {
+				if err := images.ValidateNameTemplate(value); err != nil {
+					return &SettingsFieldError{Field: "file_name", Message: err.Error()}
+				}
+			}
+			put("file_name", value)
 		}
 		if input.PublicImageDomain != nil {
 			value, err := publicurl.NormalizeDomain(*input.PublicImageDomain)

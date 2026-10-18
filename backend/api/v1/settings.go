@@ -102,6 +102,12 @@ func (s *Server) patchSettings(c *gin.Context) {
 		writeProblem(c, http.StatusUnprocessableEntity, "storage_disabled", "已停用的存储不能设为系统默认存储")
 		return
 	}
+	var fieldErr *services.SettingsFieldError
+	if errors.As(err, &fieldErr) {
+		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", fieldErr.Message+"，事务已回滚",
+			FieldProblem{Field: fieldErr.Field, Code: "invalid", Message: fieldErr.Message})
+		return
+	}
 	if errors.Is(err, services.ErrSettingsValidation) || errors.Is(err, services.ErrBucketNotFound) {
 		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "设置值无效，事务已回滚")
 		return
