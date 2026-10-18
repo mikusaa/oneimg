@@ -1,7 +1,10 @@
-import type { DashboardStats, Image, Problem, StorageBucket, Tag, TagUsage, UploadBatch, User } from './generated/types.gen'
+import type { DashboardStats, Image, Problem, StorageBucket, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
 import { client as generatedClient } from './generated/client.gen'
 
-export type { DashboardStats, Image, Problem, StorageBucket, Tag, TagUsage, UploadBatch, User } from './generated/types.gen'
+export type { DashboardStats, Image, Problem, StorageBucket, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
+
+/** 上传趋势的统计粒度：day 为最近 30 天，week 为 12 周，month 为 12 个月，year 为 5 年 */
+export type TrendPeriod = 'day' | 'week' | 'month' | 'year'
 
 export type Envelope<T> = { data: T; meta?: { pagination?: { page: number; page_size: number; total: number; total_pages: number } } }
 
@@ -79,7 +82,7 @@ export const api = {
   importImage: (body: Record<string, unknown>) => request<Image>('/image-imports', { method: 'POST', body: JSON.stringify(body) }),
   uploadOptions: () => request<Record<string, unknown>>('/upload-options'),
   dashboardStats: () => request<DashboardStats>('/stats/dashboard'),
-  imageStats: (period: string) => request<Record<string, unknown>[]>(`/stats/images?period=${encodeURIComponent(period)}`),
+  imageStats: (period: TrendPeriod) => request<TrendPoint[]>(`/stats/images?period=${encodeURIComponent(period)}`),
   listBuckets: () => request<StorageBucket[]>('/storage-buckets'),
   listUsers: (query = '') => request<User[]>(`/users${query ? `?${query}` : ''}`),
   getSettings: (groups = '') => request<Record<string, unknown>>(`/settings${groups ? `?groups=${encodeURIComponent(groups)}` : ''}`),

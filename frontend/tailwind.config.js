@@ -40,6 +40,8 @@ module.exports = {
           ring: 'var(--oi-ring)',
           sakura: 'var(--oi-sakura)',
           'sakura-soft': 'var(--oi-sakura-soft)',
+          'chart-image': 'var(--oi-chart-image)',
+          'chart-video': 'var(--oi-chart-video)',
           warn: 'var(--oi-warn)',
           'warn-soft': 'var(--oi-warn-soft)',
           danger: 'var(--oi-danger)',

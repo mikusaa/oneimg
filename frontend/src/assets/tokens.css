@@ -21,6 +21,9 @@
   --oi-ring: rgba(16, 160, 100, 0.3);
   --oi-sakura: #ec7598;
   --oi-sakura-soft: #fdebf0;
+  /* 统计图的图片 / 视频两色：已按色觉差异和对比度校验，深色单独取值 */
+  --oi-chart-image: #10a064;
+  --oi-chart-video: #ec7598;
   --oi-warn: #c9770a;
   --oi-warn-soft: #fdf3e2;
   --oi-danger: #d93a40;
@@ -56,6 +59,8 @@
   --oi-ring: rgba(52, 211, 153, 0.35);
   --oi-sakura: #f59ab3;
   --oi-sakura-soft: rgba(245, 154, 179, 0.12);
+  --oi-chart-image: #27ad78;
+  --oi-chart-video: #b03f66;
   --oi-warn: #f0b350;
   --oi-warn-soft: rgba(240, 179, 80, 0.12);
   --oi-danger: #f2686d;
