@@ -6,11 +6,19 @@ declare module '*.vue' {
 }
 
 declare module '*.js'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    title?: string
+    /** 不需要登录，也不显示应用外壳 */
+    public?: boolean
+    /** 拥有其中任一权限码的管理员可以访问 */
+    permissions?: string[]
+  }
+}
+
 declare global {
   interface Window {
-    seoStting?: Record<string, string>
-    seoBus?: { callbacks: Array<(value: Record<string, string>) => void>; onUpdate: (callback: (value: Record<string, string>) => void) => void }
-    refreshNavItems?: () => void
     Spotlight?: { show: (items: Array<{ src: string }>) => void }
   }
 }

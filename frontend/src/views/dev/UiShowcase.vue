@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { UiButton, UiDialog, UiDrawer, UiField, UiInput, UiSegmented, UiSwitch, confirm, toast } from '@/components/ui'
+import { UiButton, UiDialog, UiDrawer, UiField, UiInput, UiMenu, UiMenuItem, UiMenuLabel, UiMenuSegmented, UiMenuSeparator, UiSegmented, UiSwitch, confirm, toast } from '@/components/ui'
+import { useTheme } from '@/composables/useTheme'
 
 // 开发环境专用预览页（/_ui），用来核对基础组件在浅色 / 深色下的外观和键盘交互
 
 const swatches = ['bg', 'sheet', 'raised', 'panel', 'hover', 'line', 'line-2', 'ink', 'text', 'muted', 'faint', 'accent', 'accent-2', 'accent-soft', 'sakura', 'sakura-soft', 'warn', 'warn-soft', 'danger', 'danger-soft', 'btn', 'btn-ink']
 const variants = ['default', 'primary', 'accent', 'ghost', 'danger', 'danger-solid'] as const
 
-const dark = ref(document.documentElement.classList.contains('dark'))
-const toggleDark = (value: boolean) => {
-  dark.value = value
-  document.documentElement.classList.toggle('dark', value)
-}
+const { isDark: dark, setTheme } = useTheme()
+const toggleDark = (value: boolean) => setTheme(value ? 'dark' : 'light')
+const menuView = ref('grid')
 
 const name = ref('')
 const domain = ref('img.example.com')
@@ -153,6 +152,31 @@ const askNormal = async () => {
         <UiButton variant="ghost" @click="toast.info('正在读取视频信息…')">普通提示</UiButton>
       </div>
       <p v-if="lastResult" class="mt-3 text-xs text-oi-muted">确认结果：{{ lastResult }}</p>
+    </section>
+
+    <section class="mb-6 rounded-oi-lg border border-oi-line bg-oi-sheet p-5">
+      <h2 class="mb-3 text-[15px] font-[650] text-oi-ink">下拉菜单</h2>
+      <div class="flex flex-wrap gap-2.5">
+        <UiMenu>
+          <template #trigger><UiButton><i class="ri-more-fill" />更多操作</UiButton></template>
+          <UiMenuItem icon="ri-key-2-line" @select="toast.info('重置密码')">重置密码</UiMenuItem>
+          <UiMenuItem icon="ri-fingerprint-line" @select="toast.info('撤销 Passkey')">撤销全部 Passkey</UiMenuItem>
+          <UiMenuItem icon="ri-forbid-line" disabled>不可用的操作</UiMenuItem>
+          <UiMenuSeparator />
+          <UiMenuItem icon="ri-delete-bin-6-line" danger @select="toast.error('删除用户')">删除用户</UiMenuItem>
+        </UiMenu>
+        <UiMenu side="top" align="end">
+          <template #trigger><UiButton variant="ghost">向上展开</UiButton></template>
+          <UiMenuItem to="/_ui" icon="ri-links-line">站内链接<template #end><i class="ri-check-line text-oi-accent" /></template></UiMenuItem>
+          <UiMenuSeparator />
+          <UiMenuLabel>视图（选择后不关闭）</UiMenuLabel>
+          <UiMenuSegmented
+            v-model="menuView"
+            aria-label="视图"
+            :options="[{ value: 'grid', icon: 'ri-grid-line', title: '网格' }, { value: 'list', icon: 'ri-list-check', title: '列表' }]"
+          />
+        </UiMenu>
+      </div>
     </section>
   </div>
 </template>

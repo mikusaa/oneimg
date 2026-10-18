@@ -1,17 +1,6 @@
 <template>
   <div class="page-shell">
-    <PageHeader title="控制中心" description="上传图片、视频并查看近期处理结果" />
-
-    <section class="dashboard-summary page-surface" aria-label="文件统计概览">
-      <div v-for="item in dashboardSummaryItems" :key="item.label" class="dashboard-summary-item">
-        <span class="dashboard-summary-icon" aria-hidden="true"><i :class="item.icon"></i></span>
-        <span class="min-w-0">
-          <span class="dashboard-summary-label">{{ item.label }}</span>
-          <span class="dashboard-summary-value" :class="{ 'animate-pulse text-slate-300 dark:text-slate-700': statsLoading }">{{ item.value }}</span>
-          <span v-if="item.detail" class="block text-xs text-slate-500 dark:text-slate-400">{{ item.detail }}</span>
-        </span>
-      </div>
-    </section>
+    <PageHeader title="上传" description="上传图片、视频并查看近期处理结果" />
 
     <div class="space-y-3 lg:space-y-3.5">
       <section class="space-y-3">
@@ -391,8 +380,6 @@ const allowedFileTypes = ref([...ALLOWED_FILE_TYPES]);
 const maxFileSize = ref(DEFAULT_MAX_FILE_SIZE);
 const videoUploadEnabled = ref(false);
 const maxVideoFileSize = ref(100 * 1024 * 1024);
-const statsLoading = ref(true);
-const dashboardStats = ref({ total_images: 0, total_videos: 0, image_size: 0, video_size: 0, total_size: 0, today_uploads: 0, month_uploads: 0, today_image_uploads: 0, today_video_uploads: 0, month_image_uploads: 0, month_video_uploads: 0 });
 
 // 标签相关
 const presetTags = ref([]);
@@ -421,14 +408,6 @@ const urlTagOptions = computed(() => [
   { value: 0, label: '不添加标签' },
   ...presetTags.value.map(tag => ({ value: tag.id, label: tag.name }))
 ]);
-const dashboardSummaryItems = computed(() => [
-  { label: '图片总数', value: `${formatNumber(dashboardStats.value.total_images)} 张`, icon: 'ri-image-line', detail: '' },
-  { label: '视频总数', value: `${formatNumber(dashboardStats.value.total_videos)} 个`, icon: 'ri-video-line', detail: '' },
-  { label: '图片体积', value: formatFileSize(dashboardStats.value.image_size), icon: 'ri-image-2-line', detail: '不含缩略图' },
-  { label: '视频体积', value: formatFileSize(dashboardStats.value.video_size), icon: 'ri-film-line', detail: '原文件大小' },
-  { label: '今日上传', value: formatNumber(dashboardStats.value.today_uploads), icon: 'ri-calendar-check-line', detail: `图片 ${dashboardStats.value.today_image_uploads} 张 · 视频 ${dashboardStats.value.today_video_uploads} 个` },
-  { label: '本月上传', value: formatNumber(dashboardStats.value.month_uploads), icon: 'ri-calendar-line', detail: `图片 ${dashboardStats.value.month_image_uploads} 张 · 视频 ${dashboardStats.value.month_video_uploads} 个` },
-]);
 const uploadQueueTotalSize = computed(() => uploadQueue.value.reduce((total, item) => total + item.file.size, 0));
 
 // ====================== 工具函数 ======================
@@ -453,7 +432,6 @@ const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-const formatNumber = value => Number(value || 0).toLocaleString('zh-CN');
 
 /**
  * 格式化日期
@@ -594,18 +572,6 @@ const loadRecentImages = async () => {
   }
 };
 
-const loadDashboardStats = async () => {
-  statsLoading.value = true;
-  try {
-    const result = await api.dashboardStats();
-    dashboardStats.value = { ...dashboardStats.value, ...result };
-  } catch (error) {
-    console.error('获取统计数据失败:', error);
-  } finally {
-    statsLoading.value = false;
-  }
-};
-
 /**
  * 删除单个文件
  */
@@ -636,7 +602,7 @@ const deleteAsync = async (imageId) => {
       
       previewCopyMenu = false;
       activeCopyMenu.value = null;
-      await Promise.all([loadRecentImages(), loadDashboardStats()]);
+      await loadRecentImages();
     } else {
       const result = await response.json();
       throw new Error(result.detail || '删除失败');
@@ -924,7 +890,7 @@ const uploadQueuedFiles = async () => {
     });
 
     if (uploadedCount + duplicateCount > 0) {
-      await Promise.all([loadRecentImages(), loadDashboardStats()]);
+      await loadRecentImages();
     }
     if (failedCount > 0) {
       Message.warning(`上传完成，成功 ${uploadedCount} 张，重复 ${duplicateCount} 张，失败 ${failedCount} 张`);
@@ -1132,7 +1098,7 @@ const postuploadbyurl = async (formData) => {
     });
     const result = await res.json();
     if (res.ok && result.data) {
-      await Promise.all([loadRecentImages(), loadDashboardStats()]);
+      await loadRecentImages();
       showUploadResultMessage([result.data]);
       return true;
     } else {
@@ -1187,7 +1153,6 @@ onBeforeRouteLeave(() => {
 onMounted(() => {
   // 初始化数据
   getUploadConfig();
-  loadDashboardStats();
   setTimeout(loadRecentImages, 100);
   
   // 注册全局事件

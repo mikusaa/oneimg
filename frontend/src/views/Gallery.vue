@@ -271,7 +271,7 @@
         <h3 class="mb-2 text-lg font-bold">暂无{{ ROLE_MAP[roleImage] }}图片</h3>
         <p class="mb-4 text-gray-600 dark:text-gray-400">
           还没有上传任何{{ ROLE_MAP[roleImage] }}图片，
-          <router-link to="/" class="text-primary hover:underline">去上传一些吧</router-link>
+          <router-link to="/upload" class="text-primary hover:underline">去上传一些吧</router-link>
         </p>
       </div>
       </section>

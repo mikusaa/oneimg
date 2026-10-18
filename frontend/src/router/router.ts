@@ -1,43 +1,22 @@
 import { apiFetch } from "@/api/client.ts"
-import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router'
-import { hasAnyPermission, ROLE_ADMIN } from '@/utils/permissions.ts'
-import Message from '@/utils/message.ts'
+import { createRouter, createWebHistory, type RouteComponent, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router'
+import { canAccessRoute, setSessionUser, clearSession, type SessionUser } from '@/composables/useSession'
+import { loadSiteConfig, useSite } from '@/composables/useSite'
+import { navItem } from './nav'
 
-type SeoSettings = Record<'seo_title' | 'seo_description' | 'seo_keywords' | 'seo_icp' | 'public_security' | 'seo_icon', string>
-interface StoredUser {
-  username?: string
-  role?: number
-  password_change_required?: boolean
-  bootstrap_verification_required?: boolean
-  permission?: { codes?: string[]; bucket_ids?: number[] }
+const site = useSite()
+
+const navRoute = (name: string, component: () => Promise<RouteComponent>): RouteRecordRaw => {
+  const item = navItem(name)
+  return { path: item.path, name, component, meta: { title: item.title, permissions: item.permissions } }
 }
-
-let seoStting = {
-  seo_title: '初春图床',
-  seo_description: '',
-  seo_keywords: '',
-  seo_icp: '',
-  public_security: '',
-  seo_icon: ''
-};
-
-const seoBus = {
-  callbacks: [],
-  onUpdate: (cb) => seoBus.callbacks.push(cb),
-  triggerUpdate: (data) => seoBus.callbacks.forEach(cb => cb(data))
-};
-
-let seoRequestPromise = null;
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue'),
-    meta: { 
-      title: '登录', 
-      public: true 
-    }
+    meta: { title: '登录', public: true }
   },
   {
     path: '/register',
@@ -45,65 +24,19 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Register.vue'),
     meta: { title: '注册', public: true }
   },
-  {
-    path: '/',
-    name: 'Home',
-    component: () => import('@/views/Home.vue'),
-    meta: {
-      title: '首页'
-    }
-  },
-  {
-    path: '/gallery',
-    name: 'Gallery',
-    component: () => import('@/views/Gallery.vue'),
-    meta: {
-      title: '图库'
-    }
-  },
-  {
-    path: '/tags',
-    redirect: to => ({ path: '/gallery', query: { ...to.query, view: 'tags' } })
-  },
-  {
-    path: '/stats',
-    redirect: '/'
-  },
-  {
-    path: '/buckets',
-    name: 'Buckets',
-    component: () => import('@/views/Buckets.vue'),
-    meta: {
-      title: '存储列表',
-      permissions: ['storage:create', 'storage:update', 'storage:delete']
-    }
-  },
-  {
-    path: '/users',
-    name: 'Users',
-    component: () => import('@/views/Users.vue'),
-    meta: {
-      title: '用户管理',
-      permissions: ['user:list']
-    }
-  },
-  {
-    path: '/account',
-    name: 'Account',
-    component: () => import('@/views/Account.vue'),
-    meta: { 
-      title: '账户设置'
-    }
-  },
-  {
-    path: '/settings',
-    name: 'Settings',
-    component: () => import('@/views/Settings.vue'),
-    meta: { 
-      title: '系统设置',
-      permissions: ['setting:upload', 'setting:image', 'setting:security', 'setting:seo']
-    }
-  }
+  // 上传暂时沿用原控制中心页面，统计拆到独立页面；页面本身在后续步骤重做
+  navRoute('Upload', () => import('@/views/Home.vue')),
+  navRoute('Gallery', () => import('@/views/Gallery.vue')),
+  navRoute('Stats', () => import('@/views/Stats.vue')),
+  navRoute('Storage', () => import('@/views/Buckets.vue')),
+  navRoute('Users', () => import('@/views/Users.vue')),
+  navRoute('Settings', () => import('@/views/Settings.vue')),
+  navRoute('Account', () => import('@/views/Account.vue')),
+  // 旧地址继续可用，避免书签失效
+  { path: '/', redirect: '/upload' },
+  { path: '/buckets', redirect: to => ({ path: '/storage', query: to.query, hash: to.hash }) },
+  { path: '/tags', redirect: to => ({ path: '/gallery', query: { ...to.query, view: 'tags' } }) },
+  { path: '/:pathMatch(.*)*', redirect: '/upload' },
 ]
 
 // 开发环境专用：新界面基础组件预览，生产构建不包含这个页面
@@ -116,155 +49,66 @@ if (import.meta.env.DEV) {
   })
 }
 
-// 创建路由实例
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
 })
 
-// 获取SEO配置
-const getSeoSetting = async () => {
-  if (seoRequestPromise) return seoRequestPromise;
+const getPageTitle = (to: RouteLocationNormalized) => to.meta.title ? `${to.meta.title} - ${site.title}` : site.title
 
-  seoRequestPromise = new Promise(async (resolve) => {
-    try {
-      const response = await apiFetch('/api/v1/public/config', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (!response.ok) {
-        throw new Error(`请求失败：${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      if (result.data) {
-        const site = result.data.site || {};
-        seoStting = {
-          ...seoStting,
-          seo_title: site.title || seoStting.seo_title,
-          seo_description: site.description || seoStting.seo_description,
-          seo_keywords: site.keywords || seoStting.seo_keywords,
-          seo_icp: site.icp || seoStting.seo_icp,
-          public_security: site.public_security || seoStting.public_security,
-          seo_icon: site.icon || seoStting.seo_icon
-        };
-        window.seoStting = seoStting; // 挂载到全局
-        seoBus.triggerUpdate(seoStting); // 更新SEO设置
-
-        // 设置网站图标
-        if (seoStting.seo_icon) {
-          let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-          if (!favicon) {
-            favicon = document.createElement('link');
-            favicon.rel = 'icon';
-            favicon.type = 'image/x-icon';
-            document.head.appendChild(favicon);
-          }
-          favicon.href = seoStting.seo_icon;
-        }
-      } else {
-        Message.error(result.detail || '获取SEO设置失败：无数据');
-      }
-    } catch (error) {
-      console.error('获取SEO设置失败:', error);
-      Message.error(error instanceof Error ? error.message : '获取SEO设置失败：网络异常');
-    } finally {
-      resolve(seoStting);
-    }
-  });
-
-  return seoRequestPromise;
-};
-
-// 封装动态标题计算函数
-const getPageTitle = (to: RouteLocationNormalized) => {
-  if (to.meta.title === '首页') {
-    return seoStting.seo_title;
-  }
-  return to.meta.title ? `${to.meta.title} - ${seoStting.seo_title}` : seoStting.seo_title;
-};
-
-//全局前置守卫
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to) => {
   try {
-    // 等待SEO接口完成
-    await getSeoSetting();
+    await loadSiteConfig()
+    document.title = getPageTitle(to)
 
-    // 设置页面标题
-    document.title = getPageTitle(to);
+    if (to.meta.public) return true
 
-    // 处理公开路由
-    const isPublic = to.meta.public;
-    if (isPublic) {
-      return next();
-    }
-
-    // 验证本地用户信息
-    let userInfo: StoredUser = {};
+    // 验证本地登录信息
+    let userInfo: SessionUser = {}
     try {
-      userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-    } catch (error) {
-      localStorage.removeItem('userInfo');
-      userInfo = {};
+      userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    } catch {
+      userInfo = {}
     }
     if (!userInfo.username) {
-      window.refreshNavItems && window.refreshNavItems();
-      return next('/login');
+      clearSession()
+      return '/login'
     }
 
-    // 验证登录状态
-    const response = await apiFetch('/api/v1/me');
+    // 向服务器确认登录状态，并刷新角色、权限和改密要求
+    const response = await apiFetch('/api/v1/me')
     if (!response.ok) {
-      // 删除本地用户信息
-      localStorage.removeItem('userInfo');
-      window.refreshNavItems && window.refreshNavItems();
-      throw new Error(`登录状态验证失败：${response.status}`);
+      clearSession()
+      throw new Error(`登录状态验证失败：${response.status}`)
+    }
+    const result = await response.json()
+    if (!result.data?.username || userInfo.username !== result.data.username) {
+      clearSession()
+      return '/login'
     }
 
-    const result = await response.json();
-    if (!result.data || !result.data.username) {
-      localStorage.removeItem('userInfo');
-      window.refreshNavItems && window.refreshNavItems();
-      return next('/login');
+    const current: SessionUser = {
+      ...userInfo,
+      id: result.data.id ?? userInfo.id,
+      role: result.data.role,
+      permission: result.data.permission || { codes: [], bucket_ids: [] },
+      password_change_required: result.data.password_change_required,
+      bootstrap_verification_required: result.data.bootstrap_verification_required,
     }
+    setSessionUser(current)
 
-    // 验证用户名一致性
-    if (userInfo.username !== result.data.username) {
-      localStorage.removeItem('userInfo');
-      window.refreshNavItems && window.refreshNavItems();
-      return next('/login');
+    // 需要改密时只允许进入账户设置；无权访问的页面回到上传页
+    if (!canAccessRoute(String(to.name), to.meta.permissions, current)) {
+      return current.password_change_required ? '/account' : '/upload'
     }
-    const currentRole = result.data.role;
-    userInfo.role = currentRole;
-    userInfo.permission = result.data.permission || { codes: [], bucket_ids: [] };
-    userInfo.password_change_required = result.data.password_change_required;
-    userInfo.bootstrap_verification_required = result.data.bootstrap_verification_required;
-    localStorage.setItem('userInfo', JSON.stringify(userInfo));
-    window.refreshNavItems && window.refreshNavItems();
-    if (userInfo.password_change_required && to.path !== '/account') return next('/account');
-    if (Array.isArray(to.meta.permissions)) {
-      if (Number(currentRole) !== ROLE_ADMIN || !hasAnyPermission(to.meta.permissions, userInfo)) return next('/');
-    }
-
-    // 所有验证通过，放行
-    next();
-  } catch (error) {
-    // 避免多次调用next的警告
-    if (!to.fullPath.includes('/login')) {
-      next('/login');
-    } else {
-      next();
-    }
+    return true
+  } catch {
+    return to.path === '/login' ? true : '/login'
   }
-});
+})
 
-// 全局后置守卫
 router.afterEach((to) => {
-  document.title = getPageTitle(to);
-});
-
-window.seoBus = seoBus;
+  document.title = getPageTitle(to)
+})
 
 export default router
