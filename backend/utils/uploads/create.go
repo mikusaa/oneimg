@@ -141,7 +141,7 @@ func createProcessedUpload(c *gin.Context, setting *models.Settings, bucket *mod
 	if subdir == "" {
 		subdir = "uploads/{year}/{month}"
 	}
-	subdir = strings.Trim(images.ImageSvc.ReplaceMagicVariables(subdir, header.Filename, c.GetInt("user_role")), "/")
+	subdir = objectDir(images.ImageSvc.ReplaceMagicVariables(subdir, header.Filename, c.GetInt("user_role")), bucket.Type)
 	name := processed.UniqueFileName
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {

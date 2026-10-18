@@ -96,6 +96,58 @@ func TestCollisionRetriesAreBoundedAndUseNewKeys(t *testing.T) {
 	}
 }
 
+func TestUploadKeysFollowStorageType(t *testing.T) {
+	images.InitImageService()
+	header := uploadHeader(t, "photo.png", "image/png", []byte("test-only"))
+	setting := &models.Settings{DefaultPath: "/img/../{role}"}
+	for storage, want := range map[string]string{"default": "/uploads/img/user/", "s3": "/img/user/", "ftp": "/img/user/"} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+		c.Set("user_role", models.RoleUser)
+		processed := &preparedUpload{
+			ProcessedImage: &images.ProcessedImage{UniqueFileName: "photo.png", OutputExt: ".png", MimeType: "image/png"},
+			Body:           bytes.NewReader([]byte("test-only")),
+		}
+		var key string
+		writer := objectWriter{create: func(_ context.Context, k string, _ io.ReadSeeker, _ string) error {
+			key = k
+			return nil
+		}, remove: func(context.Context, string) error { return nil }}
+		if _, err := createProcessedUpload(c, setting, &models.Buckets{Type: storage}, header, processed, writer); err != nil {
+			t.Fatal(storage, err)
+		}
+		if key != want+"photo.png" {
+			t.Errorf("%s key = %q, want %q", storage, key, want+"photo.png")
+		}
+	}
+}
+
+func TestLocalUploadOutsideUploadsPathStaysInUploadsDirectory(t *testing.T) {
+	t.Chdir(t.TempDir())
+	images.InitImageService()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	setting := models.Settings{AllowedTypes: "image/png", MaxFileSize: 1024, DefaultPath: "/data/{year}"}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+	c.Set("user_id", 1)
+	result, err := (&DefaultUploader{}).Upload(c, &setting, &models.Buckets{Id: 1, Type: "default"}, uploadHeader(t, "photo.png", "image/png", buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(result.URL, "/uploads/data/") {
+		t.Fatalf("local key = %q, want it under /uploads/data/", result.URL)
+	}
+	if _, err := os.Stat(strings.TrimPrefix(result.URL, "/")); err != nil {
+		t.Fatal("file not written under uploads", err)
+	}
+	if entries, _ := os.ReadDir("data"); len(entries) != 0 {
+		t.Fatalf("media written into data directory: %v", entries)
+	}
+}
+
 func TestPreparedImageHoldsSlotUntilStorageFinishes(t *testing.T) {
 	images.InitImageService()
 	var data bytes.Buffer

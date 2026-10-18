@@ -914,8 +914,17 @@ components:
         allowed_types: { type: string, description: 逗号分隔的图片 MIME 类型，视频通过独立开关启用 }
         main_image_quality: { type: integer }
         skip_compress_formats: { type: string }
-        default_path: { type: string }
-        file_name: { type: string }
+        default_path:
+          type: string
+          description: |
+            存储路径模板，留空时使用 uploads/{year}/{month}。可用变量 {year} {month} {day} {hour} {minute} {second} {role} {random} {uuid} {filename}，{moon} 为 {month} 的旧写法，变量区分大小写。
+            修改时不能包含空格、控制字符、\、. 或 .. 目录、不成对的花括号或不支持的变量，否则返回 422 validation_error，errors[].field 为 default_path；未修改的已保存值不重新校验。
+            本地存储的文件始终写在 uploads 目录下，路径不以 uploads 开头时自动补上；远端存储按原样作为对象前缀。
+        file_name:
+          type: string
+          description: |
+            文件名模板，留空、{random} 或 {uuid} 时只使用随机 ID；其他模板生成「名字-随机ID.扩展名」。可用变量同 default_path。
+            修改时不能包含控制字符、不成对的花括号或不支持的变量，否则返回 422 validation_error，errors[].field 为 file_name。
         public_image_domain: { type: string }
         cdn_domain: { type: string }
         referer_white_enable: { type: boolean }
