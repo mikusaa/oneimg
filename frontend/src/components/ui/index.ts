@@ -1,0 +1,16 @@
+// 新界面的基础组件：交互由 Reka UI 提供，外观使用 tokens.css 中的 --oi- 设计变量。
+// UiToaster 和 UiConfirmHost 在 App.vue 中挂载一次，页面里直接调用 toast() 和 confirm()。
+export { default as UiButton } from './UiButton.vue'
+export { default as UiInput } from './UiInput.vue'
+export { default as UiField } from './UiField.vue'
+export { default as UiSwitch } from './UiSwitch.vue'
+export { default as UiSegmented } from './UiSegmented.vue'
+export type { SegmentedOption } from './UiSegmented.vue'
+export { default as UiDialog } from './UiDialog.vue'
+export { default as UiDrawer } from './UiDrawer.vue'
+export { default as UiToaster } from './UiToaster.vue'
+export { default as UiConfirmHost } from './UiConfirmHost.vue'
+export { toast } from './toast'
+export type { ToastType } from './toast'
+export { confirm } from './confirm'
+export type { ConfirmOptions } from './confirm'

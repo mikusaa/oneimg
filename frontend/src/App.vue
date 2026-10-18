@@ -56,13 +56,20 @@
         </div>
       </div>
     </footer>
+
+    <!-- 新界面的提示条和确认弹窗，页面里调用 toast() / confirm() -->
+    <UiToaster />
+    <UiConfirmHost />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, defineAsyncComponent, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import Navbar from '@/components/NavBar.vue'
+// 异步加载，避免 Reka UI 进入首屏主包；加载前调用的 toast() / confirm() 会在加载后显示
+const UiToaster = defineAsyncComponent(() => import('@/components/ui/UiToaster.vue'))
+const UiConfirmHost = defineAsyncComponent(() => import('@/components/ui/UiConfirmHost.vue'))
 import icpImg from '@/assets/images/icp.svg'
 import securityImg from '@/assets/images/gongan.png'
 import packageInfo from '../package.json'
