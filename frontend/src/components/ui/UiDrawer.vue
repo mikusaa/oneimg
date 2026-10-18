@@ -38,7 +38,7 @@ const close = () => { open.value = false }
             <UiButton variant="ghost" size="sm" icon aria-label="关闭"><i class="ri-close-line" /></UiButton>
           </DialogClose>
         </div>
-        <div class="flex flex-1 flex-col gap-5 overflow-auto px-5 py-[18px]">
+        <div class="flex flex-1 flex-col gap-5 overflow-auto px-5 py-[18px] [&>*]:shrink-0">
           <slot :close="close" />
         </div>
         <div v-if="$slots.footer" class="flex flex-wrap justify-end gap-2 border-t border-oi-line px-5 py-3.5">

@@ -1,7 +1,7 @@
-import type { DashboardStats, Image, Problem, StorageBucket, Tag, UploadBatch, User } from './generated/types.gen'
+import type { DashboardStats, Image, Problem, StorageBucket, Tag, TagUsage, UploadBatch, User } from './generated/types.gen'
 import { client as generatedClient } from './generated/client.gen'
 
-export type { DashboardStats, Image, Problem, StorageBucket, Tag, UploadBatch, User } from './generated/types.gen'
+export type { DashboardStats, Image, Problem, StorageBucket, Tag, TagUsage, UploadBatch, User } from './generated/types.gen'
 
 export type Envelope<T> = { data: T; meta?: { pagination?: { page: number; page_size: number; total: number; total_pages: number } } }
 
@@ -41,14 +41,18 @@ export function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Prom
   return fetch(target, { ...init, headers, credentials: 'include' })
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise<Envelope<T>> {
   const headers = new Headers(init.headers)
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   const response = await apiFetch(`${baseURL}/api/v1${path}`, { ...init, headers })
-  if (response.status === 204) return undefined as T
+  if (response.status === 204) return { data: undefined as T }
   const payload = await response.json().catch(() => null)
   if (!response.ok) throw new ApiError(payload as Problem)
-  return (payload as Envelope<T>).data
+  return payload as Envelope<T>
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return (await requestEnvelope<T>(path, init)).data
 }
 
 export const api = {
@@ -58,13 +62,19 @@ export const api = {
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
   me: () => request<User>('/me'),
   updateMe: (body: Record<string, unknown>) => request<{ user: User; reauthentication_required: boolean }>('/me', { method: 'PATCH', body: JSON.stringify(body) }),
-  listTags: () => request<Tag[]>('/tags'),
+  listTags: () => request<TagUsage[]>('/tags'),
   createTag: (name: string) => request<Tag>('/tags', { method: 'POST', body: JSON.stringify({ name }) }),
   updateTag: (id: number, name: string) => request<Tag>(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   deleteTag: (id: number) => request<void>(`/tags/${id}`, { method: 'DELETE' }),
   listImages: (query = '') => request<Image[]>(`/images${query ? `?${query}` : ''}`),
+  /** 带分页信息的图片列表 */
+  listImagesPage: (query = '') => requestEnvelope<Image[]>(`/images${query ? `?${query}` : ''}`),
   getImage: (id: number) => request<Image>(`/images/${id}`),
   deleteImage: (id: number) => request<void>(`/images/${id}`, { method: 'DELETE' }),
+  addImageTag: (imageId: number, tagId: number) => request<void>(`/images/${imageId}/tags/${tagId}`, { method: 'PUT' }),
+  removeImageTag: (imageId: number, tagId: number) => request<void>(`/images/${imageId}/tags/${tagId}`, { method: 'DELETE' }),
+  updateImageTags: (body: { image_ids: number[]; add_tag_ids?: number[]; remove_tag_ids?: number[] }) => request<unknown>('/images/tags', { method: 'PATCH', body: JSON.stringify(body) }),
+  listImageStorages: () => request<{ id: number; name: string; type: string; disabled: boolean }[]>('/image-storages'),
   uploadImages: (form: FormData, onProgress?: (value: number) => void) => uploadWithProgress<UploadBatch>(`${baseURL}/api/v1/images`, form, onProgress),
   importImage: (body: Record<string, unknown>) => request<Image>('/image-imports', { method: 'POST', body: JSON.stringify(body) }),
   uploadOptions: () => request<Record<string, unknown>>('/upload-options'),

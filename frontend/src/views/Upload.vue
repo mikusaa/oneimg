@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api, type DashboardStats, type Image } from '@/api/client.ts'
-import ImagePreview from '@/components/ImagePreview.vue'
-import VideoPreview from '@/components/VideoPreview.vue'
 import LinkBox from '@/components/media/LinkBox.vue'
 import MediaThumb from '@/components/media/MediaThumb.vue'
+import MediaViewer from '@/components/media/MediaViewer.vue'
 import StorageTypeIcon from '@/components/storage/StorageTypeIcon.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import {
@@ -130,13 +129,17 @@ const copyRecent = async (image: Image) => {
   }
 }
 
-/* ---------- 预览与删除 ---------- */
-const imagePreview = ref<Image | null>(null)
-const videoPreview = ref<Image | null>(null)
-const preview = (image: Image) => {
-  if (isVideo(image)) videoPreview.value = image
-  else imagePreview.value = image
+/* ---------- 查看与删除 ---------- */
+const viewerOpen = ref(false)
+const viewerIndex = ref(0)
+const viewerItems = ref<Image[]>([])
+// 在本次上传或最近上传的范围内左右切换
+const preview = (image: Image, list: Image[]) => {
+  viewerItems.value = list
+  viewerIndex.value = Math.max(0, list.findIndex(item => item.id === image.id))
+  viewerOpen.value = true
 }
+const canDelete = (image: Image) => canManageImage(image, 'image:delete', user.value)
 const deleteImage = async (image: Image) => {
   const ok = await confirm({
     title: '删除这个文件？',
@@ -147,8 +150,7 @@ const deleteImage = async (image: Image) => {
   if (!ok) return
   try {
     await api.deleteImage(image.id)
-    imagePreview.value = null
-    videoPreview.value = null
+    viewerItems.value = viewerItems.value.filter(item => item.id !== image.id)
     items.value.filter(item => item.image?.id === image.id).forEach(removeItem)
     toast.success('已删除')
     void loadStats()
@@ -301,7 +303,7 @@ watch(completedBatches, () => { void loadStats() })
               type="button"
               class="upload-thumb group relative focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-oi-ring"
               :aria-label="`预览 ${item.name}`"
-              @click="preview(item.image)"
+              @click="preview(item.image, done.map(entry => entry.image!))"
             >
               <MediaThumb :src="item.image.thumbnail || item.image.url" :alt="item.name" :video="isVideo(item.image)" class="h-full w-full" />
               <i class="ri-zoom-in-line absolute inset-0 grid place-items-center bg-black/40 text-lg text-white opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
@@ -373,7 +375,7 @@ watch(completedBatches, () => { void loadStats() })
         <h2 id="upload-recent-title" class="upload-side-title">最近上传 <RouterLink to="/gallery">图库 <i class="ri-arrow-right-s-line" aria-hidden="true" /></RouterLink></h2>
         <div v-if="recent.length" class="grid grid-cols-3 gap-2">
           <div v-for="image in recent" :key="image.id" class="upload-recent group">
-            <button type="button" class="block h-full w-full focus-visible:outline-none" :aria-label="`预览 ${image.original_file_name || image.file_name}`" @click="preview(image)">
+            <button type="button" class="block h-full w-full focus-visible:outline-none" :aria-label="`预览 ${image.original_file_name || image.file_name}`" @click="preview(image, recent)">
               <MediaThumb :src="image.thumbnail || image.url" :alt="image.original_file_name || image.file_name" :video="isVideo(image)" class="h-full w-full transition-transform duration-300 group-hover:scale-[1.06]" />
             </button>
             <div class="upload-recent-ov">
@@ -411,19 +413,7 @@ watch(completedBatches, () => { void loadStats() })
       </template>
     </UiDialog>
 
-    <ImagePreview
-      v-if="imagePreview"
-      :key="imagePreview.id"
-      :media="imagePreview"
-      :can-delete="canManageImage(imagePreview, 'image:delete', user)"
-      @close="imagePreview = null"
-      @delete="deleteImage(imagePreview)"
-    />
-    <VideoPreview v-if="videoPreview" :key="videoPreview.id" :media="videoPreview" :url="safeMediaURL(videoPreview.url)" @close="videoPreview = null">
-      <template v-if="canManageImage(videoPreview, 'image:delete', user)" #actions>
-        <button type="button" class="danger-button" @click="deleteImage(videoPreview)">删除</button>
-      </template>
-    </VideoPreview>
+    <MediaViewer v-model:open="viewerOpen" v-model:index="viewerIndex" :items="viewerItems" :can-delete="canDelete" @delete="deleteImage" />
   </div>
 </template>
 

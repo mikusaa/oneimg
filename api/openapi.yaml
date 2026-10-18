@@ -324,6 +324,7 @@ paths:
     get:
       operationId: listTags
       summary: 获取标签列表
+      description: 返回全部标签；count 为标签在当前用户可见文件中的使用次数，管理员统计全部文件，普通用户只统计自己的文件。
       tags: [Tags]
       responses:
         '200': { $ref: '#/components/responses/TagCollectionResponse' }
@@ -654,7 +655,7 @@ components:
     TagCollectionResponse:
       description: 标签列表
       headers: { X-Request-ID: { schema: { type: string } } }
-      content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/Tag' } } } } } }
+      content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: '#/components/schemas/TagUsage' } } } } } }
     StorageBucketResponse:
       description: 存储桶信息
       headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
@@ -731,6 +732,13 @@ components:
       type: object
       required: [id, name]
       properties: { id: { type: integer }, name: { type: string } }
+    TagUsage:
+      type: object
+      required: [id, name, count]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        count: { type: integer, format: int64, minimum: 0, description: 当前用户可见文件中带有该标签的数量 }
     Image:
       type: object
       required: [id, url, thumbnail, file_name, original_file_name, original_file_size, file_size, mime_type, width, height, storage, bucket_id, user_id, uploader_role, tags, created_at]

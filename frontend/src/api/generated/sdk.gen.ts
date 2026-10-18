@@ -396,6 +396,8 @@ export const updateImageTags = <ThrowOnError extends boolean = false>(options: O
 
 /**
  * 获取标签列表
+ *
+ * 返回全部标签；count 为标签在当前用户可见文件中的使用次数，管理员统计全部文件，普通用户只统计自己的文件。
  */
 export const listTags = <ThrowOnError extends boolean = false>(options?: Options<ListTagsData, ThrowOnError>): RequestResult<ListTagsResponses, ListTagsErrors, ThrowOnError> => (options?.client ?? client).get<ListTagsResponses, ListTagsErrors, ThrowOnError>({
     security: [{

@@ -1,4 +1,4 @@
-import { test, expect, type BrowserContext } from '@playwright/test'
+import { test, expect, type BrowserContext, type Locator, type Page } from '@playwright/test'
 
 let cookies: Awaited<ReturnType<BrowserContext['cookies']>>
 let user: Record<string, unknown>
@@ -16,55 +16,81 @@ test.beforeEach(async ({ context, page }) => {
   }, user)
 })
 
-for (const path of ['/upload', '/gallery']) {
-  test(`historical metadata stays data on ${path}`, async ({ page }) => {
-    await page.goto(path)
-    const target = page.locator('img[src*="legacy%22"]').first()
-    await expect(target).toBeVisible()
-    await target.click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible()
-    await expect(dialog).toContainText('photo"><img src=x onerror="window.previewInjected=1">.png')
-    await expect(dialog).toContainText('tag"><img src=x onerror="window.previewInjected=1">')
-    expect(await dialog.locator('script, iframe, [onclick], [onerror], [onload]').count()).toBe(0)
-    expect(await page.evaluate(() => (window as unknown as { previewInjected: number }).previewInjected)).toBe(0)
-    const download = dialog.getByRole('link', { name: '下载' })
-    expect(await download.getAttribute('download')).not.toMatch(/["'<>?#/\\]/)
-    const [downloaded] = await Promise.all([page.waitForEvent('download'), download.click()])
-    expect(await downloaded.failure()).toBeNull()
-    await dialog.getByRole('button', { name: '复制 URL', exact: true }).click()
-    await dialog.getByRole('button', { name: '关闭', exact: true }).last().click()
-    await expect(dialog).not.toBeVisible()
-    await target.click()
-    await dialog.getByRole('button', { name: '放大原图' }).click()
-    await expect(page.locator('#spotlight.show')).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(page.locator('#spotlight.show')).not.toBeVisible()
-  })
+const injected = (page: Page) => page.evaluate(() => (window as unknown as { previewInjected: number }).previewInjected)
+
+// 历史文件名、标签名里的 HTML 只能按文本显示，下载文件名不能带路径或引号
+const expectInert = async (page: Page, scope: Locator) => {
+  expect(await scope.locator('script, iframe, [onclick], [onerror], [onload]').count()).toBe(0)
+  expect(await injected(page)).toBe(0)
+}
+const expectSafeDownload = async (page: Page, link: Locator) => {
+  expect(await link.getAttribute('download')).not.toMatch(/["'<>?#/\\]/)
+  const [downloaded] = await Promise.all([page.waitForEvent('download'), link.click()])
+  expect(await downloaded.failure()).toBeNull()
 }
 
-test('mobile preview preserves actions without injected nodes', async ({ page }) => {
+test('historical metadata stays data in the gallery inspector and viewer', async ({ page }) => {
+  await page.goto('/gallery')
+  const target = page.locator('img[src*="legacy%22"]').first()
+  await expect(target).toBeVisible()
+  await target.click()
+  const inspector = page.getByRole('dialog', { name: 'photo"><img src=x onerror="window.previewInjected=1">.png' })
+  await expect(inspector).toBeVisible()
+  await expect(inspector).toContainText('photo"><img src=x onerror="window.previewInjected=1">.png')
+  await expect(inspector).toContainText('tag"><img src=x onerror="window.previewInjected=1">')
+  await expectInert(page, inspector)
+  // 链接里的引号被编码，HTML 格式里的文件名被转义
+  expect(await inspector.getByRole('textbox', { name: 'URL 链接' }).inputValue()).toContain('legacy%22')
+  expect(await inspector.getByRole('textbox', { name: 'HTML 链接' }).inputValue()).toContain('alt="photo&quot;&gt;&lt;img')
+  await expectSafeDownload(page, inspector.getByRole('link', { name: '下载' }))
+
+  await inspector.getByRole('button', { name: '放大查看', exact: true }).click()
+  const viewer = page.getByRole('dialog', { name: 'photo"><img src=x onerror="window.previewInjected=1">.png' }).last()
+  await expect(viewer.locator('img[draggable="false"][src*="legacy%22"]')).toBeVisible()
+  await expectInert(page, viewer)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('img[src*="legacy%22"][draggable="false"]')).toHaveCount(0)
+  await expect(inspector).toBeVisible()
+  await inspector.getByRole('button', { name: '关闭' }).click()
+  await expect(inspector).not.toBeVisible()
+})
+
+test('historical metadata stays data in the upload page viewer', async ({ page }) => {
+  await page.goto('/upload')
+  const target = page.locator('img[src*="legacy%22"]').first()
+  await expect(target).toBeVisible()
+  await target.click()
+  const viewer = page.getByRole('dialog', { name: 'photo"><img src=x onerror="window.previewInjected=1">.png' })
+  await expect(viewer).toBeVisible()
+  await expectInert(page, viewer)
+  await expectSafeDownload(page, viewer.getByRole('link', { name: '下载' }))
+  await viewer.getByRole('button', { name: /^复制 .* 链接$/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(viewer).not.toBeVisible()
+})
+
+test('mobile inspector preserves actions without injected nodes', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/gallery')
   await page.locator('img[src*="legacy%22"]').first().click()
-  const dialog = page.getByRole('dialog')
-  await expect(dialog).toBeVisible()
-  const box = await dialog.boundingBox()
+  const inspector = page.getByRole('dialog', { name: 'photo"><img src=x onerror="window.previewInjected=1">.png' })
+  await expect(inspector).toBeVisible()
+  const box = await inspector.boundingBox()
   expect(box!.width).toBeLessThanOrEqual(390)
   let removed = false
   await page.route('**/api/v1/images/1/tags/*', async route => {
     if (route.request().method() === 'DELETE') { removed = true; await route.fulfill({ status: 204 }) } else await route.continue()
   })
-  await dialog.getByRole('button', { name: /^移除标签/ }).click()
+  await inspector.getByRole('button', { name: /^移除标签/ }).click()
   await expect.poll(() => removed).toBeTruthy()
   let deleted = false
   await page.route('**/api/v1/images/1', async route => {
     if (route.request().method() === 'DELETE') { deleted = true; await route.fulfill({ status: 204 }) } else await route.continue()
   })
-  await dialog.getByRole('button', { name: '删除', exact: true }).click()
-  await page.getByRole('button', { name: '确认删除', exact: true }).click()
+  await inspector.getByRole('button', { name: '删除文件', exact: true }).click()
+  await page.getByRole('dialog', { name: /^删除「/ }).getByRole('button', { name: '删除', exact: true }).click()
   await expect.poll(() => deleted).toBeTruthy()
-  expect(await page.evaluate(() => (window as unknown as { previewInjected: number }).previewInjected)).toBe(0)
+  expect(await injected(page)).toBe(0)
 })
 
 test('legacy SVG blocks scripts, external resources, embedded pages and forms', async ({ page }) => {

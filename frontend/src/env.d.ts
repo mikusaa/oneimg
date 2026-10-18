@@ -19,10 +19,4 @@ declare module 'vue-router' {
   }
 }
 
-declare global {
-  interface Window {
-    Spotlight?: { show: (items: Array<{ src: string }>) => void }
-  }
-}
-
 export {}

@@ -503,6 +503,83 @@ func TestImageStoragesListsDisabledAndFullStoragesWithReadScope(t *testing.T) {
 	}
 }
 
+func TestTagListCountsUsageWithinVisibleImages(t *testing.T) {
+	cfg := &config.Config{SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
+	router, system := setupTestRouter(t, cfg)
+	db := system.Database.DB
+	admin := models.User{Username: "tag-admin", Password: "unused", Role: models.RoleAdmin, Permission: models.Permission{Codes: []string{}, Buckets: []int{}}}
+	member := models.User{Username: "tag-member", Password: "unused", Role: models.RoleUser, Permission: models.Permission{Codes: []string{}, Buckets: []int{}}}
+	for _, user := range []*models.User{&admin, &member} {
+		if err := db.Create(user).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	shared := models.Tags{Name: "shared"}
+	adminOnly := models.Tags{Name: "admin-only"}
+	unused := models.Tags{Name: "unused"}
+	for _, tag := range []*models.Tags{&shared, &adminOnly, &unused} {
+		if err := db.Create(tag).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	images := []models.Image{
+		{FileName: "a.png", Url: "a.png", BucketId: 1, UserId: admin.ID},
+		{FileName: "b.png", Url: "b.png", BucketId: 1, UserId: admin.ID},
+		{FileName: "c.png", Url: "c.png", BucketId: 1, UserId: member.ID},
+	}
+	if err := db.Create(&images).Error; err != nil {
+		t.Fatal(err)
+	}
+	links := []models.ImageToTags{
+		{ImageId: images[0].Id, TagId: shared.Id}, {ImageId: images[0].Id, TagId: adminOnly.Id},
+		{ImageId: images[1].Id, TagId: adminOnly.Id}, {ImageId: images[2].Id, TagId: shared.Id},
+	}
+	if err := db.Create(&links).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	counts := func(user models.User) map[string]int64 {
+		t.Helper()
+		created, err := system.Services.Tokens.Create(user.ID, services.CreateTokenInput{AuthVersion: user.AuthVersion, Name: "tags", Scopes: []string{"tags:read"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/tags", nil)
+		req.Header.Set("Authorization", "Bearer "+created.Plain)
+		router.ServeHTTP(recorder, req)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("tags status = %d, body = %s", recorder.Code, recorder.Body.String())
+		}
+		var payload struct {
+			Data []struct {
+				ID    int    `json:"id"`
+				Name  string `json:"name"`
+				Count *int64 `json:"count"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		result := map[string]int64{}
+		for _, item := range payload.Data {
+			if item.Count == nil {
+				t.Fatalf("tag %s has no count: %s", item.Name, recorder.Body.String())
+			}
+			result[item.Name] = *item.Count
+		}
+		return result
+	}
+
+	// 管理员统计全部文件；普通用户仍能看到全部标签，但只统计自己的文件
+	if got := counts(admin); len(got) != 3 || got["shared"] != 2 || got["admin-only"] != 2 || got["unused"] != 0 {
+		t.Fatalf("admin tag counts = %v", got)
+	}
+	if got := counts(member); len(got) != 3 || got["shared"] != 1 || got["admin-only"] != 0 || got["unused"] != 0 {
+		t.Fatalf("member tag counts = %v", got)
+	}
+}
+
 func TestPatchSettingsRejectsInvalidPathTemplateWithFieldProblem(t *testing.T) {
 	cfg := &config.Config{SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
 	router, system := setupTestRouter(t, cfg)

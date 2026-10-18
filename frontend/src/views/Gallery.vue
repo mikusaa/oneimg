@@ -1,1245 +1,573 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter, type LocationQuery } from 'vue-router'
+import { api, type Image } from '@/api/client.ts'
+import BatchCopyDialog from '@/components/gallery/BatchCopyDialog.vue'
+import BatchTagDialog from '@/components/gallery/BatchTagDialog.vue'
+import GalleryFilters from '@/components/gallery/GalleryFilters.vue'
+import GalleryInspector from '@/components/gallery/GalleryInspector.vue'
+import { SORT_OPTIONS, type GalleryFilter, type GallerySort, type MediaKind, type MediaStorage, type UploaderRole } from '@/components/gallery/types'
+import MediaThumb from '@/components/media/MediaThumb.vue'
+import MediaViewer from '@/components/media/MediaViewer.vue'
+import TagManagerDialog from '@/components/tags/TagManagerDialog.vue'
+import { confirm, toast, UiButton, UiDrawer, UiSegmented } from '@/components/ui'
+import { LINK_FORMATS, useLinkFormat } from '@/composables/useLinkFormat'
+import { useSession } from '@/composables/useSession'
+import { loadTags, tagById, tagColor } from '@/composables/useTags'
+import { formatBytes, formatCount, formatDateTime, formatDay } from '@/utils/format'
+import { copyMediaText, isVideo, mediaLink, safeMediaURL } from '@/utils/media'
+import { canManageImage, hasPermission, ROLE_ADMIN } from '@/utils/permissions.ts'
+
+const PAGE_SIZE = 20
+const VIEW_KEY = 'gallery-view'
+
+const route = useRoute()
+const router = useRouter()
+const { user } = useSession()
+const linkFormat = useLinkFormat()
+
+const isAdmin = computed(() => Number(user.value.role) === ROLE_ADMIN)
+const can = (image: Image, permission: string) => canManageImage(image, permission, user.value)
+const canCreateTag = computed(() => hasPermission('tag:create', user.value))
+const tagPermissions = computed(() => ({
+  create: hasPermission('tag:create', user.value),
+  update: hasPermission('tag:update', user.value),
+  delete: hasPermission('tag:delete', user.value),
+}))
+const canManageTags = computed(() => tagPermissions.value.create || tagPermissions.value.update || tagPermissions.value.delete)
+
+/* ---------- 筛选条件（同步到地址栏，书签和「在图库中查看」可用） ---------- */
+const first = (value: LocationQuery[string]) => (Array.isArray(value) ? value[0] : value) ?? ''
+const positiveInt = (value: string) => { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : null }
+const pick = <T extends string>(value: string, allowed: readonly T[], fallback: T) => (allowed as readonly string[]).includes(value) ? value as T : fallback
+
+const filterFromQuery = (query: LocationQuery): GalleryFilter => ({
+  type: pick<MediaKind>(first(query.type), ['all', 'image', 'video'], 'all'),
+  tags: first(query.tags).split(',').map(positiveInt).filter((id): id is number => id !== null),
+  untagged: first(query.untagged) === '1',
+  storage: positiveInt(first(query.storage)),
+  role: pick<UploaderRole>(first(query.role), ['all', 'admin', 'user'], 'all'),
+  q: first(query.q),
+  sort: pick<GallerySort>(first(query.sort), ['new', 'old', 'big', 'name'], 'new'),
+})
+const filter = reactive<GalleryFilter>(filterFromQuery(route.query))
+const page = ref(positiveInt(first(route.query.page)) ?? 1)
+
+const toQuery = () => {
+  const query: Record<string, string> = {}
+  if (filter.type !== 'all') query.type = filter.type
+  if (filter.tags.length) query.tags = filter.tags.join(',')
+  if (filter.untagged) query.untagged = '1'
+  if (filter.storage) query.storage = String(filter.storage)
+  if (isAdmin.value && filter.role !== 'all') query.role = filter.role
+  if (filter.q.trim()) query.q = filter.q.trim()
+  if (filter.sort !== 'new') query.sort = filter.sort
+  if (page.value > 1) query.page = String(page.value)
+  return query
+}
+
+/* ---------- 列表 ---------- */
+const images = ref<Image[]>([])
+const total = ref(0)
+const totalPages = ref(1)
+const loading = ref(true)
+const loadError = ref('')
+let requestSeq = 0
+
+const loadImages = async () => {
+  const seq = ++requestSeq
+  loading.value = true
+  loadError.value = ''
+  const sort = SORT_OPTIONS.find(option => option.value === filter.sort) ?? SORT_OPTIONS[0]
+  const params = new URLSearchParams({ page: String(page.value), page_size: String(PAGE_SIZE), sort: sort.sort, order: sort.order })
+  if (filter.type !== 'all') params.set('media_type', filter.type)
+  if (filter.tags.length) params.set('tag_ids', filter.tags.join(','))
+  if (filter.untagged) params.set('untagged', 'true')
+  if (filter.storage) params.set('bucket_id', String(filter.storage))
+  if (isAdmin.value && filter.role !== 'all') params.set('uploader_role', filter.role === 'admin' ? '1' : '3')
+  if (filter.q.trim()) params.set('q', filter.q.trim())
+  try {
+    const result = await api.listImagesPage(params.toString())
+    if (seq !== requestSeq) return
+    images.value = Array.isArray(result.data) ? result.data : []
+    total.value = result.meta?.pagination?.total ?? images.value.length
+    totalPages.value = Math.max(1, result.meta?.pagination?.total_pages ?? 1)
+    // 删除后当前页可能已经超出范围
+    if (page.value > totalPages.value) { page.value = totalPages.value; return }
+    const ids = new Set(images.value.map(image => image.id))
+    selected.value = selected.value.filter(id => ids.has(id))
+  } catch (error) {
+    if (seq !== requestSeq) return
+    loadError.value = error instanceof Error && error.message ? error.message : '加载失败'
+  } finally {
+    if (seq === requestSeq) loading.value = false
+  }
+}
+
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+// 筛选变化回到第一页；搜索词稍等再请求
+watch(() => [filter.type, filter.tags.join(','), filter.untagged, filter.storage, filter.role, filter.sort], () => {
+  if (page.value !== 1) page.value = 1
+  else void loadImages()
+})
+watch(() => filter.q, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    if (page.value !== 1) page.value = 1
+    else void loadImages()
+  }, 300)
+})
+watch(page, () => {
+  void loadImages()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+})
+watch([() => ({ ...filter, tags: [...filter.tags] }), page], () => {
+  void router.replace({ query: toQuery() })
+}, { deep: true })
+
+/* ---------- 存储 ---------- */
+const storages = ref<MediaStorage[]>([])
+const loadStorages = async () => {
+  try {
+    const list = await api.listImageStorages()
+    storages.value = Array.isArray(list) ? list : []
+    if (filter.storage && !storages.value.some(storage => storage.id === filter.storage)) filter.storage = null
+  } catch (error) {
+    console.error('读取存储列表失败:', error)
+  }
+}
+
+/* ---------- 显示 ---------- */
+const readView = () => { try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid' } catch { return 'grid' } }
+const view = ref<string>(readView())
+watch(view, value => { try { localStorage.setItem(VIEW_KEY, value) } catch { /* 不保存也不影响使用 */ } })
+const viewOptions = [{ value: 'grid', icon: 'ri-layout-grid-line', title: '网格' }, { value: 'list', icon: 'ri-list-check', title: '列表' }]
+
+// 按最新上传排序时按天分组
+const groups = computed(() => {
+  if (filter.sort !== 'new') return [{ key: '', items: images.value }]
+  const result: { key: string; items: Image[] }[] = []
+  for (const image of images.value) {
+    const key = formatDay(image.created_at)
+    let group = result.find(item => item.key === key)
+    if (!group) result.push(group = { key, items: [] })
+    group.items.push(image)
+  }
+  return result
+})
+const name = (image: Image) => image.original_file_name || image.file_name || '文件'
+const subtitle = (image: Image) => `${formatBytes(image.file_size)} · ${isVideo(image) ? (image.mime_type.split('/')[1] || '').toUpperCase() : `${image.width}×${image.height}`}`
+const hasFilters = computed(() => filter.type !== 'all' || filter.tags.length > 0 || filter.untagged || !!filter.storage || filter.role !== 'all' || !!filter.q.trim())
+const clearFilters = () => Object.assign(filter, { type: 'all', tags: [], untagged: false, storage: null, role: 'all', q: '' })
+const removeTagFilter = (id: number) => { filter.tags = filter.tags.filter(item => item !== id) }
+
+/* ---------- 复制 ---------- */
+const formatLabel = computed(() => LINK_FORMATS.find(item => item.value === linkFormat.value)?.label ?? 'URL')
+const copiedId = ref<number | null>(null)
+let copiedTimer: ReturnType<typeof setTimeout> | undefined
+const copyLink = async (image: Image) => {
+  try {
+    await copyMediaText(mediaLink(image, linkFormat.value, safeMediaURL(image.url)))
+    toast.success(`已复制 ${formatLabel.value} 链接`)
+    copiedId.value = image.id
+    clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => { copiedId.value = null }, 1400)
+  } catch {
+    toast.error('复制失败，请手动复制')
+  }
+}
+
+/* ---------- 选择与批量操作 ---------- */
+const selected = ref<number[]>([])
+const selecting = computed(() => selected.value.length > 0)
+const selectedImages = computed(() => images.value.filter(image => selected.value.includes(image.id)))
+const allSelected = computed(() => images.value.length > 0 && selected.value.length === images.value.length)
+const toggleSelected = (id: number) => {
+  selected.value = selected.value.includes(id) ? selected.value.filter(item => item !== id) : [...selected.value, id]
+}
+const toggleAll = () => { selected.value = allSelected.value ? [] : images.value.map(image => image.id) }
+const batchCopyOpen = ref(false)
+const batchTagOpen = ref(false)
+
+/* ---------- 详情与查看器 ---------- */
+const inspectId = ref<number | null>(null)
+const inspectOpen = ref(false)
+const inspected = computed(() => images.value.find(image => image.id === inspectId.value) ?? null)
+const inspect = (image: Image) => {
+  inspectId.value = image.id
+  inspectOpen.value = true
+}
+watch(inspectOpen, value => { if (!value) inspectId.value = null })
+
+const viewerOpen = ref(false)
+const viewerIndex = ref(0)
+const openViewer = (image: Image) => {
+  viewerIndex.value = Math.max(0, images.value.findIndex(item => item.id === image.id))
+  viewerOpen.value = true
+}
+
+const onTileClick = (image: Image, event: MouseEvent) => {
+  if (selecting.value || event.metaKey || event.ctrlKey || event.shiftKey) toggleSelected(image.id)
+  else inspect(image)
+}
+const onUpdated = (image: Image) => {
+  images.value = images.value.map(item => item.id === image.id ? image : item)
+}
+
+/* ---------- 删除 ---------- */
+const deleteImages = async (targets: Image[]) => {
+  const allowed = targets.filter(image => can(image, 'image:delete'))
+  if (!allowed.length) {
+    toast.error('没有可删除的文件（无权限）')
+    return
+  }
+  const skipped = targets.length - allowed.length
+  const ok = await confirm({
+    title: allowed.length === 1 ? `删除「${name(allowed[0])}」？` : `删除 ${allowed.length} 个文件？`,
+    description: `文件会从存储中移除，已发布的外链将失效，无法撤销。${skipped ? `另有 ${skipped} 个文件无权删除，将跳过。` : ''}`,
+    danger: true,
+    confirmText: '删除',
+  })
+  if (!ok) return
+  let failed = 0
+  const queue = [...allowed]
+  // 没有批量删除接口，同时最多发 3 个请求
+  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+    for (let image = queue.shift(); image; image = queue.shift()) {
+      try { await api.deleteImage(image.id) } catch { failed += 1 }
+    }
+  }))
+  const deleted = allowed.length - failed
+  if (deleted) toast.success(`已删除 ${deleted} 个文件`)
+  if (failed) toast.error(`${failed} 个文件删除失败`)
+  if (inspectId.value && allowed.some(image => image.id === inspectId.value)) inspectOpen.value = false
+  await loadImages()
+  void loadTags(true).catch(() => undefined)
+  void loadStorages()
+}
+
+/* ---------- 标签管理 ---------- */
+const tagManagerOpen = ref(false)
+const showTag = (id: number) => Object.assign(filter, { tags: [id], untagged: false })
+
+/* ---------- 手机端筛选抽屉 ---------- */
+const filtersOpen = ref(false)
+
+// Esc：先取消选择；弹窗打开时由弹窗处理
+const onKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !selecting.value || event.defaultPrevented) return
+  if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return
+  selected.value = []
+}
+
+onMounted(() => {
+  void loadImages()
+  void loadStorages()
+  loadTags(true).catch(() => toast.error('读取标签失败'))
+  // 旧地址 /tags 跳转到 /gallery?view=tags：打开标签管理
+  if (route.query.view === 'tags') {
+    if (canManageTags.value) tagManagerOpen.value = true
+    void router.replace({ query: toQuery() })
+  }
+  window.addEventListener('keydown', onKeydown)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  clearTimeout(searchTimer)
+  clearTimeout(copiedTimer)
+})
+</script>
+
 <template>
-  <div class="page-shell text-gray-800 dark:text-gray-200">
-    <PageHeader title="图库管理" description="检索、整理和批量管理文件" />
+  <div class="grid flex-1 grid-cols-[228px_minmax(0,1fr)] font-oi text-sm text-oi-text max-[900px]:grid-cols-1">
+    <!-- 桌面端筛选栏 -->
+    <aside class="border-r border-oi-line bg-oi-panel max-[900px]:hidden" aria-label="筛选">
+      <div class="sticky top-0 max-h-dvh overflow-auto px-3 py-5">
+        <GalleryFilters v-model="filter" :storages="storages" :is-admin="isAdmin" :can-manage-tags="canManageTags" @manage-tags="tagManagerOpen = true" />
+      </div>
+    </aside>
 
-    <nav v-if="canManageTags" class="view-tabs" aria-label="图库视图">
-      <button type="button" class="view-tab" :class="{ 'view-tab-active': activeView === 'images' }" @click="selectView('images')">
-        <i class="ri-gallery-view-2"></i>
-        文件
-      </button>
-      <button type="button" class="view-tab" :class="{ 'view-tab-active': activeView === 'tags' }" @click="selectView('tags')">
-        <i class="ri-price-tag-3-line"></i>
-        标签
-      </button>
-    </nav>
+    <div class="flex min-w-0 flex-col">
+      <header class="px-[26px] pt-[22px] max-[900px]:px-4 max-[900px]:pt-4">
+        <div class="flex items-baseline gap-2.5">
+          <h1 class="text-[22px] font-[680] tracking-[-0.02em] text-oi-ink">图库</h1>
+          <span class="text-[13px] text-oi-muted" role="status">{{ isAdmin ? '全站' : '我的' }} {{ loading && !images.length ? '…' : formatCount(total) }} 个文件</span>
+        </div>
+        <div v-if="filter.tags.length || filter.untagged" class="mt-2.5 flex flex-wrap items-center gap-1.5 text-[12.5px]">
+          <span class="text-oi-muted">标签含任一：</span>
+          <span v-for="id in filter.tags" :key="id" class="inline-flex h-6 items-center gap-[5px] rounded-full border border-oi-line bg-oi-panel pl-2 pr-1 text-xs text-oi-ink">
+            <span class="h-[7px] w-[7px] rounded-full" :style="{ background: tagColor(tagById(id)?.name || '') }" aria-hidden="true" />{{ tagById(id)?.name ?? `#${id}` }}
+            <button type="button" class="grid h-[18px] w-[18px] place-items-center rounded-full text-[13px] text-oi-muted hover:bg-oi-line hover:text-oi-ink" :aria-label="`取消筛选 ${tagById(id)?.name ?? id}`" @click="removeTagFilter(id)"><i class="ri-close-line" aria-hidden="true" /></button>
+          </span>
+          <span v-if="filter.untagged" class="inline-flex h-6 items-center gap-[5px] rounded-full border border-oi-line bg-oi-panel pl-2 pr-1 text-xs text-oi-ink">
+            未加标签
+            <button type="button" class="grid h-[18px] w-[18px] place-items-center rounded-full text-[13px] text-oi-muted hover:bg-oi-line hover:text-oi-ink" aria-label="取消筛选未加标签" @click="filter.untagged = false"><i class="ri-close-line" aria-hidden="true" /></button>
+          </span>
+          <button type="button" class="text-oi-accent-2 hover:underline" @click="filter.tags = []; filter.untagged = false">清除</button>
+        </div>
+      </header>
 
-    <div v-if="activeView === 'images'" class="space-y-2.5 lg:space-y-3">
-      <div class="content-panel gallery-panel-compact gallery-topbar-compact space-y-2">
-        <div class="gallery-topbar-minimal">
-          <div class="gallery-topbar-filters">
-            <div class="gallery-inline-control gallery-inline-control-select"><label class="gallery-inline-label" for="media-type">类型</label><select id="media-type" v-model="mediaType" class="input-modern gallery-inline-select" :disabled="loading" @change="currentPage = 1; loadImages()"><option value="">全部</option><option value="image">图片</option><option value="video">视频</option></select></div>
-            <div v-if="isAdmin" class="gallery-inline-control gallery-inline-control-role">
-              <span class="gallery-inline-label">角色</span>
-              <div class="role-buttons grid w-full grid-cols-3 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 sm:inline-flex sm:w-auto" role="group" aria-label="图片角色筛选">
-            <button
-              @click="changeRole('all')"
-              class="pressable min-h-10 px-3 py-1.5 text-sm"
-              :aria-pressed="roleImage === 'all'"
-              :class="[
-                roleImage === 'all'
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'bg-transparent hover:bg-slate-100 dark:hover:bg-white/10'
-              ]"
-            >
-              全部
-            </button>
-            <button
-              @click="changeRole('admin')"
-              class="pressable min-h-10 px-3 py-1.5 text-sm"
-              :aria-pressed="roleImage === 'admin'"
-              :class="[
-                roleImage === 'admin' 
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' 
-                  : 'bg-transparent hover:bg-slate-100 dark:hover:bg-white/10'
-              ]"
-            >
-              管理员
-            </button>
-            <button
-              @click="changeRole('user')"
-              class="pressable min-h-10 px-3 py-1.5 text-sm"
-              :aria-pressed="roleImage === 'user'"
-              :class="[
-                roleImage === 'user'
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'bg-transparent hover:bg-slate-100 dark:hover:bg-white/10'
-              ]"
-            >
-              用户
-            </button>
-          </div>
-            </div>
-
-            <div class="gallery-inline-control gallery-inline-control-select">
-              <span class="gallery-inline-label">存储</span>
-          <select 
-            class="input-modern gallery-inline-select"
-            v-model="selectedBucket"
-            @change="loadImages"
-          >
-            <option value="null">全部</option>
-            <option 
-              v-for="bucket in presetBuckets" 
-              :key="bucket.id"
-              :value="bucket.id"
-            >{{ bucket.disabled ? `${bucket.name}（已停用）` : bucket.name }}</option>
-          </select>
-            </div>
-
-            <div class="gallery-inline-control gallery-inline-control-search">
-              <span class="gallery-inline-label">搜索</span>
-              <div class="flex w-full gap-1.5 sm:w-72 lg:w-full">
-                <input
-                  v-model.trim="searchKeyword"
-                  class="input-modern min-w-0 flex-1"
-                  type="search"
-                  placeholder="原始名 / 文件名 / URL / 哈希"
-                  @keyup.enter="handleSearch"
-                />
-                <button class="soft-button px-2.5" @click="handleSearch" title="搜索" aria-label="搜索图片">
-                  <i class="ri-search-line"></i>
-                </button>
-                <button v-if="searchKeyword" class="soft-button px-2.5" @click="clearSearch" title="清空" aria-label="清空搜索">
-                  <i class="ri-close-line"></i>
-                </button>
-              </div>
-            </div>
-
-            <div class="gallery-inline-control gallery-inline-control-tags">
-              <span class="gallery-inline-label">标签</span>
-              <div class="w-full sm:w-72 lg:w-full">
-                <TagSelector
-                  :model-value="selectedTags"
-                  :options="galleryTagOptions"
-                  multiple
-                  confirm
-                  empty-label="全部标签"
-                  @update:model-value="applyTagFilter"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div class="gallery-topbar-actions">
-            <div class="gallery-topbar-stats">
-              <label v-if="images.length > 0" for="selectAll" class="gallery-topbar-stat gallery-topbar-stat-action">
-                <input
-                  type="checkbox"
-                  id="selectAll"
-                  class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                  v-model="selectAll"
-                  @change="handleSelectAll"
-                >
-                <span>全选</span>
-              </label>
-              <span class="gallery-topbar-stat">{{ ROLE_MAP[roleImage] }}</span>
-              <span class="gallery-topbar-stat">{{ images.length }} 张</span>
-              <span class="gallery-topbar-stat">已选 {{ selectedImages.length }}</span>
-            </div>
-          <Transition name="batch-actions">
-          <div v-if="selectedImages.length > 0" class="batch-actions flex w-full flex-col gap-2 sm:flex-row sm:items-center xl:w-auto">
-            <button @click="handleBatchCopy" class="soft-button">
-              <i class="ri-file-copy-line"></i>
-              批量复制
-            </button>
-            <button
-            v-if="canBatchTag"
-            @click="handleBatchSetTag"
-            class="soft-button">
-                <i class="ri-bookmark-2-fill"></i>
-                批量设置标签
-            </button>
-            <button
-              v-if="canBatchDelete"
-              @click="handleBatchDelete"
-              class="danger-button"
-            >
-              <i class="ri-delete-bin-fill"></i>
-              删除 ({{ selectedImages.length }})
-            </button>
-          </div>
-          </Transition>
-          </div>
-          </div>
+      <div class="flex flex-wrap items-center gap-2 border-b border-oi-line px-[26px] py-3.5 max-[900px]:px-4">
+        <label class="relative min-w-[180px] max-w-[360px] flex-1">
+          <i class="ri-search-line pointer-events-none absolute left-[11px] top-1/2 -translate-y-1/2 text-base text-oi-faint" aria-hidden="true" />
+          <input v-model="filter.q" type="search" placeholder="原始文件名 / 文件名 / URL / 哈希" aria-label="搜索文件" class="gallery-input w-full !pl-[34px]">
+        </label>
+        <UiButton icon class="min-[901px]:hidden" aria-label="筛选" :aria-expanded="filtersOpen" @click="filtersOpen = true">
+          <i class="ri-filter-3-line" aria-hidden="true" />
+        </UiButton>
+        <span class="flex-1" />
+        <select v-model="filter.sort" class="gallery-input" aria-label="排序">
+          <option v-for="option in SORT_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+        <select v-model="linkFormat" class="gallery-input" aria-label="复制的链接格式" title="复制的链接格式">
+          <option v-for="format in LINK_FORMATS" :key="format.value" :value="format.value">{{ format.label }}</option>
+        </select>
+        <UiSegmented v-model="view" :options="viewOptions" aria-label="显示方式" />
       </div>
 
-      <section class="space-y-3">
-      <div v-if="loading" class="content-panel loading-container flex flex-col items-center justify-center py-12 sm:py-14">
-        <div class="spinner w-10 h-10 border-4 border-gray-200 dark:border-gray-700 border-t-primary dark:border-t-primary rounded-full animate-spin mb-4"></div>
-        <p class="text-gray-600 dark:text-gray-400">加载中...</p>
-      </div>
-      
-      <div v-else-if="images.length > 0" class="content-panel gallery-panel-compact images-container">
-        <div v-if="viewMode === 'grid'" class="images-grid grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-          <div 
-            v-for="image in images" 
-            :key="image.id"
-            class="gallery-image-card gallery-image-card-compact"
-            :class="isImageSelected(image.id) ? 'border-primary ring-2 ring-primary/20 dark:border-primary' : 'hover:border-slate-300 dark:hover:border-white/20'"
-            tabindex="0"
-            :aria-label="`查看文件 ${getImageAltText(image)}`"
-            :aria-selected="isImageSelected(image.id)"
-            @keydown.enter.prevent="openPreview(image)"
-          >
-            <div class="gallery-image-card-head">
-              <div class="gallery-card-badges">
-                <span 
-                  class="image-role gallery-card-badge"
-                  :class="getRoleTagClass(image)"
-                >
-                  {{ getRoleName(image) }}
-                </span>
-                <span class="gallery-card-badge gallery-card-badge-dark">
-                  {{ presetBuckets.find(bucket => bucket.id == image.bucket_id)?.name }}
-                </span>
-              </div>
-              <label class="gallery-card-checkbox" :for="`image-${image.id}`" @click.stop>
-                <input
-                  type="checkbox"
-                  :id="`image-${image.id}`"
-                  class="h-4 w-4 rounded border-gray-300 bg-white text-primary focus:ring-primary dark:bg-gray-800"
-                  :checked="isImageSelected(image.id)"
-                  @change="handleImageSelectionChange(image.id, $event)"
-                  @click.stop
-                >
-              </label>
-            </div>
+      <div class="relative min-h-[60vh] px-[26px] pb-28 pt-[18px] max-[900px]:px-4">
+        <div v-if="loadError" class="py-16 text-center text-oi-muted" role="alert">
+          <i class="ri-error-warning-line mb-2.5 block text-[34px] text-oi-danger" aria-hidden="true" />
+          <h2 class="mb-1 text-[15px] font-semibold text-oi-ink">加载失败</h2>
+          <p class="mb-4">{{ loadError }}</p>
+          <UiButton @click="loadImages">重试</UiButton>
+        </div>
 
-            <div class="image-wrapper relative aspect-square overflow-hidden bg-gray-100 dark:bg-gray-950" @click="openPreview(image)">
-              <div v-if="!isVideo(image)" class="loading absolute inset-0 flex items-center justify-center z-0 text-slate-300">
-                <svg class="w-8 h-8 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="transform: scaleX(-1) scaleY(-1);">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </div>
-              <button v-if="isVideo(image)" type="button" class="video-placeholder" :aria-label="`播放 ${image.file_name}`" @click.stop="openPreview(image)"><i class="ri-play-circle-line text-5xl"></i><span>{{ image.mime_type.split('/')[1].toUpperCase() }}</span></button>
-              <img v-else
-                :src="image.thumbnail || image.url" 
-                :alt="getImageAltText(image)"
-                class="image-thumbnail h-full w-full object-cover opacity-0"
-                loading="lazy"
-                @load="handleImageLoad"
-                @error="handleImageError"
-              />
-            </div>
-            <div class="image-info gallery-image-info-compact p-3">
-              <p class="image-filename overflow-hidden truncate whitespace-nowrap text-sm font-medium">{{ image.file_name }}</p>
-              <p v-if="image.original_file_name && image.original_file_name !== image.file_name" class="gallery-image-card-meta truncate">
-                原始：{{ image.original_file_name }}
-              </p>
-              <p class="gallery-image-card-meta gallery-image-card-meta-inline">
-                {{ formatFileSize(image.file_size) }} • 
-                {{ isVideo(image) ? image.mime_type.split('/')[1].toUpperCase() : `${image.width}×${image.height}` }}
-              </p>
-              <p class="gallery-image-card-meta">{{ formatDate(image.created_at) }}</p>
-            </div>
-          </div>
+        <div v-else-if="loading && !images.length" class="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-x-3.5 gap-y-4" aria-busy="true" aria-label="正在加载">
+          <div v-for="n in 8" :key="n" class="aspect-[4/3] animate-pulse rounded-[14px] bg-oi-panel" />
         </div>
-        
-        <div v-if="totalPages > 1" class="pagination flex flex-wrap items-center justify-center gap-2 py-4 sm:py-5">
-          <button 
-            @click="changePage(currentPage - 1)"
-            :disabled="currentPage <= 1"
-            class="soft-button"
-            :class="{ 'opacity-50 cursor-not-allowed': currentPage <= 1 }"
-          >
-            上一页
-          </button>
-          
-          <div class="page-numbers flex flex-wrap justify-center gap-1">
-            <button 
-              v-for="page in visiblePages"
-              :key="page"
-              @click="changePage(page)"
-              class="pressable flex h-10 w-10 items-center justify-center rounded-lg border text-sm"
-              :aria-label="`第 ${page} 页`"
-              :aria-current="page === currentPage ? 'page' : undefined"
-              :class="[
-                page === currentPage 
-                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white' 
-                  : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
-              ]"
-            >
-              {{ page }}
-            </button>
-          </div>
-          
-          <button 
-            @click="changePage(currentPage + 1)"
-            :disabled="currentPage >= totalPages"
-            class="soft-button"
-            :class="{ 'opacity-50 cursor-not-allowed': currentPage >= totalPages }"
-          >
-            下一页
-          </button>
-        </div>
-      </div>
-      
-      <div v-else class="content-panel empty-state flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300/80 bg-white/70 py-14 text-center dark:border-white/10 dark:bg-white/5">
-        <div class="empty-icon mb-3 text-5xl text-gray-400 dark:text-gray-600">
-          <i class="ri-image-ai-line"></i>
-        </div>
-        <h3 class="mb-2 text-lg font-bold">暂无{{ ROLE_MAP[roleImage] }}图片</h3>
-        <p class="mb-4 text-gray-600 dark:text-gray-400">
-          还没有上传任何{{ ROLE_MAP[roleImage] }}图片，
-          <router-link to="/upload" class="text-primary hover:underline">去上传一些吧</router-link>
-        </p>
-      </div>
-      </section>
-    </div>
 
-    <TagManager v-else @changed="getTagsList" />
-
-    <AppDialog
-      v-if="activeView === 'images'"
-      v-model="tagDialogOpen"
-      :title="tagDialogMode === 'batch' ? '批量编辑标签' : '添加标签'"
-      width-class="max-w-md"
-      @close="handleTagDialogClose"
-    >
-      <div class="space-y-4">
-        <div>
-          <label class="field-label">选择标签</label>
-          <TagSelector
-            v-model="tagDialogValue"
-            :options="actionTagOptions"
-            empty-label="选择标签"
-          />
-        </div>
-        <div v-if="tagDialogMode === 'batch'" class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-slate-950">
-          <p class="text-sm font-medium text-slate-700 dark:text-slate-200">已选择 {{ batchEditableImages.length }} 个文件</p>
-          <p class="mt-1.5 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
-            {{ batchEditableImages.map(image => image.file_name).join('、') }}
+        <div v-else-if="!images.length" class="py-16 text-center text-oi-muted">
+          <i class="ri-image-line mb-2.5 block text-[34px] text-oi-faint" aria-hidden="true" />
+          <h2 class="mb-1 text-[15px] font-semibold text-oi-ink">{{ hasFilters ? '没有符合条件的文件' : '还没有文件' }}</h2>
+          <p>
+            <template v-if="hasFilters"><button type="button" class="text-oi-accent-2 hover:underline" @click="clearFilters">清除筛选</button>，或 </template>
+            <RouterLink to="/upload" class="text-oi-accent-2 hover:underline">去上传</RouterLink>
           </p>
         </div>
-      </div>
 
+        <template v-else-if="view === 'grid'">
+          <section v-for="group in groups" :key="group.key" :aria-label="group.key || '文件'" class="[&:not(:first-child)]:mt-[22px]">
+            <h2 v-if="group.key" class="mb-2.5 mt-1 flex items-center gap-2 text-[12.5px] font-semibold text-oi-muted">
+              {{ group.key }} <span class="font-normal">{{ group.items.length }}</span>
+            </h2>
+            <ul :class="['grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-x-3.5 gap-y-4 max-[480px]:grid-cols-2 max-[480px]:gap-x-2.5', selecting && 'is-selecting']">
+              <li v-for="image in group.items" :key="image.id" :class="['gallery-tile group relative', selected.includes(image.id) && 'is-selected', inspectId === image.id && 'is-active']">
+                <div class="tile-img relative aspect-[4/3] overflow-hidden rounded-[14px] border border-oi-line bg-oi-panel">
+                  <button
+                    type="button"
+                    class="block h-full w-full focus-visible:outline-none"
+                    :aria-label="`${selecting ? '选择' : '查看详情'} ${name(image)}`"
+                    @click="onTileClick(image, $event)"
+                    @dblclick="openViewer(image)"
+                    @keydown.space.prevent="toggleSelected(image.id)"
+                  >
+                    <MediaThumb :src="image.thumbnail || image.url" :alt="name(image)" :video="isVideo(image)" class="h-full w-full transition-transform duration-[450ms] ease-[cubic-bezier(.3,.7,.4,1)] group-hover:scale-[1.04]" />
+                  </button>
+                  <button
+                    type="button"
+                    role="checkbox"
+                    :aria-checked="selected.includes(image.id)"
+                    :aria-label="`选择 ${name(image)}`"
+                    class="tile-check absolute left-2 top-2 z-[2]"
+                    @click="toggleSelected(image.id)"
+                  >
+                    <span :class="['grid h-[18px] w-[18px] place-items-center rounded-md border-[1.5px] text-[13px] transition-colors', selected.includes(image.id) ? 'border-oi-accent bg-oi-accent text-white' : 'border-black/15 bg-white/90 text-transparent']"><i class="ri-check-line" aria-hidden="true" /></span>
+                  </button>
+                  <span v-if="isVideo(image)" class="pointer-events-none absolute right-2 top-2 inline-flex h-[22px] items-center gap-[3px] rounded-[7px] bg-black/55 px-[7px] text-[11px] font-semibold text-white backdrop-blur-[6px]">
+                    <i class="ri-play-fill" aria-hidden="true" />{{ (image.mime_type.split('/')[1] || '').toUpperCase() }}
+                  </span>
+                  <div class="tile-quick absolute bottom-2 right-2 z-[2] flex gap-1">
+                    <button type="button" class="tile-quick-btn w-7 !px-0" :aria-label="`放大查看 ${name(image)}`" title="放大查看" @click="openViewer(image)"><i class="ri-zoom-in-line" aria-hidden="true" /></button>
+                    <button type="button" :class="['tile-quick-btn', copiedId === image.id && '!text-[#0b8352]']" :aria-label="`复制 ${name(image)} 的${formatLabel}链接`" @click="copyLink(image)">
+                      <i :class="copiedId === image.id ? 'ri-check-line' : 'ri-file-copy-line'" aria-hidden="true" />{{ copiedId === image.id ? '已复制' : '复制' }}
+                    </button>
+                  </div>
+                </div>
+                <div class="px-0.5 pt-2">
+                  <div class="truncate text-[13px] font-[540] text-oi-ink" :title="name(image)">{{ name(image) }}</div>
+                  <div class="mt-px flex items-center gap-1.5 text-[11.5px] text-oi-muted">
+                    <span class="truncate">{{ subtitle(image) }}</span>
+                    <span class="ml-auto inline-flex gap-[3px]">
+                      <span v-for="tag in image.tags.slice(0, 6)" :key="tag.id" class="h-[7px] w-[7px] rounded-full" :style="{ background: tagColor(tag.name) }" :title="tag.name" />
+                    </span>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </section>
+        </template>
+
+        <div v-else class="-mx-3 overflow-x-auto">
+          <table class="w-full border-separate border-spacing-0 text-[13px]">
+            <thead>
+              <tr class="[&>th]:border-b [&>th]:border-oi-line [&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:text-xs [&>th]:font-[550] [&>th]:text-oi-muted">
+                <th class="w-9">
+                  <button type="button" role="checkbox" :aria-checked="allSelected" aria-label="全选本页" @click="toggleAll">
+                    <span :class="['grid h-[18px] w-[18px] place-items-center rounded-md border-[1.5px] text-[13px]', allSelected ? 'border-oi-accent bg-oi-accent text-white' : 'border-oi-line-2 bg-oi-raised text-transparent']"><i class="ri-check-line" aria-hidden="true" /></span>
+                  </button>
+                </th>
+                <th>文件</th>
+                <th class="max-[900px]:hidden">标签</th>
+                <th class="max-[900px]:hidden">存储</th>
+                <th class="max-[900px]:hidden">大小</th>
+                <th class="max-[900px]:hidden">上传</th>
+                <th class="text-right">链接</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="image in images"
+                :key="image.id"
+                :class="['[&>td]:border-b [&>td]:border-oi-line [&>td]:px-3 [&>td]:py-[9px]', selected.includes(image.id) ? '[&>td]:bg-oi-accent-soft' : 'hover:[&>td]:bg-oi-panel']"
+              >
+                <td>
+                  <button type="button" role="checkbox" :aria-checked="selected.includes(image.id)" :aria-label="`选择 ${name(image)}`" @click="toggleSelected(image.id)">
+                    <span :class="['grid h-[18px] w-[18px] place-items-center rounded-md border-[1.5px] text-[13px]', selected.includes(image.id) ? 'border-oi-accent bg-oi-accent text-white' : 'border-oi-line-2 bg-oi-raised text-transparent']"><i class="ri-check-line" aria-hidden="true" /></span>
+                  </button>
+                </td>
+                <td>
+                  <div class="flex min-w-0 items-center gap-3">
+                    <button type="button" class="h-10 w-10 flex-none overflow-hidden rounded-lg border border-oi-line" :aria-label="`放大查看 ${name(image)}`" @click="openViewer(image)">
+                      <MediaThumb :src="image.thumbnail || image.url" :alt="name(image)" :video="isVideo(image)" class="h-full w-full" />
+                    </button>
+                    <button type="button" class="min-w-0 text-left" :aria-label="`查看详情 ${name(image)}`" @click="inspect(image)">
+                      <span class="block max-w-[260px] truncate font-[540] text-oi-ink">{{ name(image) }}</span>
+                      <span class="block max-w-[260px] truncate font-oi-mono text-[11.5px] text-oi-muted">{{ image.file_name }}</span>
+                    </button>
+                  </div>
+                </td>
+                <td class="max-[900px]:hidden">
+                  <div class="flex flex-wrap gap-1">
+                    <span v-for="tag in image.tags" :key="tag.id" class="inline-flex h-[22px] items-center gap-[5px] whitespace-nowrap rounded-full border border-oi-line bg-oi-panel px-2 text-xs">
+                      <span class="h-1.5 w-1.5 rounded-full" :style="{ background: tagColor(tag.name) }" aria-hidden="true" />{{ tag.name }}
+                    </span>
+                  </div>
+                </td>
+                <td class="whitespace-nowrap max-[900px]:hidden">
+                  {{ storages.find(storage => storage.id === image.bucket_id)?.name ?? image.storage }}<span v-if="storages.find(storage => storage.id === image.bucket_id)?.disabled" class="text-oi-muted">（已停用）</span>
+                </td>
+                <td class="whitespace-nowrap tabular-nums max-[900px]:hidden">{{ formatBytes(image.file_size) }}</td>
+                <td class="whitespace-nowrap tabular-nums text-oi-muted max-[900px]:hidden">{{ formatDateTime(image.created_at) }}</td>
+                <td class="text-right">
+                  <UiButton size="sm" :aria-label="`复制 ${name(image)} 的${formatLabel}链接`" @click="copyLink(image)">
+                    <i :class="copiedId === image.id ? 'ri-check-line' : 'ri-file-copy-line'" aria-hidden="true" />{{ copiedId === image.id ? '已复制' : '复制' }}
+                  </UiButton>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <nav v-if="images.length && totalPages > 1" class="flex items-center justify-center gap-3 pb-1 pt-6 text-[12.5px] text-oi-muted" aria-label="分页">
+          <UiButton variant="ghost" size="sm" :disabled="page <= 1 || loading" @click="page -= 1"><i class="ri-arrow-left-s-line" aria-hidden="true" />上一页</UiButton>
+          <span class="tabular-nums">第 {{ page }} / {{ totalPages }} 页 · 每页 {{ PAGE_SIZE }} 个</span>
+          <UiButton variant="ghost" size="sm" :disabled="page >= totalPages || loading" @click="page += 1">下一页<i class="ri-arrow-right-s-line" aria-hidden="true" /></UiButton>
+        </nav>
+      </div>
+    </div>
+
+    <!-- 批量操作栏 -->
+    <Transition
+      enter-from-class="opacity-0 translate-y-3"
+      leave-to-class="opacity-0 translate-y-3"
+      enter-active-class="transition duration-200 ease-[cubic-bezier(.3,.7,.4,1)]"
+      leave-active-class="transition duration-200 ease-[cubic-bezier(.3,.7,.4,1)]"
+    >
+      <div
+        v-if="selecting"
+        class="fixed bottom-6 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-0.5 rounded-[14px] bg-oi-btn py-1.5 pl-3.5 pr-1.5 text-oi-btn-ink shadow-oi-lg max-[900px]:bottom-[calc(74px+env(safe-area-inset-bottom))] min-[900px]:ml-[106px] min-[1081px]:ml-[118px]"
+        role="toolbar"
+        aria-label="批量操作"
+      >
+        <span class="mr-2 whitespace-nowrap text-[13px] font-semibold">已选 {{ selected.length }}</span>
+        <button type="button" class="selbar-btn" @click="toggleAll"><i class="ri-checkbox-multiple-line" aria-hidden="true" /><span class="max-[600px]:hidden">{{ allSelected ? '取消全选' : '全选本页' }}</span></button>
+        <span class="mx-1 h-[18px] w-px bg-[color-mix(in_srgb,var(--oi-btn-ink)_22%,transparent)]" aria-hidden="true" />
+        <button type="button" class="selbar-btn" aria-label="复制链接" @click="batchCopyOpen = true"><i class="ri-file-copy-line" aria-hidden="true" /><span class="max-[600px]:hidden">复制链接</span></button>
+        <button type="button" class="selbar-btn" aria-label="编辑标签" @click="batchTagOpen = true"><i class="ri-price-tag-3-line" aria-hidden="true" /><span class="max-[600px]:hidden">标签</span></button>
+        <button type="button" class="selbar-btn !text-[#ff8a8e]" aria-label="删除所选" @click="deleteImages(selectedImages)"><i class="ri-delete-bin-6-line" aria-hidden="true" /><span class="max-[600px]:hidden">删除</span></button>
+        <span class="mx-1 h-[18px] w-px bg-[color-mix(in_srgb,var(--oi-btn-ink)_22%,transparent)]" aria-hidden="true" />
+        <button type="button" class="selbar-btn" aria-label="取消选择" title="取消选择 (Esc)" @click="selected = []"><i class="ri-close-line" aria-hidden="true" /></button>
+      </div>
+    </Transition>
+
+    <UiDrawer v-model:open="filtersOpen" title="筛选">
+      <GalleryFilters v-model="filter" :storages="storages" :is-admin="isAdmin" :can-manage-tags="canManageTags" @manage-tags="filtersOpen = false; tagManagerOpen = true" />
       <template #footer>
-        <button type="button" class="soft-button" :disabled="tagActionLoading" @click="cancelTagDialog">取消</button>
-        <button
-          v-if="tagDialogMode === 'batch'"
-          type="button"
-          class="danger-button"
-          :disabled="tagDialogValue === null || tagActionLoading"
-          @click="runBatchTagAction('delete')"
-        >
-          <i v-if="tagActionLoading" class="ri-loader-4-line animate-spin"></i>
-          删除标签
-        </button>
-        <button
-          type="button"
-          class="primary-button"
-          :disabled="tagDialogValue === null || tagActionLoading"
-          @click="tagDialogMode === 'batch' ? runBatchTagAction('add') : submitImageTag()"
-        >
-          <i v-if="tagActionLoading" class="ri-loader-4-line animate-spin"></i>
-          添加标签
-        </button>
+        <UiButton variant="ghost" :disabled="!hasFilters" @click="clearFilters">清除筛选</UiButton>
+        <UiButton variant="primary" @click="filtersOpen = false">完成</UiButton>
       </template>
-    </AppDialog>
-    <ImagePreview v-if="imagePreviewOpen && currentPreviewImage" :key="currentPreviewImage.id" :media="currentPreviewImage"
-      :storage-name="presetBuckets.find(bucket => bucket.id == currentPreviewImage.bucket_id)?.name"
-      :can-delete="canManageImage(currentPreviewImage, 'image:delete')" :can-add-tag="canManageImage(currentPreviewImage, 'image:tag:add')" :can-delete-tag="canManageImage(currentPreviewImage, 'image:tag:delete')"
-      @close="imagePreviewOpen = false" @delete="deleteImage(currentPreviewImage.id); imagePreviewOpen = false" @add-tag="addImageTagModal(currentPreviewImage.id); imagePreviewOpen = false" @remove-tag="removePreviewTag" />
-    <VideoPreview v-if="videoPreview" :key="videoPreview.id" :media="videoPreview" :url="getFullUrl(videoPreview.url)" @close="videoPreview = null">
-      <div class="mt-3 flex flex-wrap gap-2"><span v-for="tag in videoPreview.tags" :key="tag.id" class="result-meta-pill">{{ tag.name }} <button v-if="canManageImage(videoPreview, 'image:tag:delete')" :aria-label="`移除标签 ${tag.name}`" @click="deleteImageTagAsync(videoPreview.id, tag.id)">×</button></span></div>
-      <template #actions>
-        <button v-if="canManageImage(videoPreview, 'image:tag:add')" class="soft-button" @click="addImageTagModal(videoPreview.id); videoPreview = null">添加标签</button>
-        <button v-if="canManageImage(videoPreview, 'image:delete')" class="danger-button" @click="deleteImage(videoPreview.id); videoPreview = null">删除</button>
-      </template>
-    </VideoPreview>
+    </UiDrawer>
+
+    <GalleryInspector
+      v-model:open="inspectOpen"
+      :image="inspected"
+      :storages="storages"
+      :is-admin="isAdmin"
+      :can="can"
+      :can-create-tag="canCreateTag"
+      @view="openViewer"
+      @delete="image => deleteImages([image])"
+      @updated="onUpdated"
+    />
+    <MediaViewer
+      v-model:open="viewerOpen"
+      v-model:index="viewerIndex"
+      :items="images"
+      :can-delete="image => can(image, 'image:delete')"
+      @delete="image => deleteImages([image])"
+    />
+    <BatchCopyDialog v-model:open="batchCopyOpen" :images="selectedImages" />
+    <BatchTagDialog v-model:open="batchTagOpen" :images="selectedImages" :can="can" :can-create-tag="canCreateTag" @done="loadImages" />
+    <TagManagerDialog
+      v-model:open="tagManagerOpen"
+      :can-create="tagPermissions.create"
+      :can-update="tagPermissions.update"
+      :can-delete="tagPermissions.delete"
+      @show-tag="showTag"
+    />
   </div>
 </template>
 
-<script setup lang="ts">
-import { apiFetch } from "@/api/client.ts"
-import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import AppDialog from '@/components/AppDialog.vue'
-import VideoPreview from '@/components/VideoPreview.vue'
-import ImagePreview from '@/components/ImagePreview.vue'
-import { safeMediaURL, safeDownloadName } from '@/utils/media'
-import { isVideo, mediaLink } from '@/utils/media'
-const videoPreview = ref(null)
-import PageHeader from '@/components/PageHeader.vue'
-import TagManager from '@/components/TagManager.vue'
-import TagSelector from '@/components/TagSelector.vue'
-import errorImg from '@/assets/images/error.webp';
-import Loading from '@/utils/loading.ts'
-import Message from '@/utils/message.ts'
-import PopupModal from '@/utils/popupModal.ts'
-import { getStoredUser, hasPermission, isSuperAdmin, ROLE_ADMIN } from '@/utils/permissions.ts';
-
-// ====================== 常量定义 ======================
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-const PAGE_SIZE = 20;
-const ROLE_MAP = {
-  all: '全部',
-  admin: '管理员',
-  user: '普通用户'
-};
-const STORAGE_MAP = {
-  default: '本地'
-};
-
-// ====================== 工具函数（抽离复用） ======================
-/**
- * 获取完整的图片URL
- * @param {string} path - 图片相对路径
- * @returns {string} 完整URL
- */
-const getFullUrl = safeMediaURL;
-
-/**
- * 格式化文件大小
- * @param {number} bytes - 文件字节数
- * @returns {string} 格式化后的大小字符串
- */
-const formatFileSize = (bytes) => {
-  if (!bytes || isNaN(bytes)) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
-};
-
-/**
- * 格式化日期
- * @param {string} dateString - 日期字符串
- * @returns {string} 本地化日期字符串
- */
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('zh-CN');
-  } catch (error) {
-    console.error('日期格式化失败:', error);
-    return dateString;
-  }
-};
-
-/**
- * 获取角色标签样式类
- * @param {string|number} userId - 用户ID
- * @returns {string} 样式类字符串
- */
-const getRoleName = (image) => {
-  if (Number(image?.uploader_role) === 1) return '管理员';
-  if (Number(image?.uploader_role) === 3) return '普通用户';
-  if (image?.user_id == '1') return '管理员';
-  return '已删除用户';
-};
-
-const getRoleTagClass = (image) => {
-  const role = Number(image?.uploader_role);
-  if (role === 1 || image?.user_id == '1') {
-    return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-  }
-  if (role === 3) {
-    return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
-  }
-  return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-};
-
-// ====================== 响应式数据 ======================
-const images = ref([]);
-const loading = ref(false);
-const viewMode = ref('grid');
-const currentPage = ref(1);
-const totalPages = ref(1);
-const roleImage = ref("all");
-const isAdmin = ref(false);
-const presetTags = ref([]);
-const presetBuckets = ref([]);
-const selectedBucket = ref(null);
-const selectedImages = ref([]); // 选中的图片ID数组
-const selectedTags = ref([]); // 选中的标签ID数组
-const searchKeyword = ref('');
-const selectAll = ref(false); // 全选状态
-const currentPreviewImage = ref(null);
-const mediaType = ref('');
-const tagDialogOpen = ref(false);
-const tagDialogMode = ref('batch');
-const tagDialogValue = ref(null);
-const tagDialogImageId = ref(null);
-const tagActionLoading = ref(false);
-const currentUser = getStoredUser();
-
-// 路由实例
-const router = useRouter();
-const route = useRoute();
-const canManageTags = Number(currentUser?.role) === ROLE_ADMIN
-  && ['tag:create', 'tag:update', 'tag:delete'].some(permission => hasPermission(permission, currentUser));
-const activeView = computed(() => route.query.view === 'tags' && canManageTags ? 'tags' : 'images');
-
-const selectView = view => {
-  const nextView = view === 'tags' && canManageTags ? 'tags' : 'images';
-  if (activeView.value === nextView && route.query.view === nextView) return;
-  router.replace({ query: { ...route.query, view: nextView } });
-};
-
-// ====================== 计算属性 ======================
-/**
- * 分页可见页码
- */
-const visiblePages = computed(() => {
-  const pages = [];
-  const start = Math.max(1, currentPage.value - 2);
-  const end = Math.min(totalPages.value, currentPage.value + 2);
-  
-  for (let i = start; i <= end; i++) {
-    pages.push(i);
-  }
-  
-  return pages;
-});
-
-const getImageAltText = (image) => image?.original_file_name || image?.file_name || '图片';
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
-const getPreviewFileName = image => image?.original_file_name || image?.file_name || '图片预览';
-const getImageSizeSummary = image => {
-  if (isVideo(image)) return formatFileSize(Number(image.file_size || 0));
-  const originalSize = Number(image?.original_file_size || 0);
-  const savedSize = Number(image?.file_size || 0);
-  const savedLabel = formatFileSize(savedSize);
-
-  if (originalSize <= 0) return `原图大小未知 · 保存后 ${savedLabel}`;
-
-  const originalLabel = formatFileSize(originalSize);
-  if (savedSize === originalSize) {
-    return `原图 ${originalLabel} · 保存后 ${savedLabel}（保留原图）`;
-  }
-
-  const retained = savedSize / originalSize * 100;
-  if (savedSize < originalSize) {
-    return `原图 ${originalLabel} · 压缩后 ${savedLabel}（节省 ${(100 - retained).toFixed(1)}%）`;
-  }
-  return `原图 ${originalLabel} · 保存后 ${savedLabel}（原图的 ${retained.toFixed(1)}%）`;
-};
-const getSpotlightDescription = image => [
-  getPreviewFileName(image),
-  `尺寸: ${image?.width || '未知'}×${image?.height || '未知'}`,
-  getImageSizeSummary(image),
-  `上传日期: ${formatDate(image?.created_at)}`,
-  `角色: ${getRoleName(image)}`
-].join(' | ');
-
-const canManageImage = (image, permission) => {
-  if (!image) return false;
-  if (isSuperAdmin(currentUser)) return true;
-  if (Number(image.user_id) === 1) return false;
-  if (Number(image.user_id) === Number(currentUser.id)) return true;
-  return Number(currentUser.role) === ROLE_ADMIN && hasPermission(permission, currentUser);
-};
-
-const selectedImageRecords = computed(() => images.value.filter(image => selectedImages.value.includes(image.id)));
-const galleryTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.id, label: tag.name })));
-const actionTagOptions = computed(() => presetTags.value.map(tag => ({ value: tag.id, label: tag.name })));
-const batchEditableImages = computed(() => images.value.filter(image => (
-  selectedImages.value.includes(image.id)
-  && (canManageImage(image, 'image:tag:add') || canManageImage(image, 'image:tag:delete'))
-)));
-const canBatchDelete = computed(() => selectedImageRecords.value.some(image => canManageImage(image, 'image:delete')));
-const canBatchTag = computed(() => selectedImageRecords.value.some(image =>
-  canManageImage(image, 'image:tag:add') || canManageImage(image, 'image:tag:delete')
-));
-
-// ====================== 监听器 ======================
-/**
- * 监听全选状态变化（优化：双向绑定同步）
- */
-watch(
-  () => [selectedImages.value.length, images.value.length],
-  ([selectedLen, imageLen]) => {
-    selectAll.value = imageLen > 0 && selectedLen === imageLen;
-  },
-  { immediate: true }
-);
-
-// ====================== API 请求函数 ======================
-/**
- * 获取标签列表
- */
-const getTagsList = async () => {
-  try {
-    const response = await apiFetch(`${API_BASE_URL}/api/v1/tags`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
-    
-    const result = await response.json();
-    if (response.ok && Array.isArray(result.data)) {
-      presetTags.value = result.data;
-    } else {
-      throw new Error(result.detail || '获取标签列表失败');
-    }
-  } catch (error) {
-    console.error('获取标签失败:', error);
-    Message.error(error.message || '获取标签列表失败');
-  }
-};
-
-/**
- * 获取媒体所在存储列表（含已停用、已满或无上传权限的存储）
- */
-const getBucketsList = async () => {
-  try {
-    const response = await apiFetch(`${API_BASE_URL}/api/v1/image-storages`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
-    
-    const result = await response.json();
-    if (response.ok && Array.isArray(result.data)) {
-      presetBuckets.value = result.data;
-    } else {
-      throw new Error(result.detail || '获取存储列表失败');
-    }
-  } catch (error) {
-    console.error('获取存储列表失败:', error);
-    Message.error(error.message || '获取存储列表失败');
-  }
-};  
-
-/**
- * 加载图片列表
- */
-const loadImages = async () => {
-  if (loading.value) return; // 防止重复请求
-  loading.value = true;
-  
-  try {
-    const params = new URLSearchParams({
-      page: String(currentPage.value),
-      page_size: String(PAGE_SIZE),
-      sort: 'created_at',
-      order: 'desc'
-    });
-    if (mediaType.value) params.set('media_type', mediaType.value);
-    if (selectedTags.value.length) params.set('tag_ids', selectedTags.value.join(','));
-    if (selectedBucket.value && selectedBucket.value !== 'null') params.set('bucket_id', String(selectedBucket.value));
-    if (isAdmin.value && roleImage.value !== 'all') {
-      params.set('uploader_role', roleImage.value === 'admin' ? '1' : '3');
-    }
-    if (searchKeyword.value) {
-      params.set('q', searchKeyword.value);
-    }
-    
-    const response = await apiFetch(`${API_BASE_URL}/api/v1/images?${params}`, {
-      headers: {
-      }
-    });
-    
-    if (response.ok) {
-      const result = await response.json();
-      images.value = Array.isArray(result.data) ? result.data : [];
-      totalPages.value = result.meta?.pagination?.total_pages || 1;
-      selectedImages.value = []; // 重置选择状态
-    } else {
-      if (response.status === 401) {
-        router.push('/login');
-        Message.error('登录已过期，请重新登录');
-        return;
-      }
-      throw new Error('加载图片失败');
-    }
-  } catch (error) {
-    console.error('加载图片错误:', error);
-    Message.error(`加载图片失败: ${error.message}`);
-  } finally {
-    loading.value = false;
-  }
-};
-
-/**
- * 批量删除文件
- * @param {Array} deleteIds - 要删除的图片ID数组
- */
-const batchDeleteImages = async (deleteIds) => {
-  // 优化：并行删除（控制并发数）
-  const promises = deleteIds.map(id => deleteAsync(id));
-  await Promise.allSettled(promises);
-  // 重新加载列表
-  loadImages();
-};
-
-/**
- * 删除单个文件
- * @param {string|number} id - 图片ID
- * @returns {boolean} 是否删除成功
- */
-const deleteAsync = async (id) => {    
-  const loadingInstance = Loading.show({
-    text: '删除中...',
-    color: '#ff4d4f',
-    mask: true
-  });
-  
-  try {
-    const response = await apiFetch(`${API_BASE_URL}/api/v1/images/${id}`, {
-      method: 'DELETE',
-      headers: {
-      }
-    });
-    
-    if (response.ok) {
-      Message.success('图片删除成功');
-      selectedImages.value = selectedImages.value.filter(imageId => imageId !== id);
-      // 重新加载列表
-      loadImages();
-      return true;
-    } else {
-      const result = await response.json();
-      throw new Error(result.detail || '删除失败');
-    }
-  } catch (error) {
-    console.error('删除文件错误:', error);
-    Message.error(`删除文件失败: ${error.message}`);
-    return false;
-  } finally {
-    await loadingInstance.hide();
-  }
-};
-
-/**
- * 给图片添加标签
- * @param {string|number} imageId - 图片ID
- * @param {Object} values - 表单值
- */
-const pustImageTag = async (imageId, values) => {
-  const { tag } = values;
-  if (tag == null || tag === '') {
-    Message.warning('请选择标签');
-    return;
-  }
-  
-  try {
-    const response = await apiFetch(`${API_BASE_URL}/api/v1/images/${imageId}/tags/${tag}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const result = await response.json();
-    if (response.ok) {
-      // 更新本地数据
-      const image = images.value.find(item => item.id === imageId);
-      if (image) {
-        // 添加新标签
-        const newTag = presetTags.value.find(item => item.id === Number(tag));
-        if (newTag) image.tags.push(newTag);
-        // 更新预览图片
-        currentPreviewImage.value = image;
-        if (image) openPreview(image);
-      }
-      Message.success('添加成功');
-    } else {
-      Message.error(result.detail || '添加失败');
-      openPreview(currentPreviewImage.value);
-    }
-  } catch (err) {
-    Message.error(`出错了：${err.message}`);
-    console.warn(err);
-  }
-};
-
-// 删除文件标签
-const deleteImageTagAsync = async (imageId, tagId) => {
-  try {
-    const response = await apiFetch(`${API_BASE_URL}/api/v1/images/${imageId}/tags/${tagId}`, {
-      method: 'DELETE',
-    });
-
-    const result = response.status === 204 ? {} : await response.json();
-    if (response.ok) {
-      // 更新本地数据
-      const image = images.value.find(item => item.id === imageId);
-      if (image) {
-        // 移除标签
-        image.tags = image.tags.filter(item => item.id !== tagId);
-        // 更新预览图片
-        currentPreviewImage.value = image;
-      }
-      Message.success('删除成功');
-      return true;
-    } else {
-      Message.error(result.detail || '删除失败');
-      return false;
-    }
-  } catch (err) {
-    Message.error(`出错了：${err.message}`);
-    console.warn(err);
-    return false;
-  }
-};
-
-// ====================== 事件处理函数 ======================
-/**
- * 切换角色筛选
- * @param {string} role - 角色类型（admin/user）
- */
-const changeRole = (role) => {
-  if (roleImage.value !== role) {
-    roleImage.value = role;
-    currentPage.value = 1;
-    selectedImages.value = [];
-    selectAll.value = false;
-    loadImages();
-  }
-};
-
-/**
- * 切换分页
- * @param {number} page - 目标页码
- */
-const changePage = (page) => {
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page;
-    selectedImages.value = [];
-    selectAll.value = false;
-    loadImages();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-};
-
-const handleSearch = () => {
-  currentPage.value = 1;
-  selectedImages.value = [];
-  selectAll.value = false;
-  loadImages();
-};
-
-const clearSearch = () => {
-  if (!searchKeyword.value) return;
-  searchKeyword.value = '';
-  handleSearch();
-};
-
-/**
- * 检查图片是否被选中
- * @param {string|number} imageId - 图片ID
- * @returns {boolean} 是否选中
- */
-const isImageSelected = (imageId) => {
-  return selectedImages.value.includes(imageId);
-};
-
-const applyTagFilter = tags => {
-  selectedTags.value = tags;
-  currentPage.value = 1;
-  selectedImages.value = [];
-  selectAll.value = false;
-  loadImages();
-};
-
-/**
- * 处理单个图片选择
- * @param {string|number} imageId - 图片ID
- * @param {boolean} isChecked - 是否选中
- */
-const handleImageSelection = (imageId, isChecked) => {
-  if (isChecked) {
-    if (!selectedImages.value.includes(imageId)) {
-      selectedImages.value.push(imageId);
-    }
-  } else {
-    selectedImages.value = selectedImages.value.filter(id => id !== imageId);
-  }
-};
-
-const handleImageSelectionChange = (imageId, event: Event) => {
-  handleImageSelection(imageId, (event.target as HTMLInputElement).checked)
-}
-
-/**
- * 处理全选
- * @param {Event} e - 事件对象
- */
-const handleSelectAll = (e) => {
-  const isChecked = e.target.checked;
-  selectedImages.value = isChecked 
-    ? images.value.map(image => image.id) 
-    : [];
-};
-
-/**
- * 处理批量删除确认
- */
-const handleBatchDelete = () => {
-  if (selectedImages.value.length === 0) {
-    Message.warning('请选择要删除的图片');
-    return;
-  }
-
-  const filterIds = selectedImages.value.filter(id =>
-    canManageImage(images.value.find(item => item.id === id), 'image:delete')
-  );
-
-  if (filterIds.length === 0) {
-    Message.warning('你没有权限删除选中的图片');
-    return;
-  }
-  
-  const modal = new PopupModal({
-    title: '批量删除确认',
-    content: `
-      <div class="flex gap-3">
-        <i class="fa fa-exclamation-triangle text-warning text-xl mt-1"></i>
-        <div>
-          <p>确定要删除选中的 ${filterIds.length} 个文件吗？</p>
-          <p class="mt-1 text-secondary text-sm">删除后无法恢复，请谨慎操作</p>
-        </div>
-      </div>
-    `,
-    buttons: [
-      {
-        text: '取消',
-        type: 'default',
-        callback: (modal) => modal.close()
-      },
-      {
-        text: '确认删除',
-        type: 'danger',
-        callback: async (modal) => {
-          modal.close();
-          await batchDeleteImages(filterIds);
-        }
-      }
-    ],
-    maskClose: true
-  });
-  modal.open();
-};
-
-const formatBatchLinks = format => selectedImageRecords.value.map(image => mediaLink(image, format, getFullUrl(image.url))).join('\n');
-
-const copyText = async (text) => {
-  if (navigator.clipboard && window.isSecureContext) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand('copy');
-  textarea.remove();
-  if (!copied) throw new Error('浏览器不支持自动复制');
-};
-
-const handleBatchCopy = () => {
-  if (selectedImageRecords.value.length === 0) {
-    Message.warning('请选择要复制的图片');
-    return;
-  }
-  let format = 'url';
-  const modal = new PopupModal({
-    title: '批量复制图片链接',
-    width: 'lg',
-    content: `
-      <div class="space-y-3">
-        <label class="field-label" for="batch-copy-format">链接格式</label>
-        <select id="batch-copy-format" class="input-modern w-full">
-          <option value="url">URL</option>
-          <option value="markdown">Markdown</option>
-          <option value="html">HTML</option><option value="gif">动图式 HTML（视频）</option>
-          <option value="bbcode">BBCode</option>
-        </select>
-        <label class="field-label" for="batch-copy-preview">复制预览</label>
-        <textarea id="batch-copy-preview" class="input-modern min-h-[220px] w-full font-mono text-xs" readonly></textarea>
-      </div>
-    `,
-    buttons: [
-      { text: '取消', type: 'default', callback: currentModal => currentModal.close() },
-      { text: '复制', type: 'primary', callback: async currentModal => {
-        try {
-          await copyText(formatBatchLinks(format));
-          Message.success(`已复制 ${selectedImageRecords.value.length} 条链接`);
-          currentModal.close();
-        } catch (error) {
-          Message.error(error.message || '复制失败');
-        }
-      }}
-    ],
-    onOpen: currentModal => {
-      const select = currentModal.content.querySelector('#batch-copy-format');
-      const preview = currentModal.content.querySelector('#batch-copy-preview');
-      const refresh = () => {
-        format = select.value;
-        preview.value = formatBatchLinks(format);
-      };
-      select.addEventListener('change', refresh);
-      refresh();
-    }
-  });
-  modal.open();
-};
-
-/**
- * 批量设置标签
- */
-const handleBatchSetTag = () => {
-    if (selectedImages.value.length === 0) {
-        Message.warning('请选择要编辑的图片');
-        return;
-    }
-
-    // 已选择的图片
-    const imageId = selectedImages.value.filter(id => {
-      const image = images.value.find(item => item.id === id);
-      return canManageImage(image, 'image:tag:add') || canManageImage(image, 'image:tag:delete');
-    });
-    if (imageId.length === 0) {
-      Message.warning('你没有权限编辑选中的图片');
-      return;
-    }
-
-    tagDialogMode.value = 'batch';
-    tagDialogValue.value = null;
-    tagDialogImageId.value = null;
-    tagDialogOpen.value = true;
-}
-
-const batchDeleteTag = async (tagId) => {
-    if (tagId === null) {
-        Message.warning("请选择标签");
-        return false;
-    }
-
-    const imageIds = selectedImages.value.filter(id => canManageImage(images.value.find(item => item.id === id), 'image:tag:delete'));
-    if (imageIds.length === 0) {
-        Message.warning('你没有权限删除选中图片的标签');
-        return false;
-    }
-    try {
-        const response = await apiFetch(`${API_BASE_URL}/api/v1/images/tags`, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                image_ids: imageIds,
-                remove_tag_ids: [Number(tagId)],
-            })
-        });
-        
-        const result = await response.json();
-        if (response.ok) {
-            Message.success('删除标签成功');
-            // 刷新列表
-            await loadImages();
-            return true;
-        } else {
-            throw new Error(result.detail || '删除标签失败');
-        }
-    } catch (error) {
-        console.error('删除标签失败:', error);
-        Message.error(error.message || '删除标签失败');
-        return false;
-    }
-}
-
-const batchAddTag = async (tagId) => {
-    if (tagId === null) {
-        Message.warning("请选择标签");
-        return false;
-    }
-    const imageIds = selectedImages.value.filter(id => canManageImage(images.value.find(item => item.id === id), 'image:tag:add'));
-    if (imageIds.length === 0) {
-        Message.warning('你没有权限给选中的图片添加标签');
-        return false;
-    }
-    try {
-        const response = await apiFetch(`${API_BASE_URL}/api/v1/images/tags`, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                image_ids: imageIds,
-                add_tag_ids: [Number(tagId)],
-            })
-        });
-        
-        const result = await response.json();
-        if (response.ok) {
-            Message.success('添加标签成功');
-            // 刷新列表
-            await loadImages();
-            return true;
-        } else {
-            throw new Error(result.detail || '添加标签失败');
-        }
-    } catch (error) {
-        console.error('添加标签失败:', error);
-        Message.error(error.message || '添加标签失败');
-        return false;
-    }
-}
-
-const closeTagDialog = () => {
-  tagDialogOpen.value = false;
-};
-
-const handleTagDialogClose = () => {
-  if (tagDialogMode.value === 'image' && currentPreviewImage.value) {
-    openPreview(currentPreviewImage.value);
-  }
-};
-
-const cancelTagDialog = () => {
-  closeTagDialog();
-  handleTagDialogClose();
-};
-
-const runBatchTagAction = async action => {
-  if (tagDialogValue.value === null || tagActionLoading.value) return;
-  tagActionLoading.value = true;
-  try {
-    const succeeded = action === 'delete'
-      ? await batchDeleteTag(tagDialogValue.value)
-      : await batchAddTag(tagDialogValue.value);
-    if (succeeded) closeTagDialog();
-  } finally {
-    tagActionLoading.value = false;
-  }
-};
-
-const submitImageTag = async () => {
-  if (tagDialogValue.value === null || tagActionLoading.value) return;
-  tagActionLoading.value = true;
-  const imageId = tagDialogImageId.value;
-  closeTagDialog();
-  try {
-    await pustImageTag(imageId, { tag: tagDialogValue.value });
-  } finally {
-    tagActionLoading.value = false;
-  }
-};
-
-/**
- * 图片加载完成处理
- * @param {Event} e - 事件对象
- */
-const handleImageLoad = (e) => {
-  e.target.classList.remove('opacity-0');
-  const loadingEl = e.target.parentElement.querySelector('.loading');
-  if (loadingEl) loadingEl.classList.add('hidden');
-};
-
-/**
- * 图片加载错误处理
- * @param {Event} e - 事件对象
- */
-const handleImageError = (e) => {
-  // 使用导入的错误图片，而非base64硬编码
-  e.target.src = errorImg;
-  const loadingEl = e.target.parentElement.querySelector('.loading');
-  if (loadingEl) loadingEl.classList.add('hidden');
-};
-
-/**
- * 打开图片预览
- * @param {Object} image - 图片对象
- */
-const openPreview = (image) => {
- currentPreviewImage.value = image;
- if (isVideo(image)) { videoPreview.value = image; imagePreviewOpen.value = false; return }
- imagePreviewOpen.value = true;
-};
-const imagePreviewOpen = ref(false);
-const removePreviewTag = async (tagID: number) => {
- if (currentPreviewImage.value) await deleteImageTagAsync(currentPreviewImage.value.id, tagID);
-};
-
-/**
- * 打开删除文件确认弹窗
- * @param {string|number} imageId - 图片ID
- */
-const deleteImage = async (imageId) => {
-  const modal = new PopupModal({
-    title: '确认删除',
-    content: `
-      <div class="flex gap-3">
-        <i class="fa fa-exclamation-triangle text-warning text-xl mt-1"></i>
-        <div>
-          <p>确定要删除这个文件吗？</p>
-          <p class="mt-1 text-secondary text-sm">删除后无法恢复，请谨慎操作</p>
-        </div>
-      </div>
-    `,
-    buttons: [
-      {
-        text: '取消',
-        type: 'default',
-        callback: (modal) => modal.close()
-      },
-      {
-        text: '确认删除',
-        type: 'danger',
-        callback: async (modal) => {
-          modal.close();
-          deleteAsync(imageId);
-        }
-      }
-    ],
-    maskClose: true
-  });
-  modal.open();
-};
-
-/**
- * 打开添加标签弹窗
- * @param {string|number} imageId - 图片ID
- */
-const addImageTagModal = imageId => {
-  tagDialogMode.value = 'image';
-  tagDialogValue.value = null;
-  tagDialogImageId.value = imageId;
-  tagDialogOpen.value = true;
-};
-
-// ====================== 生命周期 ======================
-onMounted(() => {
-  // 初始化用户角色
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-  if (Number(userInfo?.role) === 1) {
-    isAdmin.value = true;
-    roleImage.value = "all";
-  } else {
-    isAdmin.value = false;
-    roleImage.value = "user";
-  }
-  
-  // 加载数据
-  getTagsList();
-  getBucketsList();
-  loadImages();
-
-  if (route.query.view === 'tags' && !canManageTags) {
-    selectView('images');
-  }
-});
-
-onUnmounted(() => {
-  // 清理全局函数和资源
-  imagePreviewOpen.value = false;
-});
-</script>
-
 <style scoped>
-.batch-actions-enter-active,
-.batch-actions-leave-active {
-  transition: opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+.gallery-input {
+  height: 36px; border-radius: 10px; border: 1px solid var(--oi-line-2); background: var(--oi-raised); padding-inline: 10px;
+  font-size: 13.5px; color: var(--oi-ink); outline: none;
 }
+.gallery-input:focus { border-color: var(--oi-accent); box-shadow: 0 0 0 3px var(--oi-ring); }
 
-.batch-actions-enter-from,
-.batch-actions-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
+.tile-img { transition: box-shadow .2s; }
+.gallery-tile:hover .tile-img { box-shadow: var(--oi-shadow); }
+.gallery-tile.is-selected .tile-img, .gallery-tile.is-active .tile-img { box-shadow: 0 0 0 2.5px var(--oi-accent), var(--oi-shadow); border-color: transparent; }
+.gallery-tile:has(button:first-child:focus-visible) .tile-img { box-shadow: 0 0 0 2.5px var(--oi-accent); }
+
+.tile-check { opacity: 0; transition: opacity .15s; }
+.tile-check:focus-visible { opacity: 1; outline: none; }
+.tile-check:focus-visible > span { box-shadow: 0 0 0 3px var(--oi-ring); }
+.gallery-tile:hover .tile-check, .gallery-tile.is-selected .tile-check, .is-selecting .tile-check { opacity: 1; }
+
+.tile-quick { opacity: 0; transform: translateY(4px); transition: opacity .18s, transform .18s; }
+.gallery-tile:hover .tile-quick, .gallery-tile:focus-within .tile-quick { opacity: 1; transform: none; }
+.is-selecting .tile-quick { display: none; }
+.tile-quick-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 28px; padding: 0 9px; border-radius: 8px;
+  background: rgba(255, 255, 255, .94); color: #131518; font-size: 12px; font-weight: 600; box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
 }
+.tile-quick-btn:hover { background: #fff; }
+.tile-quick-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--oi-ring); }
 
+.selbar-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 9px;
+  font-size: 13px; font-weight: 520; color: inherit; opacity: .88;
+}
+.selbar-btn:hover { background: color-mix(in srgb, var(--oi-btn-ink) 14%, transparent); opacity: 1; }
+.selbar-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--oi-ring); }
+
+/* 触屏没有悬停：勾选框和快捷按钮始终显示 */
+@media (hover: none) {
+  .tile-check, .tile-quick { opacity: 1; transform: none; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .batch-actions-enter-from,
-  .batch-actions-leave-to {
-    transform: none;
-  }
+  .tile-quick, .tile-check { transition: none; }
 }
 </style>

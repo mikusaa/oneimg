@@ -2,6 +2,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { api, ApiError, type Image } from '@/api/client.ts'
 import { toast } from '@/components/ui/toast'
 import { useSession } from '@/composables/useSession'
+import { useTags } from '@/composables/useTags'
 import { fileVideoMime } from '@/utils/media'
 import { formatBytes } from '@/utils/format'
 
@@ -68,6 +69,13 @@ const autoStart = ref(readStorage(AUTO_START_KEY) === '1')
 const completedBatches = ref(0)
 
 watch(bucketId, value => { if (value) writeStorage(BUCKET_KEY, String(value)) })
+// 标签被删除后，从上传标签里去掉
+const { tags: allTags, loaded: tagsLoaded } = useTags()
+watch(allTags, list => {
+  if (!tagsLoaded.value) return
+  const ids = new Set(list.map(tag => tag.id))
+  if (tagIds.value.some(id => !ids.has(id))) tagIds.value = tagIds.value.filter(id => ids.has(id))
+})
 watch(autoStart, value => writeStorage(AUTO_START_KEY, value ? '1' : '0'))
 
 let sequence = 0

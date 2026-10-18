@@ -34,6 +34,43 @@ func (s *TagService) List() ([]models.Tags, error) {
 	return items, err
 }
 
+// TagUsage 是标签及其在当前用户可见文件中的使用次数。
+type TagUsage struct {
+	Tag   models.Tags
+	Count int64
+}
+
+// ListWithUsage 返回全部标签，并按可见范围统计使用次数：管理员统计全部文件，其他用户只统计自己的文件。
+func (s *TagService) ListWithUsage(user models.User) ([]TagUsage, error) {
+	tags, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	query := s.db.Table("image_to_tags").
+		Select("image_to_tags.tag_id AS tag_id, COUNT(*) AS count").
+		Joins("JOIN images ON images.id = image_to_tags.image_id").
+		Group("image_to_tags.tag_id")
+	if user.Role != models.RoleAdmin {
+		query = query.Where("images.user_id = ?", user.ID)
+	}
+	var rows []struct {
+		TagID int
+		Count int64
+	}
+	if err := query.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	counts := make(map[int]int64, len(rows))
+	for _, row := range rows {
+		counts[row.TagID] = row.Count
+	}
+	result := make([]TagUsage, 0, len(tags))
+	for _, tag := range tags {
+		result = append(result, TagUsage{Tag: tag, Count: counts[tag.Id]})
+	}
+	return result, nil
+}
+
 func (s *TagService) Create(name string) (models.Tags, error) {
 	name, err := validateTagName(name)
 	if err != nil {
