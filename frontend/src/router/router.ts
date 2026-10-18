@@ -106,6 +106,16 @@ const routes: RouteRecordRaw[] = [
   }
 ]
 
+// 开发环境专用：新界面基础组件预览，生产构建不包含这个页面
+if (import.meta.env.DEV) {
+  routes.push({
+    path: '/_ui',
+    name: 'UiShowcase',
+    component: () => import('@/views/dev/UiShowcase.vue'),
+    meta: { title: '组件预览', public: true }
+  })
+}
+
 // 创建路由实例
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
