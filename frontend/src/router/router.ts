@@ -25,7 +25,7 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '注册', public: true }
   },
   navRoute('Upload', () => import('@/views/Upload.vue'), { bleed: true }),
-  navRoute('Gallery', () => import('@/views/Gallery.vue')),
+  navRoute('Gallery', () => import('@/views/Gallery.vue'), { bleed: true }),
   // 统计页暂时只有原控制中心的概览，在后续步骤重做
   navRoute('Stats', () => import('@/views/Stats.vue')),
   navRoute('Storage', () => import('@/views/Buckets.vue')),

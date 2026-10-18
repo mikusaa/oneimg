@@ -57,6 +57,8 @@ curl -sS "${ONEIMG_URL}/api/v1/upload-options" \
 
 `GET /api/v1/image-storages`（需要 `images:read`）返回当前用户可见媒体实际所在的存储 `id`、`name`、`type` 和 `disabled`，管理员包含全部媒体。已停用、容量已满或无上传权限的存储同样返回，适合显示存储名称和填充 `bucket_id` 筛选；选择上传目标仍应使用 `upload-options`。
 
+`GET /api/v1/tags`（需要 `tags:read`）返回全部标签的 `id`、`name` 和 `count`。`count` 是标签在当前用户可见文件中的使用次数：管理员统计全部文件，普通用户只统计自己的文件，未使用的标签为 0。
+
 ### 上传图片或视频
 
 先确认 PAT 有 `images:write`，并将本地文件名替换为实际存在的文件：

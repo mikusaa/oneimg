@@ -1099,29 +1099,6 @@
   to { transform: rotate(360deg); }
 }
 
-#spotlight {
-  z-index: 13000 !important;
-}
-
-#spotlight .spl-header,
-#spotlight .spl-footer {
-  font-family: inherit;
-}
-
-#spotlight .spl-close,
-#spotlight .spl-next,
-#spotlight .spl-prev,
-#spotlight .spl-page ~ div {
-  transition: opacity 160ms var(--ui-ease), transform 160ms var(--ui-ease) !important;
-}
-
-#spotlight .spl-close:focus-visible,
-#spotlight .spl-next:focus-visible,
-#spotlight .spl-prev:focus-visible {
-  outline: 2px solid white;
-  outline-offset: 3px;
-}
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

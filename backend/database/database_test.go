@@ -51,3 +51,40 @@ func TestInitDBPreservesLegacyStorageSyncSchema(t *testing.T) {
 		t.Fatal("legacy multi_storage_sync column should be preserved")
 	}
 }
+
+func TestInitDBAddsTagIndexWithoutRebuildingLinks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tags.db")
+	legacy, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 旧版本的关联表只有 (image_id, tag_id) 主键
+	if err := legacy.Exec("CREATE TABLE image_to_tags (image_id integer, tag_id integer, PRIMARY KEY (image_id, tag_id))").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Exec("INSERT INTO image_to_tags (image_id, tag_id) VALUES (1, 2), (3, 2), (3, 4)").Error; err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := legacy.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	InitDB(&config.Config{SqlitePath: path})
+	if !db.DB.Migrator().HasIndex(&models.ImageToTags{}, "idx_image_to_tags_tag_id") {
+		t.Fatal("image_to_tags should have a tag_id index")
+	}
+	var links int64
+	if err := db.DB.Model(&models.ImageToTags{}).Count(&links).Error; err != nil {
+		t.Fatal(err)
+	}
+	if links != 3 {
+		t.Fatalf("image_to_tags rows = %d, want 3", links)
+	}
+	if err := db.DB.Create(&models.ImageToTags{ImageId: 1, TagId: 2}).Error; err == nil {
+		t.Fatal("composite primary key should still reject duplicate links")
+	}
+}

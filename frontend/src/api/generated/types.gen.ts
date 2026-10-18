@@ -63,6 +63,15 @@ export type Tag = {
     name: string;
 };
 
+export type TagUsage = {
+    id: number;
+    name: string;
+    /**
+     * 当前用户可见文件中带有该标签的数量
+     */
+    count: number;
+};
+
 export type Image = {
     id: number;
     url: string;
@@ -1147,7 +1156,7 @@ export type ListTagsResponses = {
      * 标签列表
      */
     200: {
-        data: Array<Tag>;
+        data: Array<TagUsage>;
     };
 };
 

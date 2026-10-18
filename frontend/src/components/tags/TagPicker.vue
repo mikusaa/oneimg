@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, useId, watch } from 'vue'
-import type { Tag } from '@/api/client.ts'
+import type { TagUsage } from '@/api/client.ts'
 import { toast } from '@/components/ui'
-import { createTag, markTagUsed, tagById, tagColor, TAG_NAME_MAX, useTags } from '@/composables/useTags'
+import { createTag, markTagUsed, tagById, tagColor, tagNameError, TAG_NAME_MAX, useTags } from '@/composables/useTags'
 
 const props = withDefaults(defineProps<{
   /** 可以直接创建不存在的标签（需要 tag:create） */
   allowCreate?: boolean
   autofocus?: boolean
-}>(), { allowCreate: false, autofocus: false })
+  /** 不显示已选标签（外部已经列出时） */
+  hideSelected?: boolean
+}>(), { allowCreate: false, autofocus: false, hideSelected: false })
 
 const model = defineModel<number[]>({ default: () => [] })
 
@@ -21,15 +23,18 @@ const active = ref(0)
 const creating = ref(false)
 
 const keyword = computed(() => query.value.trim().toLowerCase())
+type Tag = TagUsage
 const byName = (a: Tag, b: Tag) => a.name.localeCompare(b.name, 'zh')
+// 使用次数多的排在前面，次数相同时按名称
+const byUsage = (a: Tag, b: Tag) => b.count - a.count || byName(a, b)
 
 const recent = computed(() => keyword.value ? [] : recentIds.value.map(tagById).filter((tag): tag is Tag => !!tag))
 const matches = computed(() => {
   const k = keyword.value
-  if (!k) return tags.value.filter(tag => !recentIds.value.includes(tag.id)).sort(byName)
+  if (!k) return tags.value.filter(tag => !recentIds.value.includes(tag.id)).sort(byUsage)
   // 名称以关键词开头的排在前面
   const starts = (tag: Tag) => Number(tag.name.toLowerCase().startsWith(k))
-  return tags.value.filter(tag => tag.name.toLowerCase().includes(k)).sort((a, b) => starts(b) - starts(a) || byName(a, b))
+  return tags.value.filter(tag => tag.name.toLowerCase().includes(k)).sort((a, b) => starts(b) - starts(a) || byUsage(a, b))
 })
 const options = computed(() => [...recent.value, ...matches.value])
 const canCreate = computed(() => props.allowCreate && !!keyword.value && !tags.value.some(tag => tag.name.toLowerCase() === keyword.value))
@@ -63,8 +68,9 @@ const toggle = (tag: Tag) => {
 const create = async () => {
   const name = query.value.trim()
   if (!name || creating.value) return
-  if ([...name].length > TAG_NAME_MAX) {
-    toast.error(`标签名称最多 ${TAG_NAME_MAX} 个字符`)
+  const error = tagNameError(name)
+  if (error) {
+    toast.error(error)
     return
   }
   creating.value = true
@@ -131,7 +137,7 @@ onMounted(() => {
       >
     </div>
 
-    <div v-if="selected.length" class="flex max-h-[92px] flex-wrap gap-1 overflow-auto border-b border-oi-line px-2.5 py-2">
+    <div v-if="selected.length && !hideSelected" class="flex max-h-[92px] flex-wrap gap-1 overflow-auto border-b border-oi-line px-2.5 py-2">
       <span
         v-for="tag in selected"
         :key="tag.id"
@@ -166,11 +172,12 @@ onMounted(() => {
             <span :class="['grid h-4 w-4 flex-none place-items-center rounded-[5px] border-[1.5px] text-[11px] transition-colors', model.includes(tag.id) ? 'border-oi-accent bg-oi-accent text-white' : 'border-oi-line-2 bg-oi-raised text-transparent']" aria-hidden="true"><i class="ri-check-line" /></span>
             <span class="h-[7px] w-[7px] flex-none rounded-full" :style="{ background: tagColor(tag.name) }" aria-hidden="true" />
             <span class="min-w-0 flex-1 truncate">{{ tag.name }}</span>
+            <span class="text-[11.5px] tabular-nums text-oi-faint">{{ tag.count }}</span>
           </div>
         </div>
 
         <div role="group" :aria-labelledby="`${id}-all`">
-          <div :id="`${id}-all`" class="px-2 pb-1 pt-2 text-[11px] text-oi-faint">{{ keyword ? `匹配 ${matches.length} 个` : '全部' }}</div>
+          <div :id="`${id}-all`" class="px-2 pb-1 pt-2 text-[11px] text-oi-faint">{{ keyword ? `匹配 ${matches.length} 个` : '全部 · 按使用次数' }}</div>
           <div
             v-for="(tag, index) in matches"
             :id="optionId(index + recent.length)"
@@ -190,6 +197,7 @@ onMounted(() => {
                 <template v-else>{{ part.text }}</template>
               </template>
             </span>
+            <span class="text-[11.5px] tabular-nums text-oi-faint">{{ tag.count }}</span>
           </div>
         </div>
       </div>

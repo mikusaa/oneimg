@@ -10,15 +10,23 @@ import (
 	"gorm.io/gorm"
 )
 
+// tagUsageDTO 在标签基础字段之外附带当前用户可见文件中的使用次数
+type tagUsageDTO struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
+}
+
 func (s *Server) listTags(c *gin.Context) {
-	items, err := s.services.Tags.List()
+	user, _ := currentUser(c)
+	items, err := s.services.Tags.ListWithUsage(*user)
 	if err != nil {
 		writeProblem(c, http.StatusInternalServerError, "tag_list_failed", "读取标签失败")
 		return
 	}
-	result := make([]tagDTO, 0, len(items))
+	result := make([]tagUsageDTO, 0, len(items))
 	for _, item := range items {
-		result = append(result, toTagDTO(item))
+		result = append(result, tagUsageDTO{ID: item.Tag.Id, Name: item.Tag.Name, Count: item.Count})
 	}
 	writeData(c, http.StatusOK, result, nil)
 }
