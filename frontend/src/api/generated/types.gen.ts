@@ -150,13 +150,24 @@ export type StorageBucket = {
      */
     usage_exact: boolean;
     filesystem?: StorageFilesystem;
-    config?: {
-        [key: string]: unknown;
-    };
+    config?: StorageConfig;
     /**
      * true 表示已停用，不接受新上传且不出现在上传选项中，已有媒体照常读取
      */
     disabled: boolean;
+};
+
+/**
+ * 按存储类型使用不同字段（如 r2_endpoint、ftp_host）；密钥类字段在响应中为空字符串，并附带 <字段>_configured 表示是否已配置。
+ */
+export type StorageConfig = {
+    /**
+     * 仅 S3 / R2：存储桶的公开访问域名（直链域名），只缺协议时补 https://，保存时去掉末尾 /。设置后该存储全部文件（含历史文件和缩略图）的返回链接改用这个域名，浏览器不经过 OneImg，来源白名单不生效。
+     * 留空表示经 OneImg 访问。格式错误或其他存储类型返回 422 validation_error，errors[].field 为 config.public_domain。
+     *
+     */
+    public_domain?: string;
+    [key: string]: unknown;
 };
 
 export type ImageStorage = {
@@ -261,9 +272,7 @@ export type StorageRequest = {
      * OneImg 配置的逻辑配额，0 表示无限制
      */
     capacity_bytes: number;
-    config: {
-        [key: string]: unknown;
-    };
+    config: StorageConfig;
 };
 
 export type CreateUserRequest = {
@@ -325,7 +334,9 @@ export type SettingsPatch = {
      *
      */
     file_name?: string;
-    public_image_domain?: string;
+    /**
+     * 本地存储的 CDN 域名，CDN 根路径指向 uploads 目录，返回链接去掉 /uploads 前缀；留空表示经 OneImg 访问
+     */
     cdn_domain?: string;
     referer_white_enable?: boolean;
     referer_white_list?: string;

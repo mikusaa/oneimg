@@ -382,7 +382,9 @@ paths:
     patch:
       operationId: updateStorageBucket
       summary: 更新存储桶
-      description: 更换端点或账户时必须显式提供新凭证，否则返回 422 credentials_required_for_new_endpoint。
+      description: |
+        更换端点或账户时必须显式提供新凭证，否则返回 422 credentials_required_for_new_endpoint。
+        config 只需包含要修改的字段；只修改 public_domain 不需要重新提供凭证，传空字符串表示清除。
       tags: [Storage]
       requestBody: { $ref: '#/components/requestBodies/Storage' }
       responses:
@@ -550,6 +552,7 @@ paths:
     patch:
       operationId: updateSettings
       summary: 更新系统设置
+      description: 图片直链域名已移到各 S3/R2 存储的 config.public_domain；请求里仍带 public_image_domain 时返回 422 validation_error，errors[].code 为 moved。
       tags: [Settings]
       requestBody:
         required: true
@@ -801,8 +804,18 @@ components:
         usage_bytes: { type: integer, format: int64, minimum: 0, description: OneImg 管理的主图和已成功保存的缩略图占用 }
         usage_exact: { type: boolean, description: false 表示 usage_bytes 包含历史数据的保守估算 }
         filesystem: { $ref: '#/components/schemas/StorageFilesystem' }
-        config: { type: object, additionalProperties: true }
+        config: { $ref: '#/components/schemas/StorageConfig' }
         disabled: { type: boolean, description: true 表示已停用，不接受新上传且不出现在上传选项中，已有媒体照常读取 }
+    StorageConfig:
+      type: object
+      additionalProperties: true
+      description: 按存储类型使用不同字段（如 r2_endpoint、ftp_host）；密钥类字段在响应中为空字符串，并附带 <字段>_configured 表示是否已配置。
+      properties:
+        public_domain:
+          type: string
+          description: |
+            仅 S3 / R2：存储桶的公开访问域名（直链域名），只缺协议时补 https://，保存时去掉末尾 /。设置后该存储全部文件（含历史文件和缩略图）的返回链接改用这个域名，浏览器不经过 OneImg，来源白名单不生效。
+            留空表示经 OneImg 访问。格式错误或其他存储类型返回 422 validation_error，errors[].field 为 config.public_domain。
     ImageStorage:
       type: object
       required: [id, name, type, disabled]
@@ -890,7 +903,7 @@ components:
     StorageRequest:
       type: object
       required: [name, type, capacity_bytes, config]
-      properties: { id: { type: integer, minimum: 1 }, name: { type: string }, type: { type: string, enum: [default, s3, r2, ftp, webdav] }, capacity_bytes: { type: integer, minimum: 0, description: OneImg 配置的逻辑配额，0 表示无限制 }, config: { type: object, additionalProperties: true } }
+      properties: { id: { type: integer, minimum: 1 }, name: { type: string }, type: { type: string, enum: [default, s3, r2, ftp, webdav] }, capacity_bytes: { type: integer, minimum: 0, description: OneImg 配置的逻辑配额，0 表示无限制 }, config: { $ref: '#/components/schemas/StorageConfig' } }
     CreateUserRequest:
       type: object
       required: [username, password, role]
@@ -933,8 +946,7 @@ components:
           description: |
             文件名模板，留空、{random} 或 {uuid} 时只使用随机 ID；其他模板生成「名字-随机ID.扩展名」。可用变量同 default_path。
             修改时不能包含控制字符、不成对的花括号或不支持的变量，否则返回 422 validation_error，errors[].field 为 file_name。
-        public_image_domain: { type: string }
-        cdn_domain: { type: string }
+        cdn_domain: { type: string, description: 本地存储的 CDN 域名，CDN 根路径指向 uploads 目录，返回链接去掉 /uploads 前缀；留空表示经 OneImg 访问 }
         referer_white_enable: { type: boolean }
         referer_white_list: { type: string }
         seo_title: { type: string }

@@ -50,33 +50,8 @@
                                         </option>
                                     </select>
                                     <p class="field-hint">普通用户始终可使用默认存储，其他存储按用户权限开放。</p>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section class="settings-section">
-                            <div class="settings-section-heading">
-                                <h3>图片直链</h3>
-                            </div>
-                            <div class="settings-field-grid">
-                                <div class="setting-group">
-                                    <label class="field-label" for="public_image_domain">图片直链域名</label>
-                                    <input
-                                        id="public_image_domain"
-                                        v-model="systemSettings.public_image_domain"
-                                        :data-save-state="saveStates.public_image_domain"
-                                        type="text"
-                                        class="input-modern"
-                                        :class="{ 'cursor-not-allowed opacity-60': publicImageDomainInputDisabled }"
-                                        :disabled="publicImageDomainInputDisabled"
-                                        placeholder="例如 https://img.example.com"
-                                        @blur="handleFieldBlur('public_image_domain', systemSettings.public_image_domain)"
-                                    >
-                                    <p
-                                        class="field-hint"
-                                        :class="{ 'text-amber-600 dark:text-amber-300': publicImageDomainUnavailable || hasPublicImageDomain }"
-                                    >
-                                        {{ publicImageDomainHint }}
+                                    <p class="field-hint">
+                                        图片直链域名和本地存储的 CDN 域名已移到<RouterLink to="/storage" class="text-blue-600 dark:text-blue-400">存储</RouterLink>页，每个存储单独设置。
                                     </p>
                                 </div>
                             </div>
@@ -331,13 +306,10 @@
                             <div class="settings-section-heading settings-section-heading-inline">
                                 <div>
                                     <h3>图片来源保护</h3>
-                                    <p v-if="hasPublicImageDomain" class="text-amber-600 dark:text-amber-300">
-                                        已配置图片直链域名，图片不会经过系统代理，来源白名单无法生效。
-                                    </p>
+                                    <p>只对经 OneImg 访问的链接生效；设置了直链或 CDN 域名的存储，浏览器不经过 OneImg，不受白名单保护。</p>
                                 </div>
                                 <label
                                     class="settings-switch"
-                                    :class="hasPublicImageDomain ? 'cursor-not-allowed opacity-60' : ''"
                                     title="来源白名单"
                                 >
                                     <input
@@ -345,7 +317,6 @@
                                         :data-save-state="saveStates.referer_white_enable"
                                         type="checkbox"
                                         class="sr-only peer"
-                                        :disabled="hasPublicImageDomain"
                                         @change="handleSwitchChange('referer_white_enable', systemSettings.referer_white_enable)"
                                     >
                                     <span class="switch-track"></span>
@@ -504,7 +475,6 @@ const systemSettings = reactive({
     skip_compress_formats: 'image/gif,image/webp',
     default_path: '/uploads/{year}/{moon}',
     file_name: '{random}',
-    public_image_domain: '',
 })
 
 const SETTING_TABS = [
@@ -542,53 +512,7 @@ const revealActiveTab = async (key) => {
 const hasSettingPermission = (permission) => settingPermissions.value.includes(permission)
 const availableSettingTabs = computed(() => SETTING_TABS.filter(tab => tab.permissions.some(hasSettingPermission)))
 
-const publicDomainStorageTypes = ['s3', 'r2']
-const publicDomainAffectedSettings = [
-    'referer_white_enable',
-    'referer_white_list',
-]
-
-const currentDefaultBucket = computed(() => {
-    return presetBuckets.value.find(bucket => String(bucket.id) === String(systemSettings.default_storage))
-})
-
-const supportsPublicImageDomain = computed(() => {
-    return publicDomainStorageTypes.includes(currentDefaultBucket.value?.type)
-})
-
-const hasPublicImageDomain = computed(() => String(systemSettings.public_image_domain || '').trim() !== '')
-const publicImageDomainUnavailable = computed(() => !supportsPublicImageDomain.value)
-const publicImageDomainInputDisabled = computed(() => publicImageDomainUnavailable.value && !hasPublicImageDomain.value)
-
-const publicImageDomainHint = computed(() => {
-    if (!supportsPublicImageDomain.value) {
-        return '当前默认存储不支持图片直链域名，仅 S3/R2 存储可用。'
-    }
-    if (hasPublicImageDomain.value) {
-        return '图片链接将直接使用该域名，来源白名单等代理能力不会生效。'
-    }
-    return '填写 S3/R2 绑定的直链域名后，返回链接将直接使用该域名。'
-})
-
-const refererListDisabled = computed(() => {
-    return hasPublicImageDomain.value || !systemSettings.referer_white_enable
-})
-
-const bucketSupportsPublicImageDomain = (bucketId) => {
-    const bucket = presetBuckets.value.find(item => String(item.id) === String(bucketId))
-    return publicDomainStorageTypes.includes(bucket?.type)
-}
-
-const disabledByPublicImageDomain = (key) => {
-    return hasPublicImageDomain.value && publicDomainAffectedSettings.includes(key)
-}
-
-const normalizeDomain = (value) => {
-    let domain = String(value || '').trim()
-    if (domain === '') return ''
-    if (!domain.includes('://')) domain = `https://${domain}`
-    return domain.replace(/\/+$/, '')
-}
+const refererListDisabled = computed(() => !systemSettings.referer_white_enable)
 
 const getRequestHeaders = () => ({
     'Content-Type': 'application/json',
@@ -672,33 +596,11 @@ const getBucketsList = async () => {
 }
 
 const handleSwitchChange = (key, value) => {
-    if (disabledByPublicImageDomain(key)) {
-        message.warning('已配置图片直链域名，该设置不会生效')
-        systemSettings[key] = updateSetting[key]
-        return
-    }
-
     saveSetting(key, value)
 }
 
 const handleFieldBlur = (key, rawValue) => {
-    if (disabledByPublicImageDomain(key)) {
-        message.warning('已配置图片直链域名，该设置不会生效')
-        systemSettings[key] = updateSetting[key]
-        return
-    }
-
     let value = rawValue
-    if (key === 'public_image_domain') {
-        value = normalizeDomain(value)
-        systemSettings[key] = value
-
-        if (key === 'public_image_domain' && publicImageDomainUnavailable.value && value !== '') {
-            message.warning('当前默认存储不支持图片直链域名')
-            systemSettings.public_image_domain = updateSetting.public_image_domain || ''
-            return
-        }
-    }
 
     if (key === 'main_image_quality') {
         const quality = Number(value)
@@ -721,8 +623,7 @@ const handleFieldBlur = (key, rawValue) => {
         systemSettings.skip_compress_formats = value
     }
 
-    const allowEmptyKeys = ['public_image_domain']
-    if (value === '' && !allowEmptyKeys.includes(key)) {
+    if (value === '') {
         if (Object.prototype.hasOwnProperty.call(updateSetting, key)) {
             systemSettings[key] = updateSetting[key]
         }
@@ -734,17 +635,6 @@ const handleFieldBlur = (key, rawValue) => {
 }
 
 const handleSelectChange = (key, value) => {
-    if (key === 'default_storage' && hasPublicImageDomain.value && !bucketSupportsPublicImageDomain(value)) {
-        message.warning('图片直链域名仅支持 S3/R2 存储，请先清空该配置')
-        systemSettings.default_storage = updateSetting.default_storage
-        return
-    }
-
-    if (disabledByPublicImageDomain(key)) {
-        message.warning('已配置图片直链域名，该设置不会生效')
-        systemSettings[key] = updateSetting[key]
-        return
-    }
     saveSetting(key, value)
 }
 

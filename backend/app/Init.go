@@ -66,6 +66,9 @@ func Init() *System {
 	if err := ResetRemovedStorageDefaults(db.DB); err != nil {
 		log.Fatalf("已移除存储的默认配置修复失败: %v", err)
 	}
+	if err := MigratePublicImageDomain(db.DB); err != nil {
+		log.Fatalf("图片直链域名迁移失败: %v", err)
+	}
 	if count, err := services.CountSharedPhysicalObjects(db.DB); err != nil {
 		log.Fatalf("历史对象引用检查失败: %v", err)
 	} else if count > 0 {

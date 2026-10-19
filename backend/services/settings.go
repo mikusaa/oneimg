@@ -39,7 +39,6 @@ type SettingsPatch struct {
 	SkipCompressFormats *string
 	DefaultPath         *string
 	FileName            *string
-	PublicImageDomain   *string
 	CDNDomain           *string
 	RefererWhiteEnable  *bool
 	RefererWhiteList    *string
@@ -157,13 +156,6 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 				}
 			}
 			put("file_name", value)
-		}
-		if input.PublicImageDomain != nil {
-			value, err := publicurl.NormalizeDomain(*input.PublicImageDomain)
-			if err != nil {
-				return errors.Join(ErrSettingsValidation, err)
-			}
-			put("public_image_domain", value)
 		}
 		if input.CDNDomain != nil {
 			value, err := publicurl.NormalizeDomain(*input.CDNDomain)
