@@ -105,7 +105,9 @@ func (s *Server) patchSettings(c *gin.Context) {
 		SEOICP: input.SEOICP, PublicSecurity: input.PublicSecurity, SEOIcon: input.SEOIcon,
 	})
 	if errors.Is(err, services.ErrStorageDisabled) {
-		writeProblem(c, http.StatusUnprocessableEntity, "storage_disabled", "已停用的存储不能设为系统默认存储")
+		message := "已停用的存储不能设为系统默认存储"
+		writeProblem(c, http.StatusUnprocessableEntity, "storage_disabled", message,
+			FieldProblem{Field: "default_storage", Code: "storage_disabled", Message: message})
 		return
 	}
 	var fieldErr *services.SettingsFieldError
@@ -114,7 +116,7 @@ func (s *Server) patchSettings(c *gin.Context) {
 			FieldProblem{Field: fieldErr.Field, Code: "invalid", Message: fieldErr.Message})
 		return
 	}
-	if errors.Is(err, services.ErrSettingsValidation) || errors.Is(err, services.ErrBucketNotFound) {
+	if errors.Is(err, services.ErrSettingsValidation) {
 		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "设置值无效，事务已回滚")
 		return
 	}

@@ -206,7 +206,8 @@ func TestSettingsUpdateRollsBackAtomically(t *testing.T) {
 	title := "after"
 	missingBucket := 999
 	_, err := NewSettingsService(db).Update(SettingsPatch{SEOTitle: &title, DefaultStorage: &missingBucket})
-	if !errors.Is(err, ErrBucketNotFound) {
+	var fieldErr *SettingsFieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "default_storage" || !errors.Is(err, ErrSettingsValidation) {
 		t.Fatalf("error = %v", err)
 	}
 	var stored models.Settings

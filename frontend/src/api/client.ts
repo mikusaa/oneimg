@@ -1,7 +1,15 @@
-import type { DashboardStats, Image, Problem, StorageBucket, StorageRequest, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
+import type { CreatedPersonalAccessToken, CreateTokenRequest, DashboardStats, Image, ManagedUser, PersonalAccessToken, Problem, StorageBucket, StorageRequest, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
 import { client as generatedClient } from './generated/client.gen'
 
-export type { DashboardStats, Image, Problem, StorageBucket, StorageConfig, StorageRequest, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
+export type { CreatedPersonalAccessToken, CreateTokenRequest, DashboardStats, FieldProblem, Image, ManagedUser, PersonalAccessToken, Problem, StorageBucket, StorageConfig, StorageRequest, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
+
+/** GET /me/passkeys 的列表项（OpenAPI 里还是通用 DataEnvelope） */
+export interface PasskeyRecord {
+  id: number
+  name: string
+  created_at: string
+  last_used_at: string | null
+}
 
 /** 上传趋势的统计粒度：day 为最近 30 天，week 为 12 周，month 为 12 个月，year 为 5 年 */
 export type TrendPeriod = 'day' | 'week' | 'month' | 'year'
@@ -10,7 +18,29 @@ export type Envelope<T> = { data: T; meta?: { pagination?: { page: number; page_
 
 export class ApiError extends Error {
   problem: Problem
-  constructor(problem: Problem) { super(problem?.detail || 'API request failed'); this.name = 'ApiError'; this.problem = problem }
+  /** 429 时服务器建议等待的秒数（Retry-After） */
+  retryAfter?: number
+  constructor(problem: Problem, retryAfter?: number) {
+    super(problem?.detail || 'API request failed')
+    this.name = 'ApiError'
+    this.problem = problem
+    this.retryAfter = retryAfter
+  }
+}
+
+/** 接口错误的提示文字：限流时说明等待时间，其他情况用服务器的 detail */
+export const errorMessage = (error: unknown, fallback: string) => {
+  if (!(error instanceof ApiError)) return fallback
+  if (error.problem?.status === 429 || error.retryAfter) {
+    return error.retryAfter ? `操作太频繁，请 ${error.retryAfter} 秒后再试` : '操作太频繁，请稍后再试'
+  }
+  return error.problem?.detail || fallback
+}
+
+/** 字段级错误：{ 字段名: 提示 } */
+export const fieldErrors = (error: unknown): Record<string, string> => {
+  if (!(error instanceof ApiError)) return {}
+  return Object.fromEntries((error.problem?.errors ?? []).map(item => [item.field, item.message]))
 }
 
 const baseURL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
@@ -50,7 +80,10 @@ async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise
   const response = await apiFetch(`${baseURL}/api/v1${path}`, { ...init, headers })
   if (response.status === 204) return { data: undefined as T }
   const payload = await response.json().catch(() => null)
-  if (!response.ok) throw new ApiError(payload as Problem)
+  if (!response.ok) {
+    const retryAfter = Number(response.headers.get('Retry-After')) || undefined
+    throw new ApiError((payload ?? { status: response.status }) as Problem, retryAfter)
+  }
   return payload as Envelope<T>
 }
 
@@ -92,6 +125,25 @@ export const api = {
   setBucketDisabled: (id: number, disabled: boolean) => request<StorageBucket>(`/storage-buckets/${id}/${disabled ? 'disable' : 'enable'}`, { method: 'POST' }),
   testBucketConnection: (body: StorageRequest & { id?: number }) => request<{ detail: string }>('/storage-connection-tests', { method: 'POST', body: JSON.stringify(body) }),
   listUsers: (query = '') => request<User[]>(`/users${query ? `?${query}` : ''}`),
+  /** 带分页信息的用户列表 */
+  listUsersPage: (query = '') => requestEnvelope<ManagedUser[]>(`/users${query ? `?${query}` : ''}`),
+  createUser: (body: { username: string; password: string; role: number }) => request<User>('/users', { method: 'POST', body: JSON.stringify(body) }),
+  /** 改用户名或角色；改为普通用户时后端会清空功能权限 */
+  updateUser: (id: number, body: { username?: string; role?: number }) => request<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  setUserPermissions: (id: number, body: { codes: string[]; bucket_ids: number[] }) => request<User>(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify(body) }),
+  resetUserPassword: (id: number) => request<{ new_password: string }>(`/users/${id}/password-reset`, { method: 'POST' }),
+  revokeUserPasskeys: (id: number) => request<void>(`/users/${id}/passkeys/revoke`, { method: 'POST' }),
+  deleteUser: (id: number) => request<void>(`/users/${id}`, { method: 'DELETE' }),
+  listPasskeys: () => request<PasskeyRecord[]>('/me/passkeys'),
+  passkeyRegistrationOptions: (body: { name: string; current_password: string }) => request<{ options: unknown }>('/me/passkeys/registration/options', { method: 'POST', body: JSON.stringify(body) }),
+  passkeyRegistrationVerify: (body: unknown) => request<unknown>('/me/passkeys/registration/verify', { method: 'POST', body: JSON.stringify(body) }),
+  renamePasskey: (id: number, name: string) => request<unknown>(`/me/passkeys/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  revokePasskey: (id: number, currentPassword: string) => request<void>(`/me/passkeys/${id}/revoke`, { method: 'POST', body: JSON.stringify({ current_password: currentPassword }) }),
+  passkeyLoginOptions: () => request<{ options: unknown }>('/auth/passkeys/login/options', { method: 'POST' }),
+  passkeyLoginVerify: (body: unknown) => request<User>('/auth/passkeys/login/verify', { method: 'POST', body: JSON.stringify(body) }),
+  listTokens: () => request<PersonalAccessToken[]>('/me/tokens'),
+  createToken: (body: CreateTokenRequest) => request<CreatedPersonalAccessToken>('/me/tokens', { method: 'POST', body: JSON.stringify(body) }),
+  revokeToken: (id: number) => request<unknown>(`/me/tokens/${id}/revoke`, { method: 'POST' }),
   getSettings: (groups = '') => request<Record<string, unknown>>(`/settings${groups ? `?groups=${encodeURIComponent(groups)}` : ''}`),
   updateSettings: (body: Record<string, unknown>) => request<Record<string, unknown>>('/settings', { method: 'PATCH', body: JSON.stringify(body) }),
 }

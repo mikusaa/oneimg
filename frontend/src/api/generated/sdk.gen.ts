@@ -736,7 +736,7 @@ export const getSettings = <ThrowOnError extends boolean = false>(options?: Opti
 /**
  * 更新系统设置
  *
- * 图片直链域名已移到各 S3/R2 存储的 config.public_domain；请求里仍带 public_image_domain 时返回 422 validation_error，errors[].code 为 moved。
+ * 一次请求可以修改多个字段，在同一个事务中保存：任一字段无效时整体回滚，返回 422，errors[].field 是出错的字段名（与请求体字段一致，如 main_image_quality、default_storage），errors[].code 一般为 invalid，默认存储已停用时为 storage_disabled。图片直链域名已移到各 S3/R2 存储的 config.public_domain；请求里仍带 public_image_domain 时返回 422 validation_error，errors[].code 为 moved。
  */
 export const updateSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateSettingsData, ThrowOnError>): RequestResult<UpdateSettingsResponses, UpdateSettingsErrors, ThrowOnError> => (options.client ?? client).patch<UpdateSettingsResponses, UpdateSettingsErrors, ThrowOnError>({
     security: [{

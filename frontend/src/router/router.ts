@@ -16,17 +16,16 @@ const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue'),
-    meta: { title: '登录', public: true }
+    meta: { title: '登录', public: true, auth: true }
   },
   {
     path: '/register',
     name: 'Register',
     component: () => import('@/views/Register.vue'),
-    meta: { title: '注册', public: true }
+    meta: { title: '注册', public: true, auth: true }
   },
   navRoute('Upload', () => import('@/views/Upload.vue'), { bleed: true }),
   navRoute('Gallery', () => import('@/views/Gallery.vue'), { bleed: true }),
-  // 统计页暂时只有原控制中心的概览，在后续步骤重做
   navRoute('Stats', () => import('@/views/Stats.vue')),
   navRoute('Storage', () => import('@/views/Storage.vue')),
   navRoute('Users', () => import('@/views/Users.vue')),
@@ -70,9 +69,10 @@ router.beforeEach(async (to) => {
     } catch {
       userInfo = {}
     }
+    // 未登录时记下原地址，登录后回到这里
     if (!userInfo.username) {
       clearSession()
-      return '/login'
+      return to.fullPath === '/' ? '/login' : { path: '/login', query: { redirect: to.fullPath } }
     }
 
     // 向服务器确认登录状态，并刷新角色、权限和改密要求
@@ -103,12 +103,15 @@ router.beforeEach(async (to) => {
     }
     return true
   } catch {
-    return to.path === '/login' ? true : '/login'
+    // 会话失效：回到登录页，登录后返回原地址
+    if (to.path === '/login') return true
+    return to.fullPath === '/' ? '/login' : { path: '/login', query: { redirect: to.fullPath } }
   }
 })
 
-router.afterEach((to) => {
-  document.title = getPageTitle(to)
+// 被取消的导航（如设置页「留在本页」）也会调用 afterEach，这时不改标题
+router.afterEach((to, _from, failure) => {
+  if (!failure) document.title = getPageTitle(to)
 })
 
 export default router

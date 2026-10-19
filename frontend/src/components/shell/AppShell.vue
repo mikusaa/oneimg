@@ -1,21 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { UiButton, UiSegmented } from '@/components/ui'
+import { UiButton } from '@/components/ui'
 import { canAccessRoute, useSession } from '@/composables/useSession'
-import { THEME_OPTIONS, useTheme, type ThemePreference } from '@/composables/useTheme'
+import { useTheme } from '@/composables/useTheme'
 import { NAV_ITEMS, navItem, type NavItem } from '@/router/nav'
 import AppBrand from './AppBrand.vue'
 import GlobalUploadInput from './GlobalUploadInput.vue'
 import SiteFooter from './SiteFooter.vue'
 import UserMenu from './UserMenu.vue'
-import { useLogout } from './useLogout'
 
 // 登录后的应用外壳：桌面端左侧栏 + 内容面板，手机端（900px 以下）改为底部标签栏
 const route = useRoute()
 const { user, mustChangePassword } = useSession()
-const { preference, isDark, setTheme, toggleTheme } = useTheme()
-const { logout, pending: loggingOut } = useLogout()
+const { isDark, toggleTheme } = useTheme()
 
 const allowed = (item: NavItem) => canAccessRoute(item.name, item.permissions, user.value)
 const workspaceItems = computed(() => NAV_ITEMS.filter(item => item.group === 'workspace' && allowed(item)))
@@ -36,11 +34,6 @@ const tabs = computed(() => {
 })
 
 const themeLabel = computed(() => isDark.value ? '切换到浅色' : '切换到深色')
-const theme = computed({
-  get: () => preference.value,
-  set: (value: string) => setTheme(value as ThemePreference),
-})
-const themeOptions = THEME_OPTIONS.map(option => ({ value: option.value, label: option.label }))
 
 const navItemClass = (item: NavItem) => [
   'flex h-9 items-center gap-2.5 rounded-[9px] px-2.5 font-medium transition-colors duration-150 [&>i]:text-lg [&>i]:transition-colors',
@@ -142,21 +135,6 @@ const navItemClass = (item: NavItem) => [
           </RouterLink>
         </nav>
 
-        <!-- 手机端「我的」：主题、退出登录和页脚（桌面端在侧栏底部） -->
-        <section v-if="onAccount" class="px-4 pt-4 font-oi min-[900px]:hidden" aria-label="外观与登录">
-          <div class="divide-y divide-oi-line rounded-oi border border-oi-line bg-oi-raised">
-            <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <span id="mobile-theme-label" class="text-sm font-semibold text-oi-ink">外观</span>
-              <UiSegmented v-model="theme" :options="themeOptions" aria-labelledby="mobile-theme-label" />
-            </div>
-            <div class="px-4 py-3">
-              <UiButton variant="danger" :disabled="loggingOut" @click="logout">
-                <i class="ri-logout-box-r-line" aria-hidden="true" />退出登录
-              </UiButton>
-            </div>
-          </div>
-          <SiteFooter class="mt-3.5" />
-        </section>
 
         <div :class="['flex min-w-0 flex-1 flex-col', !bleed && 'px-4 pb-8 pt-4 min-[900px]:px-6 min-[900px]:pb-10 min-[900px]:pt-6 xl:px-8']">
           <slot />

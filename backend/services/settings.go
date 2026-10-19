@@ -22,6 +22,8 @@ type SettingsFieldError struct {
 func (e *SettingsFieldError) Error() string { return e.Field + ": " + e.Message }
 func (e *SettingsFieldError) Unwrap() error { return ErrSettingsValidation }
 
+func fieldError(field, message string) error { return &SettingsFieldError{Field: field, Message: message} }
+
 type SettingsService struct{ db *gorm.DB }
 
 type SettingsPatch struct {
@@ -83,12 +85,12 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 		}
 		if input.DefaultStorage != nil {
 			if *input.DefaultStorage <= 0 {
-				return ErrSettingsValidation
+				return fieldError("default_storage", "请选择一个存储")
 			}
 			var target models.Buckets
 			if err := tx.Select("id", "disabled").First(&target, *input.DefaultStorage).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
-					return ErrBucketNotFound
+					return fieldError("default_storage", "存储不存在")
 				}
 				return err
 			}
@@ -99,7 +101,7 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 		}
 		if input.MaxFileSize != nil {
 			if *input.MaxFileSize < 1024 || *input.MaxFileSize > 1024*1024*1024 {
-				return ErrSettingsValidation
+				return fieldError("max_file_size", "图片大小上限需要在 1 KiB 到 1 GiB 之间")
 			}
 			put("max_file_size", *input.MaxFileSize)
 		}
@@ -108,33 +110,33 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 		}
 		if input.MaxVideoFileSize != nil {
 			if *input.MaxVideoFileSize < 1<<20 || *input.MaxVideoFileSize > 1<<30 {
-				return ErrSettingsValidation
+				return fieldError("max_video_file_size", "视频大小上限需要在 1 MiB 到 1 GiB 之间")
 			}
 			put("max_video_file_size", *input.MaxVideoFileSize)
 		}
 		if input.AllowedTypes != nil {
 			value := strings.TrimSpace(*input.AllowedTypes)
 			if value == "" {
-				return ErrSettingsValidation
+				return fieldError("allowed_types", "至少保留一种图片类型")
 			}
 			for _, mime := range strings.Split(value, ",") {
 				mime = strings.ToLower(strings.TrimSpace(mime))
 				if mime != "image/jpeg" && mime != "image/png" && mime != "image/gif" && mime != "image/webp" {
-					return ErrSettingsValidation
+					return fieldError("allowed_types", "只支持 image/jpeg、image/png、image/gif、image/webp")
 				}
 			}
 			put("allowed_types", strings.ToLower(strings.ReplaceAll(value, " ", "")))
 		}
 		if input.MainImageQuality != nil {
 			if *input.MainImageQuality < 0 || *input.MainImageQuality > 100 {
-				return ErrSettingsValidation
+				return fieldError("main_image_quality", "压缩质量需要在 0 到 100 之间")
 			}
 			put("main_image_quality", *input.MainImageQuality)
 		}
 		if input.SkipCompressFormats != nil {
 			value := strings.TrimSpace(*input.SkipCompressFormats)
 			if value == "" {
-				return ErrSettingsValidation
+				return fieldError("skip_compress_formats", "跳过压缩的格式不能为空")
 			}
 			put("skip_compress_formats", value)
 		}
@@ -143,7 +145,7 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 			value := strings.TrimSpace(*input.DefaultPath)
 			if value != result.DefaultPath {
 				if err := images.ValidatePathTemplate(value); err != nil {
-					return &SettingsFieldError{Field: "default_path", Message: err.Error()}
+					return fieldError("default_path", err.Error())
 				}
 			}
 			put("default_path", value)
@@ -152,7 +154,7 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 			value := strings.TrimSpace(*input.FileName)
 			if value != result.FileName {
 				if err := images.ValidateNameTemplate(value); err != nil {
-					return &SettingsFieldError{Field: "file_name", Message: err.Error()}
+					return fieldError("file_name", err.Error())
 				}
 			}
 			put("file_name", value)
@@ -160,7 +162,7 @@ func (s *SettingsService) Update(input SettingsPatch) (models.Settings, error) {
 		if input.CDNDomain != nil {
 			value, err := publicurl.NormalizeDomain(*input.CDNDomain)
 			if err != nil {
-				return errors.Join(ErrSettingsValidation, err)
+				return fieldError("cdn_domain", err.Error())
 			}
 			put("cdn_domain", value)
 		}

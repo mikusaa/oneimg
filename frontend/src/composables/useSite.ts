@@ -34,8 +34,10 @@ const setMetaTag = (name: string, content: string) => {
   else tag.removeAttribute('content')
 }
 
-// 设置了网站图标时替换默认的 OneImg Logo
-const applyFavicon = (href: string) => {
+// 设置了网站图标时替换默认的 OneImg Logo，清空后换回来
+const defaultFavicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.getAttribute('href') ?? ''
+const applyFavicon = (value: string) => {
+  const href = value || defaultFavicon
   if (!href) return
   let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
   if (!link) {
@@ -76,6 +78,15 @@ export const loadSiteConfig = () => {
     return readonly(site)
   })()
   return loading
+}
+
+/** 系统设置保存站点信息后立即更新标题、描述和图标，不用刷新页面 */
+export const applySiteConfig = (patch: Partial<SiteConfig>) => {
+  Object.assign(site, patch)
+  if (!site.title.trim()) site.title = PRODUCT_NAME
+  setMetaTag('description', site.description)
+  setMetaTag('keywords', site.keywords)
+  applyFavicon(site.icon)
 }
 
 export const useSite = () => readonly(site)

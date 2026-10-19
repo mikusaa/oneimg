@@ -625,6 +625,82 @@ func TestPatchSettingsRejectsInvalidPathTemplateWithFieldProblem(t *testing.T) {
 	}
 }
 
+// 系统设置页把所有改动放进一次 PATCH：任一字段无效时整体回滚，并用 errors[].field 指出是哪一项
+func TestPatchSettingsReportsInvalidFieldAndRollsBack(t *testing.T) {
+	cfg := &config.Config{SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
+	router, system := setupTestRouter(t, cfg)
+	db := system.Database.DB
+	disabled := models.Buckets{Name: "paused", Type: "webdav", Config: map[string]any{}, Disabled: true}
+	if err := db.Create(&disabled).Error; err != nil {
+		t.Fatal(err)
+	}
+	admin := models.User{Username: "settings-fields", Password: "unused", Role: models.RoleAdmin, Permission: models.Permission{Codes: models.AllPermissionCodes(), Buckets: []int{}}}
+	if err := db.Create(&admin).Error; err != nil {
+		t.Fatal(err)
+	}
+	created, err := system.Services.Tokens.Create(admin.ID, services.CreateTokenInput{AuthVersion: admin.AuthVersion, Name: "settings", Scopes: []string{"settings:read", "settings:write"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(method, body string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(method, "/api/v1/settings", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+created.Plain)
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(recorder, req)
+		return recorder
+	}
+	before := call(http.MethodGet, "")
+	if before.Code != http.StatusOK {
+		t.Fatalf("read settings status = %d, body = %s", before.Code, before.Body.String())
+	}
+
+	cases := []struct {
+		body, field, code string
+	}{
+		{`{"max_file_size":10}`, "max_file_size", "invalid"},
+		{`{"max_video_file_size":1024}`, "max_video_file_size", "invalid"},
+		{`{"allowed_types":"image/png,image/svg+xml"}`, "allowed_types", "invalid"},
+		{`{"allowed_types":" "}`, "allowed_types", "invalid"},
+		{`{"main_image_quality":101}`, "main_image_quality", "invalid"},
+		{`{"skip_compress_formats":""}`, "skip_compress_formats", "invalid"},
+		{`{"default_storage":0}`, "default_storage", "invalid"},
+		{`{"default_storage":9999}`, "default_storage", "invalid"},
+		{`{"default_storage":` + strconv.Itoa(disabled.Id) + `}`, "default_storage", "storage_disabled"},
+		{`{"cdn_domain":"ftp://cdn.example.com"}`, "cdn_domain", "invalid"},
+		// 有效字段和无效字段放在同一次请求里
+		{`{"seo_title":"Changed","registration_enabled":true,"main_image_quality":-1}`, "main_image_quality", "invalid"},
+		{`{"seo_icp":"x","file_name":"{date}"}`, "file_name", "invalid"},
+	}
+	for _, item := range cases {
+		recorder := call(http.MethodPatch, item.body)
+		var problem struct {
+			Errors []struct {
+				Field   string `json:"field"`
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+		if recorder.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("%s status = %d, body = %s", item.body, recorder.Code, recorder.Body.String())
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &problem); err != nil {
+			t.Fatal(err)
+		}
+		if len(problem.Errors) != 1 || problem.Errors[0].Field != item.field || problem.Errors[0].Code != item.code || problem.Errors[0].Message == "" {
+			t.Fatalf("%s problem = %s", item.body, recorder.Body.String())
+		}
+	}
+
+	after := call(http.MethodGet, "")
+	if after.Body.String() != before.Body.String() {
+		t.Fatalf("settings changed after rejected patches:\nbefore %s\nafter  %s", before.Body.String(), after.Body.String())
+	}
+	if ok := call(http.MethodPatch, `{"seo_title":"Changed","main_image_quality":90}`); ok.Code != http.StatusOK || !strings.Contains(ok.Body.String(), `"seo_title":"Changed"`) || !strings.Contains(ok.Body.String(), `"main_image_quality":90`) {
+		t.Fatalf("valid patch status = %d, body = %s", ok.Code, ok.Body.String())
+	}
+}
+
 func TestStorageDirectDomainIsPerBucket(t *testing.T) {
 	cfg := &config.Config{SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
 	router, system := setupTestRouter(t, cfg)
