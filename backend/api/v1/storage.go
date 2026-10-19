@@ -249,7 +249,7 @@ func handleStorageError(c *gin.Context, err error) bool {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		writeProblem(c, http.StatusNotFound, "storage_not_found", "存储桶不存在")
 	case errors.Is(err, services.ErrDefaultStorage):
-		writeProblem(c, http.StatusForbidden, "default_storage_protected", "本地默认存储不能修改或删除")
+		writeProblem(c, http.StatusForbidden, "default_storage_protected", "内置的本地存储不能修改或删除")
 	case errors.Is(err, services.ErrStorageInUseAsDefault):
 		writeProblem(c, http.StatusConflict, "storage_is_upload_default", "该存储是当前系统默认存储，请先在存储页切换默认存储后再删除或停用")
 	case errors.Is(err, services.ErrStorageTypeInvalid), errors.Is(err, services.ErrStorageConfigInvalid), errors.Is(err, services.ErrStorageCapacity):

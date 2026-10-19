@@ -84,6 +84,10 @@ func Init() *System {
 	return r
 }
 
+// LocalStorageName 是新安装时内置本地存储的名称。旧版本叫「本地默认存储」，
+// 容易和「默认存储」（上传时默认选中的存储）混淆。已有安装保留原名，不做迁移。
+const LocalStorageName = "本地存储"
+
 // InitDefaultStorage 初始化默认存储配置
 func InitDefaultStorage(db *database.Database) {
 	// 默认使用本地存储
@@ -107,7 +111,7 @@ func InitDefaultStorage(db *database.Database) {
 	// 创建默认存储配置
 	storage := models.Buckets{
 		Id:       1,
-		Name:     "本地默认存储",
+		Name:     LocalStorageName,
 		Type:     storageType,
 		Capacity: 0, // 无限容量
 		Config:   Config,
