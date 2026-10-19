@@ -1,7 +1,7 @@
-import type { DashboardStats, Image, Problem, StorageBucket, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
+import type { DashboardStats, Image, Problem, StorageBucket, StorageRequest, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
 import { client as generatedClient } from './generated/client.gen'
 
-export type { DashboardStats, Image, Problem, StorageBucket, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
+export type { DashboardStats, Image, Problem, StorageBucket, StorageConfig, StorageRequest, Tag, TagUsage, TrendPoint, UploadBatch, User } from './generated/types.gen'
 
 /** 上传趋势的统计粒度：day 为最近 30 天，week 为 12 周，month 为 12 个月，year 为 5 年 */
 export type TrendPeriod = 'day' | 'week' | 'month' | 'year'
@@ -84,6 +84,13 @@ export const api = {
   dashboardStats: () => request<DashboardStats>('/stats/dashboard'),
   imageStats: (period: TrendPeriod) => request<TrendPoint[]>(`/stats/images?period=${encodeURIComponent(period)}`),
   listBuckets: () => request<StorageBucket[]>('/storage-buckets'),
+  createBucket: (body: StorageRequest) => request<StorageBucket>('/storage-buckets', { method: 'POST', body: JSON.stringify(body) }),
+  /** config 只需包含要修改的字段，密钥类字段留空表示不变 */
+  updateBucket: (id: number, body: StorageRequest) => request<StorageBucket>(`/storage-buckets/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  /** purgeObjects 为 true 时同时清理未被其他记录引用的远端文件 */
+  deleteBucket: (id: number, purgeObjects = false) => request<void>(`/storage-buckets/${id}${purgeObjects ? '?purge_objects=true' : ''}`, { method: 'DELETE' }),
+  setBucketDisabled: (id: number, disabled: boolean) => request<StorageBucket>(`/storage-buckets/${id}/${disabled ? 'disable' : 'enable'}`, { method: 'POST' }),
+  testBucketConnection: (body: StorageRequest & { id?: number }) => request<{ detail: string }>('/storage-connection-tests', { method: 'POST', body: JSON.stringify(body) }),
   listUsers: (query = '') => request<User[]>(`/users${query ? `?${query}` : ''}`),
   getSettings: (groups = '') => request<Record<string, unknown>>(`/settings${groups ? `?groups=${encodeURIComponent(groups)}` : ''}`),
   updateSettings: (body: Record<string, unknown>) => request<Record<string, unknown>>('/settings', { method: 'PATCH', body: JSON.stringify(body) }),

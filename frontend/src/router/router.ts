@@ -28,7 +28,7 @@ const routes: RouteRecordRaw[] = [
   navRoute('Gallery', () => import('@/views/Gallery.vue'), { bleed: true }),
   // 统计页暂时只有原控制中心的概览，在后续步骤重做
   navRoute('Stats', () => import('@/views/Stats.vue')),
-  navRoute('Storage', () => import('@/views/Buckets.vue')),
+  navRoute('Storage', () => import('@/views/Storage.vue')),
   navRoute('Users', () => import('@/views/Users.vue')),
   navRoute('Settings', () => import('@/views/Settings.vue')),
   navRoute('Account', () => import('@/views/Account.vue')),

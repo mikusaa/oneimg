@@ -135,9 +135,11 @@ func (s *ImageService) GetMany(ids []int) ([]models.Image, error) {
 func (s *ImageService) attachMetadata(images []models.Image) ([]ImageRecord, error) {
 	ids := make([]int, 0, len(images))
 	userIDs := make([]int, 0, len(images))
+	bucketIDs := make([]int, 0, len(images))
 	for _, image := range images {
 		ids = append(ids, image.Id)
 		userIDs = append(userIDs, image.UserId)
+		bucketIDs = append(bucketIDs, image.BucketId)
 	}
 	var links []models.ImageToTags
 	if err := s.db.Where("image_id IN ?", ids).Find(&links).Error; err != nil {
@@ -175,10 +177,19 @@ func (s *ImageService) attachMetadata(images []models.Image) ([]ImageRecord, err
 	if err := s.db.First(&setting).Error; err != nil {
 		return nil, err
 	}
+	var buckets []models.Buckets
+	if err := s.db.Select("id", "type", "config").Where("id IN ?", uniqueInts(bucketIDs)).Find(&buckets).Error; err != nil {
+		return nil, err
+	}
+	domainByBucket := make(map[int]string, len(buckets))
+	for _, bucket := range buckets {
+		domainByBucket[bucket.Id] = publicurl.BucketDomain(bucket)
+	}
 	result := make([]ImageRecord, 0, len(images))
 	for _, image := range images {
-		image.Url = publicurl.BuildCDNForStorage(setting, image.Storage, publicurl.BuildForStorage(setting, image.Storage, image.BucketId, image.Url))
-		image.Thumbnail = publicurl.BuildCDNForStorage(setting, image.Storage, publicurl.BuildForStorage(setting, image.Storage, image.BucketId, image.Thumbnail))
+		domain := domainByBucket[image.BucketId]
+		image.Url = publicurl.BuildCDNForStorage(setting, image.Storage, publicurl.BuildForStorage(image.Storage, domain, image.Url))
+		image.Thumbnail = publicurl.BuildCDNForStorage(setting, image.Storage, publicurl.BuildForStorage(image.Storage, domain, image.Thumbnail))
 		itemTags := tagsByImage[image.Id]
 		if itemTags == nil {
 			itemTags = []models.Tags{}

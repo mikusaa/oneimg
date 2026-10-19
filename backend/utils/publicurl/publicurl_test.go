@@ -9,7 +9,7 @@ import (
 
 func TestHistoricalPathDataIsNotURLSyntax(t *testing.T) {
 	raw := `/uploads/photo"#?%2F.png`
-	got := BuildForStorage(models.Settings{}, "default", 1, raw)
+	got := BuildForStorage("default", "", raw)
 	u, err := url.Parse(got)
 	if err != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != raw {
 		t.Fatal(got, err)
@@ -19,45 +19,43 @@ func TestHistoricalPathDataIsNotURLSyntax(t *testing.T) {
 	}
 }
 
-func TestBuildForStorageOnlyRewritesDefaultSupportedBucket(t *testing.T) {
-	setting := models.Settings{
-		DefaultStorage:    2,
-		PublicImageDomain: "img.example.com",
-	}
-
+func TestBuildForStorageUsesEachBucketDomain(t *testing.T) {
 	tests := []struct {
 		name    string
 		storage string
-		bucket  int
+		domain  string
 		want    string
 	}{
-		{
-			name:    "default supported bucket",
-			storage: "s3",
-			bucket:  2,
-			want:    "https://img.example.com/uploads/a.webp",
-		},
-		{
-			name:    "same storage different bucket",
-			storage: "s3",
-			bucket:  8,
-			want:    "/uploads/a.webp",
-		},
-		{
-			name:    "unsupported storage default bucket",
-			storage: "default",
-			bucket:  2,
-			want:    "/uploads/a.webp",
-		},
+		{name: "s3 with domain", storage: "s3", domain: "img.example.com", want: "https://img.example.com/uploads/a.webp"},
+		{name: "r2 with domain path", storage: "r2", domain: "https://cdn.example.com/media/", want: "https://cdn.example.com/media/uploads/a.webp"},
+		{name: "s3 without domain", storage: "s3", domain: "", want: "/uploads/a.webp"},
+		{name: "invalid domain falls back", storage: "s3", domain: "ftp://bad.example.com", want: "/uploads/a.webp"},
+		{name: "ftp ignores domain", storage: "ftp", domain: "img.example.com", want: "/uploads/a.webp"},
+		{name: "local ignores domain", storage: "default", domain: "img.example.com", want: "/uploads/a.webp"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildForStorage(setting, tt.storage, tt.bucket, "/uploads/a.webp")
+			got := BuildForStorage(tt.storage, tt.domain, "/uploads/a.webp")
 			if got != tt.want {
 				t.Fatalf("BuildForStorage() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBucketDomainOnlyForDirectStorage(t *testing.T) {
+	r2 := models.Buckets{Type: "r2", Config: map[string]any{ConfigKey: "img.example.com"}}
+	if got := BucketDomain(r2); got != "https://img.example.com" {
+		t.Fatalf("BucketDomain(r2) = %q", got)
+	}
+	webdav := models.Buckets{Type: "webdav", Config: map[string]any{ConfigKey: "img.example.com"}}
+	if got := BucketDomain(webdav); got != "" {
+		t.Fatalf("BucketDomain(webdav) = %q, want empty", got)
+	}
+	nonString := models.Buckets{Type: "s3", Config: map[string]any{ConfigKey: 42}}
+	if got := BucketDomain(nonString); got != "" {
+		t.Fatalf("BucketDomain(non-string) = %q, want empty", got)
 	}
 }
 

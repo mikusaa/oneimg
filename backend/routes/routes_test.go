@@ -625,6 +625,130 @@ func TestPatchSettingsRejectsInvalidPathTemplateWithFieldProblem(t *testing.T) {
 	}
 }
 
+func TestStorageDirectDomainIsPerBucket(t *testing.T) {
+	cfg := &config.Config{SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
+	router, system := setupTestRouter(t, cfg)
+	db := system.Database.DB
+	local := models.Buckets{Id: 1, Name: "local", Type: "default", Config: map[string]any{}}
+	if err := db.Create(&local).Error; err != nil {
+		t.Fatal(err)
+	}
+	admin := models.User{Username: "domain-admin", Password: "unused", Role: models.RoleAdmin, Permission: models.Permission{Codes: models.AllPermissionCodes(), Buckets: []int{}}}
+	if err := db.Create(&admin).Error; err != nil {
+		t.Fatal(err)
+	}
+	created, err := system.Services.Tokens.Create(admin.ID, services.CreateTokenInput{AuthVersion: admin.AuthVersion, Name: "domain", Scopes: []string{"storage:read", "storage:write", "images:read", "settings:read", "settings:write"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+created.Plain)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		router.ServeHTTP(recorder, req)
+		return recorder
+	}
+	type storagePayload struct {
+		Data struct {
+			ID     int            `json:"id"`
+			Config map[string]any `json:"config"`
+		} `json:"data"`
+	}
+	createR2 := func(name, domain string) storagePayload {
+		t.Helper()
+		body := `{"name":"` + name + `","type":"r2","capacity_bytes":1073741824,"config":{"r2_endpoint":"https://r2.example.com","r2_bucket":"` + name + `","r2_access_key":"ak","r2_secret_key":"sk","public_domain":"` + domain + `"}}`
+		response := call(http.MethodPost, "/api/v1/storage-buckets", body)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("create %s status = %d, body = %s", name, response.Code, response.Body.String())
+		}
+		var payload storagePayload
+		if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		return payload
+	}
+
+	// 系统默认存储仍是本地存储：直链域名不再要求存储是默认存储。
+	direct := createR2("direct", "img.example.com/")
+	if got := direct.Data.Config["public_domain"]; got != "https://img.example.com" {
+		t.Fatalf("normalized domain = %v", got)
+	}
+	proxied := createR2("proxied", "")
+	if _, ok := proxied.Data.Config["public_domain"]; ok {
+		t.Fatalf("empty domain should not be stored: %v", proxied.Data.Config)
+	}
+	images := []models.Image{
+		{FileName: "direct.webp", Url: "/uploads/direct.webp", Thumbnail: "/uploads/direct_thumb.webp", BucketId: direct.Data.ID, Storage: "r2", UserId: admin.ID},
+		{FileName: "proxied.webp", Url: "/uploads/proxied.webp", BucketId: proxied.Data.ID, Storage: "r2", UserId: admin.ID},
+	}
+	if err := db.Create(&images).Error; err != nil {
+		t.Fatal(err)
+	}
+	urls := func() map[string][2]string {
+		t.Helper()
+		response := call(http.MethodGet, "/api/v1/images", "")
+		if response.Code != http.StatusOK {
+			t.Fatalf("images status = %d, body = %s", response.Code, response.Body.String())
+		}
+		var payload struct {
+			Data []struct {
+				FileName  string `json:"file_name"`
+				URL       string `json:"url"`
+				Thumbnail string `json:"thumbnail"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		result := map[string][2]string{}
+		for _, item := range payload.Data {
+			result[item.FileName] = [2]string{item.URL, item.Thumbnail}
+		}
+		return result
+	}
+	got := urls()
+	if got["direct.webp"] != [2]string{"https://img.example.com/uploads/direct.webp", "https://img.example.com/uploads/direct_thumb.webp"} {
+		t.Fatalf("direct urls = %v", got["direct.webp"])
+	}
+	if got["proxied.webp"][0] != "/uploads/proxied.webp" {
+		t.Fatalf("proxied url = %v", got["proxied.webp"])
+	}
+
+	path := "/api/v1/storage-buckets/" + strconv.Itoa(direct.Data.ID)
+	update := func(domain string) *httptest.ResponseRecorder {
+		return call(http.MethodPatch, path, `{"name":"direct","type":"r2","capacity_bytes":1073741824,"config":{"public_domain":"`+domain+`"}}`)
+	}
+	invalid := update("ftp://img.example.com")
+	if invalid.Code != http.StatusUnprocessableEntity || !strings.Contains(invalid.Body.String(), `"field":"config.public_domain"`) {
+		t.Fatalf("invalid domain status = %d, body = %s", invalid.Code, invalid.Body.String())
+	}
+	// 只改域名不涉及端点，不需要重新提供密钥；清空后改回经 OneImg 访问。
+	if cleared := update(""); cleared.Code != http.StatusOK || strings.Contains(cleared.Body.String(), "public_domain") {
+		t.Fatalf("clear domain status = %d, body = %s", cleared.Code, cleared.Body.String())
+	}
+	if got := urls()["direct.webp"][0]; got != "/uploads/direct.webp" {
+		t.Fatalf("cleared url = %q", got)
+	}
+
+	webdav := call(http.MethodPost, "/api/v1/storage-buckets", `{"name":"dav","type":"webdav","capacity_bytes":1073741824,"config":{"webdav_url":"https://dav.example.com","webdav_user":"u","webdav_pass":"p","public_domain":"img.example.com"}}`)
+	if webdav.Code != http.StatusUnprocessableEntity || !strings.Contains(webdav.Body.String(), `"field":"config.public_domain"`) {
+		t.Fatalf("webdav domain status = %d, body = %s", webdav.Code, webdav.Body.String())
+	}
+
+	moved := call(http.MethodPatch, "/api/v1/settings", `{"public_image_domain":"img.example.com"}`)
+	if moved.Code != http.StatusUnprocessableEntity || !strings.Contains(moved.Body.String(), `"code":"moved"`) {
+		t.Fatalf("legacy settings field status = %d, body = %s", moved.Code, moved.Body.String())
+	}
+	settings := call(http.MethodGet, "/api/v1/settings?groups=upload", "")
+	if settings.Code != http.StatusOK || strings.Contains(settings.Body.String(), "public_image_domain") || !strings.Contains(settings.Body.String(), "cdn_domain") {
+		t.Fatalf("upload settings status = %d, body = %s", settings.Code, settings.Body.String())
+	}
+}
+
 func TestDashboardStatsWithSession(t *testing.T) {
 	cfg := &config.Config{AppURL: "http://localhost:8080", SqlitePath: filepath.Join(t.TempDir(), "oneimg.db"), SessionSecret: "test-session-secret", ConfigSecret: "test-config-secret-with-enough-bytes"}
 	router, system := setupTestRouter(t, cfg)

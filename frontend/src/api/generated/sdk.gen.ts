@@ -523,6 +523,8 @@ export const getStorageBucket = <ThrowOnError extends boolean = false>(options: 
  * 更新存储桶
  *
  * 更换端点或账户时必须显式提供新凭证，否则返回 422 credentials_required_for_new_endpoint。
+ * config 只需包含要修改的字段；只修改 public_domain 不需要重新提供凭证，传空字符串表示清除。
+ *
  */
 export const updateStorageBucket = <ThrowOnError extends boolean = false>(options: Options<UpdateStorageBucketData, ThrowOnError>): RequestResult<UpdateStorageBucketResponses, UpdateStorageBucketErrors, ThrowOnError> => (options.client ?? client).patch<UpdateStorageBucketResponses, UpdateStorageBucketErrors, ThrowOnError>({
     security: [{
@@ -733,6 +735,8 @@ export const getSettings = <ThrowOnError extends boolean = false>(options?: Opti
 
 /**
  * 更新系统设置
+ *
+ * 图片直链域名已移到各 S3/R2 存储的 config.public_domain；请求里仍带 public_image_domain 时返回 422 validation_error，errors[].code 为 moved。
  */
 export const updateSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateSettingsData, ThrowOnError>): RequestResult<UpdateSettingsResponses, UpdateSettingsErrors, ThrowOnError> => (options.client ?? client).patch<UpdateSettingsResponses, UpdateSettingsErrors, ThrowOnError>({
     security: [{

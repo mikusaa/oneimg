@@ -195,6 +195,12 @@ func (s *Server) testStorageConnection(c *gin.Context) {
 			writeProblem(c, http.StatusUnprocessableEntity, "credentials_required_for_new_endpoint", "更换存储端点或账户必须提供新凭证")
 			return
 		}
+		var domainErr *services.StorageDomainError
+		if errors.As(err, &domainErr) {
+			writeProblem(c, http.StatusUnprocessableEntity, "validation_error", domainErr.Message,
+				FieldProblem{Field: "config.public_domain", Code: "invalid", Message: domainErr.Message})
+			return
+		}
 		if errors.Is(err, services.ErrStorageTypeInvalid) || errors.Is(err, services.ErrStorageConfigInvalid) {
 			writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "存储配置无效")
 			return
@@ -233,7 +239,11 @@ func handleStorageError(c *gin.Context, err error) bool {
 	if err == nil {
 		return false
 	}
+	var domainErr *services.StorageDomainError
 	switch {
+	case errors.As(err, &domainErr):
+		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", domainErr.Message,
+			FieldProblem{Field: "config.public_domain", Code: "invalid", Message: domainErr.Message})
 	case errors.Is(err, services.ErrNewEndpointCredentials):
 		writeProblem(c, http.StatusUnprocessableEntity, "credentials_required_for_new_endpoint", "更换存储端点或账户必须提供新凭证")
 	case errors.Is(err, gorm.ErrRecordNotFound):
@@ -241,7 +251,7 @@ func handleStorageError(c *gin.Context, err error) bool {
 	case errors.Is(err, services.ErrDefaultStorage):
 		writeProblem(c, http.StatusForbidden, "default_storage_protected", "本地默认存储不能修改或删除")
 	case errors.Is(err, services.ErrStorageInUseAsDefault):
-		writeProblem(c, http.StatusConflict, "storage_is_upload_default", "该存储是当前系统默认存储，请先在“系统设置 → 存储设置”中切换默认存储后再删除或停用")
+		writeProblem(c, http.StatusConflict, "storage_is_upload_default", "该存储是当前系统默认存储，请先在存储页切换默认存储后再删除或停用")
 	case errors.Is(err, services.ErrStorageTypeInvalid), errors.Is(err, services.ErrStorageConfigInvalid), errors.Is(err, services.ErrStorageCapacity):
 		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "存储配置无效")
 	case errors.Is(err, services.ErrStorageDelete):

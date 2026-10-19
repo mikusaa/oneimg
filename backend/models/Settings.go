@@ -28,8 +28,8 @@ type Settings struct {
 	FileName           string `gorm:"column:file_name;default:'{random}'" json:"file_name"`                                                   // 上传文件名称，魔法变量 {random} 随机数 {year} 年 {month} 月 {day} 日 {hour} 小时 {minute} 分钟 {second} 秒
 
 	// 图片直链设置
-	PublicImageDomain string `gorm:"column:public_image_domain;default:''" json:"public_image_domain"` // 图片直链域名（用于非本地存储直接访问）
-	CDNDomain         string `gorm:"column:cdn_domain;default:''" json:"cdn_domain"`                   // 本地存储CDN域名（根路径指向uploads目录）
+	PublicImageDomain string `gorm:"column:public_image_domain;default:''" json:"-"` // 已废弃：直链域名改存于 S3/R2 存储配置的 public_domain，启动迁移后清空，保留列以便回滚
+	CDNDomain         string `gorm:"column:cdn_domain;default:''" json:"cdn_domain"` // 本地存储CDN域名（根路径指向uploads目录）
 
 	// 来源白名单设置
 	RefererWhiteEnable bool   `gorm:"column:referer_white_enable;default:false" json:"referer_white_enable"` // 是否启用白名单

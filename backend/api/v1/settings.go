@@ -30,7 +30,7 @@ type settingsPatchRequest struct {
 	SkipCompressFormats *string `json:"skip_compress_formats"`
 	DefaultPath         *string `json:"default_path"`
 	FileName            *string `json:"file_name"`
-	PublicImageDomain   *string `json:"public_image_domain"`
+	PublicImageDomain   *string `json:"public_image_domain"` // 已移到 S3/R2 存储配置，只用于返回明确错误
 	CDNDomain           *string `json:"cdn_domain"`
 	RefererWhiteEnable  *bool   `json:"referer_white_enable"`
 	RefererWhiteList    *string `json:"referer_white_list"`
@@ -56,7 +56,7 @@ func (s *Server) getSettings(c *gin.Context) {
 	all := settingsMap(item)
 	result := map[string]any{}
 	keys := map[string][]string{
-		"upload":   {"default_storage", "default_path", "file_name", "max_file_size", "video_upload_enabled", "max_video_file_size", "allowed_types", "save_original_name", "public_image_domain", "cdn_domain"},
+		"upload":   {"default_storage", "default_path", "file_name", "max_file_size", "video_upload_enabled", "max_video_file_size", "allowed_types", "save_original_name", "cdn_domain"},
 		"image":    {"original_image", "save_webp", "thumbnail", "main_image_quality", "skip_compress_formats"},
 		"security": {"registration_enabled", "referer_white_enable", "referer_white_list"},
 		"seo":      {"seo_title", "seo_description", "seo_keywords", "seo_icp", "public_security", "seo_icon"},
@@ -73,6 +73,12 @@ func (s *Server) getSettings(c *gin.Context) {
 func (s *Server) patchSettings(c *gin.Context) {
 	var input settingsPatchRequest
 	if !bindJSON(c, &input) {
+		return
+	}
+	if input.PublicImageDomain != nil {
+		message := "图片直链域名已改为在各 S3/R2 存储中设置，请使用存储接口的 config.public_domain"
+		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", message,
+			FieldProblem{Field: "public_image_domain", Code: "moved", Message: message})
 		return
 	}
 	user, _ := currentUser(c)
@@ -93,8 +99,8 @@ func (s *Server) patchSettings(c *gin.Context) {
 		VideoUploadEnabled: input.VideoUploadEnabled, MaxVideoFileSize: input.MaxVideoFileSize,
 		DefaultStorage: input.DefaultStorage, MaxFileSize: input.MaxFileSize, AllowedTypes: input.AllowedTypes,
 		MainImageQuality: input.MainImageQuality, SkipCompressFormats: input.SkipCompressFormats,
-		DefaultPath: input.DefaultPath, FileName: input.FileName, PublicImageDomain: input.PublicImageDomain,
-		CDNDomain: input.CDNDomain, RefererWhiteEnable: input.RefererWhiteEnable, RefererWhiteList: input.RefererWhiteList,
+		DefaultPath: input.DefaultPath, FileName: input.FileName, CDNDomain: input.CDNDomain,
+		RefererWhiteEnable: input.RefererWhiteEnable, RefererWhiteList: input.RefererWhiteList,
 		SEOTitle: input.SEOTitle, SEODescription: input.SEODescription, SEOKeywords: input.SEOKeywords,
 		SEOICP: input.SEOICP, PublicSecurity: input.PublicSecurity, SEOIcon: input.SEOIcon,
 	})
@@ -164,7 +170,7 @@ func (r settingsPatchRequest) groups() []string {
 			result = append(result, group)
 		}
 	}
-	if r.VideoUploadEnabled != nil || r.MaxVideoFileSize != nil || r.DefaultStorage != nil || r.MaxFileSize != nil || r.AllowedTypes != nil || r.SaveOriginalName != nil || r.DefaultPath != nil || r.FileName != nil || r.PublicImageDomain != nil || r.CDNDomain != nil {
+	if r.VideoUploadEnabled != nil || r.MaxVideoFileSize != nil || r.DefaultStorage != nil || r.MaxFileSize != nil || r.AllowedTypes != nil || r.SaveOriginalName != nil || r.DefaultPath != nil || r.FileName != nil || r.CDNDomain != nil {
 		add("upload")
 	}
 	if r.OriginalImage != nil || r.SaveWebP != nil || r.Thumbnail != nil || r.MainImageQuality != nil || r.SkipCompressFormats != nil {
@@ -186,8 +192,8 @@ func settingsMap(item models.Settings) map[string]any {
 		"registration_enabled": item.StartRegister, "save_original_name": item.SaveOriginalName,
 		"default_storage": item.DefaultStorage, "max_file_size": item.MaxFileSize, "allowed_types": item.AllowedTypes,
 		"main_image_quality": item.MainImageQuality, "skip_compress_formats": item.SkipCompressFormat,
-		"default_path": item.DefaultPath, "file_name": item.FileName, "public_image_domain": item.PublicImageDomain,
-		"cdn_domain": item.CDNDomain, "referer_white_enable": item.RefererWhiteEnable, "referer_white_list": item.RefererWhiteList,
+		"default_path": item.DefaultPath, "file_name": item.FileName, "cdn_domain": item.CDNDomain,
+		"referer_white_enable": item.RefererWhiteEnable, "referer_white_list": item.RefererWhiteList,
 		"seo_title": item.SEOTitle, "seo_description": item.SEODescription, "seo_keywords": item.SEOKeywords,
 		"seo_icp": item.SEOICP, "public_security": item.PublicSecurity, "seo_icon": item.SEOicon,
 	}

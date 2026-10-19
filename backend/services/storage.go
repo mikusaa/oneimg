@@ -12,6 +12,7 @@ import (
 	"oneimg/backend/models"
 	utilsBuckets "oneimg/backend/utils/buckets"
 	"oneimg/backend/utils/ftp"
+	"oneimg/backend/utils/publicurl"
 	"oneimg/backend/utils/s3"
 	"oneimg/backend/utils/secureconfig"
 	"oneimg/backend/utils/webdav"
@@ -33,6 +34,13 @@ var (
 	ErrPermissionDenied       = errors.New("permission denied")
 	ErrNewEndpointCredentials = errors.New("credentials required for new endpoint")
 )
+
+// StorageDomainError 表示直链域名无效，Message 可以直接展示给用户。
+type StorageDomainError struct {
+	Message string
+}
+
+func (e *StorageDomainError) Error() string { return e.Message }
 
 type FilesystemMetrics struct {
 	TotalBytes     uint64
@@ -181,7 +189,39 @@ func validateStorageInput(input StorageInput, allowDefault bool) (StorageInput, 
 			return input, ErrStorageConfigInvalid
 		}
 	}
+	if err := normalizeStorageDomain(&input); err != nil {
+		return input, err
+	}
 	return input, nil
+}
+
+// normalizeStorageDomain 校验并规范 S3/R2 的直链域名；其他类型不经存储域名访问，不能保存该字段。
+func normalizeStorageDomain(input *StorageInput) error {
+	raw, exists := input.Config[publicurl.ConfigKey]
+	if !exists {
+		return nil
+	}
+	value, ok := raw.(string)
+	if raw != nil && !ok {
+		return &StorageDomainError{Message: "访问域名必须是字符串"}
+	}
+	if !publicurl.SupportsStorage(input.Type) {
+		if strings.TrimSpace(value) != "" {
+			return &StorageDomainError{Message: "只有 S3 和 R2 存储可以设置直链域名"}
+		}
+		delete(input.Config, publicurl.ConfigKey)
+		return nil
+	}
+	domain, err := publicurl.NormalizeDomain(value)
+	if err != nil {
+		return &StorageDomainError{Message: err.Error()}
+	}
+	if domain == "" {
+		delete(input.Config, publicurl.ConfigKey)
+	} else {
+		input.Config[publicurl.ConfigKey] = domain
+	}
+	return nil
 }
 
 func (s *StorageService) Create(input StorageInput) (models.Buckets, error) {
