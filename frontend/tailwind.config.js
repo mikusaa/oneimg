@@ -8,19 +8,6 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: '#2563eb',
-        'primary-light': '#3b82f6',
-        'primary-dark': '#1d4ed8',
-        secondary: '#64748b',
-        success: '#10b981',
-        warning: '#f59e0b',
-        danger: '#ef4444',
-        'dark-100': '#334155',
-        'dark-200': '#1e293b',
-        'dark-300': '#0f172a',
-        'light-100': '#f8fafc',
-        'light-200': '#e2e8f0',
-        'light-300': '#cbd5e1',
         // 新界面设计变量（见 src/assets/tokens.css），使用 CSS 变量，不支持 /50 这类透明度写法
         oi: {
           bg: 'var(--oi-bg)',

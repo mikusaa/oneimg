@@ -16,6 +16,8 @@ declare module 'vue-router' {
     permissions?: string[]
     /** 页面自己控制内边距，内容铺满内容面板（如上传页的右侧栏） */
     bleed?: boolean
+    /** 登录、注册：公开页面里品牌放在卡片中，背景加光晕 */
+    auth?: boolean
   }
 }
 

@@ -2,6 +2,7 @@
 // UiToaster 和 UiConfirmHost 在 App.vue 中挂载一次，页面里直接调用 toast() 和 confirm()。
 export { default as UiButton } from './UiButton.vue'
 export { default as UiInput } from './UiInput.vue'
+export { default as UiPasswordInput } from './UiPasswordInput.vue'
 export { default as UiField } from './UiField.vue'
 export { default as UiSwitch } from './UiSwitch.vue'
 export { default as UiSegmented } from './UiSegmented.vue'
