@@ -7,16 +7,51 @@
 ![Vue 版本](https://img.shields.io/badge/Vue-3-42B883?logo=vuedotjs&logoColor=white)
 ![SQLite](https://img.shields.io/badge/database-SQLite-003B57?logo=sqlite&logoColor=white)
 
-OneImg 是面向个人图床和受控多账号使用的自托管媒体管理工具。本项目是基于 [onexru/oneimg](https://github.com/onexru/oneimg) 维护的个人部署分支，使用 Go、Vue 3 和 SQLite。
+OneImg 是面向个人图床和受控多账号使用的自托管媒体管理工具：上传图片后直接复制可引用的链接，再在图库里按标签、存储和日期整理。本项目是基于 [onexru/oneimg](https://github.com/onexru/oneimg) 维护的个人部署分支，使用 Go、Vue 3 和 SQLite，单个容器即可运行。
 
-## 主要功能
+![OneImg 图库：按日期分组，侧栏按类型、标签、存储和上传者筛选](docs/images/gallery.webp)
 
-- **上传与处理**：文件选择、拖拽、剪贴板图片和图片 URL 导入；批量上传、内容哈希去重、WebP 转换、压缩与缩略图。
-- **视频**：可选开启 MP4 / WebM 原文件上传和站内播放，不转码、不依赖 FFmpeg。
-- **存储**：本地、S3/R2、WebDAV 和 FTP；支持配置 CDN 或图片直链域名。
-- **整理与分享**：标签、文件名 / URL / 哈希搜索、图片与视频筛选、批量复制多种外链格式，以及历史本地图片导入。
-- **账号与集成**：多账号与细粒度权限、密码和 Passkey 登录、带 scope 的个人访问令牌（PAT）及 API v1。
-- **界面**：适配桌面与移动端，支持浅色、深色和跟随系统主题。
+## 功能重点
+
+- **上传快，不重复**：支持文件选择、拖拽、粘贴和图片 URL 导入，在任意页面拖入或粘贴都会进入上传队列，`U` / `G` 快捷键切换上传页和图库。按内容哈希去重，重复文件直接返回已有链接；可选 WebP 转换、压缩和缩略图。
+- **复制链接顺手**：上传结果、文件详情和全屏查看器都能复制 URL、Markdown、HTML、BBCode 等格式，图库可批量复制，所选格式保存在当前浏览器。
+- **图库好找**：按上传日期分组，可按类型、标签、存储和上传者筛选，按文件名、URL 或内容哈希搜索；筛选条件保存在地址中，可以收藏。统计页显示数量、体积、上传趋势和格式分布。
+- **多种存储**：支持本地、S3/R2、WebDAV 和 FTP。本地存储可设置 CDN 域名，每个 S3/R2 存储可单独设置直链域名；停用存储不影响已有外链，删除存储默认保留远端文件。
+- **账号与集成**：多账号与细粒度权限，密码和 Passkey 登录，带 scope 的个人访问令牌（PAT）及 API v1。
+- **可选视频**：开启后可上传 MP4 / WebM 原文件并在站内播放，不转码、不依赖 FFmpeg。
+- **稳妥的默认值**：新图片只接受内容确为 JPEG / PNG / GIF / WebP 的文件，拒绝 SVG 和改扩展名的伪装文件；服务器限制图像尺寸；首次启动生成随机管理员密码。这些措施用于降低常见风险，不等于完整的安全保证，部署要求见[升级指南](docs/upgrading.md)。
+- **桌面与移动端**：移动端使用底部导航，支持浅色、深色和跟随系统主题。
+
+## 界面预览
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/upload.webp" alt="上传页：上传结果可逐个或全部复制链接，重复文件返回已有链接"></td>
+    <td width="50%"><img src="docs/images/detail.webp" alt="文件详情：多种格式的链接、标签和文件信息"></td>
+  </tr>
+  <tr>
+    <td align="center">上传：逐个或全部复制链接，重复文件返回已有链接</td>
+    <td align="center">文件详情：多种链接格式、标签与文件信息</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/stats.webp" alt="统计页：数量、体积、上传趋势、格式和大小分布"></td>
+    <td><img src="docs/images/settings.webp" alt="系统设置：上传规则、存储路径与文件名"></td>
+  </tr>
+  <tr>
+    <td align="center">统计：上传趋势、格式与大小分布</td>
+    <td align="center">系统设置：上传规则、存储路径与文件名</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/gallery-dark.webp" alt="深色主题下的图库"></td>
+    <td><img src="docs/images/mobile.webp" alt="移动端的上传页和图库"></td>
+  </tr>
+  <tr>
+    <td align="center">深色主题</td>
+    <td align="center">移动端</td>
+  </tr>
+</table>
+
+截图来自临时数据库，示例图片为程序生成。
 
 ## 快速启动
 
