@@ -43,6 +43,10 @@ export type Permission = {
 export type User = {
     id: number;
     username: string;
+    /**
+     * 头像地址（相对于站点根路径），未上传时为 null
+     */
+    avatar_url: string | null;
     role: 1 | 3;
     permission: Permission;
     created_at: string;
@@ -758,6 +762,66 @@ export type RevokePasskeyResponses = {
 };
 
 export type RevokePasskeyResponse = RevokePasskeyResponses[keyof RevokePasskeyResponses];
+
+export type DeleteMyAvatarData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/me/avatar';
+};
+
+export type DeleteMyAvatarErrors = {
+    /**
+     * RFC 9457 问题详情
+     */
+    default: Problem;
+};
+
+export type DeleteMyAvatarError = DeleteMyAvatarErrors[keyof DeleteMyAvatarErrors];
+
+export type DeleteMyAvatarResponses = {
+    /**
+     * 用户信息
+     */
+    200: {
+        data: User;
+    };
+};
+
+export type DeleteMyAvatarResponse = DeleteMyAvatarResponses[keyof DeleteMyAvatarResponses];
+
+export type UpdateMyAvatarData = {
+    body: {
+        avatar: Blob | File;
+    };
+    path?: never;
+    query?: never;
+    url: '/me/avatar';
+};
+
+export type UpdateMyAvatarErrors = {
+    /**
+     * image_processing_busy，图像处理繁忙
+     */
+    503: Problem;
+    /**
+     * RFC 9457 问题详情
+     */
+    default: Problem;
+};
+
+export type UpdateMyAvatarError = UpdateMyAvatarErrors[keyof UpdateMyAvatarErrors];
+
+export type UpdateMyAvatarResponses = {
+    /**
+     * 用户信息
+     */
+    200: {
+        data: User;
+    };
+};
+
+export type UpdateMyAvatarResponse = UpdateMyAvatarResponses[keyof UpdateMyAvatarResponses];
 
 export type ListPersonalTokensData = {
     body?: never;
@@ -1631,6 +1695,38 @@ export type CreateUserResponses = {
 };
 
 export type CreateUserResponse = CreateUserResponses[keyof CreateUserResponses];
+
+export type GetUserAvatarData = {
+    body?: never;
+    path: {
+        id: number;
+    };
+    query?: {
+        /**
+         * 头像版本；与当前版本一致时响应可长期缓存
+         */
+        v?: string;
+    };
+    url: '/users/{id}/avatar';
+};
+
+export type GetUserAvatarErrors = {
+    /**
+     * RFC 9457 问题详情
+     */
+    default: Problem;
+};
+
+export type GetUserAvatarError = GetUserAvatarErrors[keyof GetUserAvatarErrors];
+
+export type GetUserAvatarResponses = {
+    /**
+     * 256×256 WebP 头像
+     */
+    200: Blob | File;
+};
+
+export type GetUserAvatarResponse = GetUserAvatarResponses[keyof GetUserAvatarResponses];
 
 export type DeleteUserData = {
     body?: never;

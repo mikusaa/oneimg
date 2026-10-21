@@ -17,6 +17,7 @@ type User struct {
 	AuthVersion            int64      `json:"-" gorm:"not null;default:1"`
 	PasswordChangeRequired bool       `json:"password_change_required" gorm:"not null;default:false"`
 	BootstrapCodeHash      *string    `json:"-" gorm:"type:text"`
+	Avatar                 *string    `json:"-" gorm:"type:text"`
 	Permission             Permission `json:"permission" gorm:"type:jsonb"`
 	CreatedAt              time.Time  `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt              time.Time  `json:"updated_at" gorm:"autoUpdateTime"`

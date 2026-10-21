@@ -168,6 +168,34 @@ paths:
       responses:
         '204': { $ref: '#/components/responses/NoContentResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
+  /me/avatar:
+    put:
+      operationId: updateMyAvatar
+      summary: 上传或替换当前账户头像
+      description: 只接受浏览器会话。服务器把 JPEG、PNG、GIF、WebP 静态图居中裁成 256×256 并重新编码为 WebP，原图最大 10 MiB，不计入存储配额。
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [avatar]
+              properties:
+                avatar: { type: string, format: binary }
+      responses:
+        '200': { $ref: '#/components/responses/UserResponse' }
+        '503': { $ref: '#/components/responses/ImageProcessingBusyResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
+    delete:
+      operationId: deleteMyAvatar
+      summary: 移除当前账户头像
+      tags: [Account]
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/UserResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
   /me/tokens:
     get:
       operationId: listPersonalTokens
@@ -490,6 +518,18 @@ paths:
       responses:
         '201': { $ref: '#/components/responses/UserResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
+  /users/{id}/avatar:
+    parameters:
+      - { $ref: '#/components/parameters/ID' }
+      - { name: v, in: query, required: false, schema: { type: string }, description: 头像版本；与当前版本一致时响应可长期缓存 }
+    get:
+      operationId: getUserAvatar
+      summary: 读取用户头像
+      description: 可以读取自己的头像；读取他人头像需要 users:read scope 和 user:list 权限。地址取自用户信息中的 avatar_url。
+      tags: [Users]
+      responses:
+        '200': { $ref: '#/components/responses/AvatarImageResponse' }
+        default: { $ref: '#/components/responses/ProblemResponse' }
   /users/{id}:
     parameters: [{ $ref: '#/components/parameters/ID' }]
     patch:
@@ -635,6 +675,10 @@ components:
       description: 用户信息
       headers: { X-Request-ID: { schema: { type: string } }, Location: { schema: { type: string } } }
       content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: '#/components/schemas/User' } } } } }
+    AvatarImageResponse:
+      description: 256×256 WebP 头像
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { image/webp: { schema: { type: string, format: binary } } }
     UserCollectionResponse:
       description: 分页用户列表
       headers: { X-Request-ID: { schema: { type: string } } }
@@ -717,10 +761,11 @@ components:
       properties: { codes: { type: array, items: { type: string } }, bucket_ids: { type: array, items: { type: integer, minimum: 1 } } }
     User:
       type: object
-      required: [id, username, role, permission, created_at, updated_at, password_change_required, bootstrap_verification_required]
+      required: [id, username, avatar_url, role, permission, created_at, updated_at, password_change_required, bootstrap_verification_required]
       properties:
         id: { type: integer }
         username: { type: string }
+        avatar_url: { type: [string, 'null'], description: 头像地址（相对于站点根路径），未上传时为 null }
         role: { type: integer, enum: [1, 3] }
         permission: { $ref: '#/components/schemas/Permission' }
         created_at: { type: string, format: date-time }

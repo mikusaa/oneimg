@@ -45,6 +45,9 @@ export const fieldErrors = (error: unknown): Record<string, string> => {
 
 const baseURL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
+/** 接口返回的站内地址（如 avatar_url）加上 API 基础地址 */
+export const resolveApiURL = (path: string) => (path.startsWith('/api/') ? `${baseURL}${path}` : path)
+
 function csrfToken(): string | undefined {
   const value = document.cookie.split('; ').find(item => item.startsWith('oneimg-csrf='))?.slice('oneimg-csrf='.length)
   return value ? decodeURIComponent(value) : undefined
@@ -134,6 +137,13 @@ export const api = {
   resetUserPassword: (id: number) => request<{ new_password: string }>(`/users/${id}/password-reset`, { method: 'POST' }),
   revokeUserPasskeys: (id: number) => request<void>(`/users/${id}/passkeys/revoke`, { method: 'POST' }),
   deleteUser: (id: number) => request<void>(`/users/${id}`, { method: 'DELETE' }),
+  /** 上传后服务器裁成正方形并转为 WebP，返回更新后的用户 */
+  updateMyAvatar: (file: File) => {
+    const form = new FormData()
+    form.append('avatar', file)
+    return request<User>('/me/avatar', { method: 'PUT', body: form })
+  },
+  deleteMyAvatar: () => request<User>('/me/avatar', { method: 'DELETE' }),
   listPasskeys: () => request<PasskeyRecord[]>('/me/passkeys'),
   passkeyRegistrationOptions: (body: { name: string; current_password: string }) => request<{ options: unknown }>('/me/passkeys/registration/options', { method: 'POST', body: JSON.stringify(body) }),
   passkeyRegistrationVerify: (body: unknown) => request<unknown>('/me/passkeys/registration/verify', { method: 'POST', body: JSON.stringify(body) }),

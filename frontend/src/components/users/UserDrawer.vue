@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { api, ApiError, errorMessage, type ManagedUser } from '@/api/client.ts'
 import { usernameError } from '@/components/auth/auth'
 import StorageTypeIcon from '@/components/storage/StorageTypeIcon.vue'
-import { toast, UiButton, UiDrawer, UiField, UiInput, UiSegmented, UiSwitch } from '@/components/ui'
+import { toast, UiAvatar, UiButton, UiDrawer, UiField, UiInput, UiSegmented, UiSwitch } from '@/components/ui'
 import { ROLE_ADMIN, ROLE_USER } from '@/utils/permissions.ts'
 import { ALL_CODES, PERMISSION_GROUPS } from './permissions'
 import type { UserStorage } from './types'
@@ -114,7 +114,7 @@ const save = async () => {
 <template>
   <UiDrawer v-model:open="open" :title="user?.username ?? ''" description="角色与权限">
     <template #leading>
-      <span class="grid h-8 w-8 flex-none place-items-center rounded-full bg-[linear-gradient(135deg,#7c8cf8,#ec7598)] text-[13px] font-semibold text-white" aria-hidden="true">{{ [...(user?.username ?? '?')][0].toUpperCase() }}</span>
+      <UiAvatar :name="user?.username" :src="user?.avatar_url" />
     </template>
 
     <form id="user-drawer-form" class="flex flex-col gap-5" novalidate @submit.prevent="save">

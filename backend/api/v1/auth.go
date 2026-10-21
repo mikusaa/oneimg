@@ -17,6 +17,7 @@ import (
 type userDTO struct {
 	ID                            int           `json:"id"`
 	Username                      string        `json:"username"`
+	AvatarURL                     *string       `json:"avatar_url"`
 	Role                          int           `json:"role"`
 	Permission                    permissionDTO `json:"permission"`
 	CreatedAt                     time.Time     `json:"created_at"`
@@ -31,8 +32,13 @@ type permissionDTO struct {
 }
 
 func toUserDTO(user models.User) userDTO {
+	var avatarURL *string
+	if version := services.AvatarVersion(user); version != "" {
+		value := "/api/v1/users/" + itoa(user.ID) + "/avatar?v=" + version
+		avatarURL = &value
+	}
 	return userDTO{
-		ID: user.ID, Username: user.Username, Role: user.Role,
+		ID: user.ID, Username: user.Username, AvatarURL: avatarURL, Role: user.Role,
 		Permission: permissionDTO{Codes: user.Permission.Codes, BucketIDs: user.Permission.Buckets},
 		CreatedAt:  user.CreatedAt.UTC(), UpdatedAt: user.UpdatedAt.UTC(),
 		PasswordChangeRequired: user.PasswordChangeRequired, BootstrapVerificationRequired: user.BootstrapCodeHash != nil,

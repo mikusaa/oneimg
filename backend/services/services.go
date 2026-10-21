@@ -14,6 +14,7 @@ type Services struct {
 	Tags     *TagService
 	Images   *ImageService
 	Users    *UserService
+	Avatars  *AvatarService
 	Settings *SettingsService
 	Stats    *StatsService
 	Storage  *StorageService
@@ -30,7 +31,9 @@ func New(db *database.Database, cfg *config.Config) *Services {
 	result.Passkeys = NewPasskeyService(db.DB, result.Accounts)
 	result.Tags = NewTagService(db.DB)
 	result.Images = NewImageService(db.DB)
+	result.Avatars = NewAvatarService(db.DB, filepath.Join(filepath.Dir(cfg.SqlitePath), "avatars"))
 	result.Users = NewUserService(db.DB)
+	result.Users.avatars = result.Avatars
 	result.Settings = NewSettingsService(db.DB)
 	result.Stats = NewStatsService(db.DB)
 	result.Storage = NewStorageService(db.DB)

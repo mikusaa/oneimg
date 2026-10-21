@@ -4,6 +4,7 @@ import { getStoredUser, hasAnyPermission, isSuperAdmin, ROLE_ADMIN } from '@/uti
 export interface SessionUser {
   id?: number
   username?: string
+  avatar_url?: string | null
   role?: number
   password_change_required?: boolean
   bootstrap_verification_required?: boolean

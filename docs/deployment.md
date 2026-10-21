@@ -59,7 +59,7 @@ docker build -t oneimg:local .
 
 | 宿主机目录 | 容器目录 | 内容 |
 | --- | --- | --- |
-| `./data` | `/app/data` | SQLite 数据库、应用 `.env`、本地缩略图，以及初始化 / 恢复文件 |
+| `./data` | `/app/data` | SQLite 数据库、应用 `.env`、本地缩略图、用户头像（数据库所在目录的 `avatars/`），以及初始化 / 恢复文件 |
 | `./uploads` | `/app/uploads` | 本地图片主文件和视频原文件 |
 
 默认数据库路径为 `/app/data/data.db`。远端存储的媒体不在这些目录中，需要独立备份；数据库与配置仍需保留。备份应保持数据库、配置和媒体一致，操作见[升级指南](upgrading.md#通用升级流程)。

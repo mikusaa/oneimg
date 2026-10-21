@@ -30,6 +30,8 @@ func (s *Server) Register(engine *gin.Engine) {
 	auth.POST("/me/passkeys/registration/verify", requireSession(), s.passkeyRegistrationVerify)
 	auth.PATCH("/me/passkeys/:id", requireSession(), s.renamePasskey)
 	auth.POST("/me/passkeys/:id/revoke", requireSession(), s.revokePasskey)
+	auth.PUT("/me/avatar", requireSession(), s.limitByPrincipal("avatar", 10, time.Minute), s.updateMyAvatar)
+	auth.DELETE("/me/avatar", requireSession(), s.deleteMyAvatar)
 	auth.GET("/me/tokens", requireSession(), s.listTokens)
 	auth.POST("/me/tokens", requireSession(), s.createToken)
 	auth.POST("/me/tokens/:id/revoke", requireSession(), s.revokeToken)
@@ -64,6 +66,7 @@ func (s *Server) Register(engine *gin.Engine) {
 
 	auth.GET("/users", requireScope("users:read"), requirePermission("user:list"), s.listUsers)
 	auth.POST("/users", requireScope("users:write"), requirePermission("user:create"), s.createUser)
+	auth.GET("/users/:id/avatar", s.getUserAvatar)
 	auth.PATCH("/users/:id", requireScope("users:write"), requirePermission("user:role:update"), s.updateUser)
 	auth.DELETE("/users/:id", requireScope("users:write"), requirePermission("user:delete"), s.deleteUser)
 	auth.PUT("/users/:id/permissions", requireScope("users:write"), requirePermission("user:permission:update"), s.updateUserPermissions)

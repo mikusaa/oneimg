@@ -132,7 +132,7 @@ unset ONEIMG_TOKEN
 
 ## 浏览器认证与完整契约
 
-项目网页使用 Session Cookie，写请求还需匹配的 `X-OneImg-CSRF`；外部集成优先使用 PAT，无需自行模拟网页登录。令牌管理仅接受浏览器会话，不能使用现有 PAT 创建另一枚 PAT。修改密码、注册或撤销 Passkey 等敏感操作还需当前密码。
+项目网页使用 Session Cookie，写请求还需匹配的 `X-OneImg-CSRF`；外部集成优先使用 PAT，无需自行模拟网页登录。令牌管理和头像上传 / 移除仅接受浏览器会话，不能使用现有 PAT 创建另一枚 PAT。修改密码、注册或撤销 Passkey 等敏感操作还需当前密码。
 
 在自己的部署中访问以下地址，将 `https://oneimg.example.com` 换成实际 Origin：
 

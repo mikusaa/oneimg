@@ -7,8 +7,8 @@ import AccountProfile from '@/components/account/AccountProfile.vue'
 import AccountTokens from '@/components/account/AccountTokens.vue'
 import SiteFooter from '@/components/shell/SiteFooter.vue'
 import { useLogout } from '@/components/shell/useLogout'
-import { toast, UiButton, UiSegmented } from '@/components/ui'
-import { useSession } from '@/composables/useSession'
+import { toast, UiAvatar, UiButton, UiSegmented } from '@/components/ui'
+import { setSessionUser, useSession } from '@/composables/useSession'
 import { THEME_OPTIONS, useTheme, type ThemePreference } from '@/composables/useTheme'
 import { ROLE_ADMIN } from '@/utils/permissions.ts'
 
@@ -16,8 +16,43 @@ const { user, roleLabel, mustChangePassword } = useSession()
 const bootstrap = computed(() => !!user.value.bootstrap_verification_required)
 const isAdmin = computed(() => Number(user.value.role) === ROLE_ADMIN)
 const username = computed(() => user.value.username ?? '')
-const initial = computed(() => [...username.value][0]?.toUpperCase() ?? '?')
 const joined = ref('')
+
+/* ---------- 头像：服务器裁成正方形并转为 WebP，不计入存储配额 ---------- */
+const AVATAR_MAX_BYTES = 10 * 1024 * 1024
+const avatarInput = ref<HTMLInputElement | null>(null)
+const avatarBusy = ref(false)
+const hasAvatar = computed(() => !!user.value.avatar_url)
+const uploadAvatar = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (file.size > AVATAR_MAX_BYTES) {
+    toast.error('头像文件不能超过 10 MiB')
+    return
+  }
+  avatarBusy.value = true
+  try {
+    setSessionUser(await api.updateMyAvatar(file))
+    toast.success('头像已更新')
+  } catch (error) {
+    toast.error(errorMessage(error, '上传头像失败'))
+  } finally {
+    avatarBusy.value = false
+  }
+}
+const removeAvatar = async () => {
+  avatarBusy.value = true
+  try {
+    setSessionUser(await api.deleteMyAvatar())
+    toast.success('已移除头像')
+  } catch (error) {
+    toast.error(errorMessage(error, '移除头像失败'))
+  } finally {
+    avatarBusy.value = false
+  }
+}
 
 /* ---------- Passkey 与令牌 ---------- */
 const passkeys = ref<PasskeyRecord[]>([])
@@ -99,12 +134,20 @@ const themeOptions = THEME_OPTIONS.map(option => ({ value: option.value, label: 
     <div
       class="relative mb-5 flex flex-wrap items-center gap-[18px] overflow-hidden rounded-[22px] border border-oi-line bg-oi-panel bg-[radial-gradient(80%_140%_at_100%_0%,color-mix(in_srgb,var(--oi-sakura)_16%,transparent),transparent_60%),radial-gradient(80%_140%_at_0%_100%,color-mix(in_srgb,var(--oi-accent)_14%,transparent),transparent_60%)] p-[22px] min-[900px]:flex-nowrap"
     >
-      <span class="grid h-16 w-16 flex-none place-items-center rounded-full bg-[linear-gradient(135deg,#7c8cf8,#ec7598)] text-2xl font-semibold text-white" aria-hidden="true">{{ initial }}</span>
+      <UiAvatar :name="username" :src="user.avatar_url" size="lg" />
       <div class="min-w-0 flex-1">
         <h2 class="truncate text-xl font-[680] tracking-[-0.02em] text-oi-ink">{{ username }}</h2>
         <p class="mt-0.5 text-[13px] text-oi-muted">
           {{ roleLabel }}<template v-if="user.id"> · ID {{ user.id }}</template><template v-if="joined"> · 加入于 {{ new Date(joined).toLocaleDateString('zh-CN') }}</template>
         </p>
+        <div v-if="!mustChangePassword" class="mt-2.5 flex flex-wrap items-center gap-2">
+          <UiButton size="sm" :disabled="avatarBusy" @click="avatarInput?.click()">
+            <i :class="avatarBusy ? 'ri-loader-4-line animate-spin' : 'ri-image-edit-line'" aria-hidden="true" />{{ hasAvatar ? '更换头像' : '上传头像' }}
+          </UiButton>
+          <UiButton v-if="hasAvatar" size="sm" variant="ghost" :disabled="avatarBusy" @click="removeAvatar">移除</UiButton>
+          <span class="text-xs text-oi-muted">JPEG、PNG、GIF、WebP 静态图，不超过 10 MiB，居中裁成正方形</span>
+          <input ref="avatarInput" type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" aria-label="选择头像图片" @change="uploadAvatar">
+        </div>
       </div>
       <dl v-if="!mustChangePassword" class="flex w-full gap-7 min-[900px]:ml-auto min-[900px]:w-auto">
         <div class="flex flex-col-reverse">

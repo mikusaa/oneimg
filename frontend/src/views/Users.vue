@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, errorMessage, type ManagedUser } from '@/api/client.ts'
 import LinkBox from '@/components/media/LinkBox.vue'
-import { confirm, toast, UiButton, UiDialog, UiMenu, UiMenuItem, UiMenuSeparator, UiSegmented } from '@/components/ui'
+import { confirm, toast, UiAvatar, UiButton, UiDialog, UiMenu, UiMenuItem, UiMenuSeparator, UiSegmented } from '@/components/ui'
 import UserCreateDialog from '@/components/users/UserCreateDialog.vue'
 import UserDrawer from '@/components/users/UserDrawer.vue'
 import { ALL_CODES } from '@/components/users/permissions'
@@ -131,7 +131,6 @@ const formatDate = (value: string) => {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('zh-CN')
 }
-const initial = (name: string) => [...name][0]?.toUpperCase() ?? '?'
 
 /* ---------- 新建、编辑 ---------- */
 const createOpen = ref(false)
@@ -252,7 +251,7 @@ const removeUser = async (user: ManagedUser) => {
           >
             <td>
               <div class="flex min-w-0 items-center gap-2.5">
-                <span class="grid h-8 w-8 flex-none place-items-center rounded-full bg-[linear-gradient(135deg,#7c8cf8,#ec7598)] text-[13px] font-semibold text-white" aria-hidden="true">{{ initial(user.username) }}</span>
+                <UiAvatar :name="user.username" :src="user.avatar_url" />
                 <div class="min-w-0">
                   <b class="block max-w-[220px] truncate font-[580] text-oi-ink" :title="user.username">{{ user.username }}</b>
                   <div class="text-xs text-oi-muted">ID {{ user.id }}<template v-if="user.id === me.id"> · 你</template></div>

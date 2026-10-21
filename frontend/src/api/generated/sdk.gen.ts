@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddImageTagData, AddImageTagErrors, AddImageTagResponses, CreatePasskeyLoginOptionsData, CreatePasskeyLoginOptionsErrors, CreatePasskeyLoginOptionsResponses, CreatePasskeyRegistrationOptionsData, CreatePasskeyRegistrationOptionsErrors, CreatePasskeyRegistrationOptionsResponses, CreatePersonalTokenData, CreatePersonalTokenErrors, CreatePersonalTokenResponses, CreateStorageBucketData, CreateStorageBucketErrors, CreateStorageBucketResponses, CreateTagData, CreateTagErrors, CreateTagResponses, CreateUserData, CreateUserErrors, CreateUserResponses, DeleteImageData, DeleteImageErrors, DeleteImageResponses, DeleteStorageBucketData, DeleteStorageBucketErrors, DeleteStorageBucketResponses, DeleteTagData, DeleteTagErrors, DeleteTagResponses, DeleteUserData, DeleteUserErrors, DeleteUserResponses, DisableStorageBucketData, DisableStorageBucketErrors, DisableStorageBucketResponses, EnableStorageBucketData, EnableStorageBucketErrors, EnableStorageBucketResponses, GetDashboardStatsData, GetDashboardStatsErrors, GetDashboardStatsResponses, GetImageData, GetImageErrors, GetImageResponses, GetImageStatsData, GetImageStatsErrors, GetImageStatsResponses, GetMeData, GetMeErrors, GetMeResponses, GetPublicConfigData, GetPublicConfigErrors, GetPublicConfigResponses, GetRandomImageData, GetRandomImageErrors, GetRandomImageResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetStorageBucketData, GetStorageBucketErrors, GetStorageBucketResponses, GetUploadOptionsData, GetUploadOptionsErrors, GetUploadOptionsResponses, ImportImageData, ImportImageErrors, ImportImageResponses, ListImagesData, ListImagesErrors, ListImagesResponses, ListImageStoragesData, ListImageStoragesErrors, ListImageStoragesResponses, ListPasskeysData, ListPasskeysErrors, ListPasskeysResponses, ListPersonalTokensData, ListPersonalTokensErrors, ListPersonalTokensResponses, ListStorageBucketsData, ListStorageBucketsErrors, ListStorageBucketsResponses, ListTagsData, ListTagsErrors, ListTagsResponses, ListUsersData, ListUsersErrors, ListUsersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveImageTagData, RemoveImageTagErrors, RemoveImageTagResponses, RenamePasskeyData, RenamePasskeyErrors, RenamePasskeyResponses, ResetUserPasswordData, ResetUserPasswordErrors, ResetUserPasswordResponses, RevokePasskeyData, RevokePasskeyErrors, RevokePasskeyResponses, RevokePersonalTokenData, RevokePersonalTokenErrors, RevokePersonalTokenResponses, RevokeUserPasskeysData, RevokeUserPasskeysErrors, RevokeUserPasskeysResponses, TestStorageConnectionData, TestStorageConnectionErrors, TestStorageConnectionResponses, UpdateImageTagsData, UpdateImageTagsErrors, UpdateImageTagsResponses, UpdateMeData, UpdateMeErrors, UpdateMeResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UpdateStorageBucketData, UpdateStorageBucketErrors, UpdateStorageBucketResponses, UpdateTagData, UpdateTagErrors, UpdateTagResponses, UpdateUserData, UpdateUserErrors, UpdateUserPermissionsData, UpdateUserPermissionsErrors, UpdateUserPermissionsResponses, UpdateUserResponses, UploadImagesData, UploadImagesErrors, UploadImagesResponses, VerifyPasskeyLoginData, VerifyPasskeyLoginErrors, VerifyPasskeyLoginResponses, VerifyPasskeyRegistrationData, VerifyPasskeyRegistrationErrors, VerifyPasskeyRegistrationResponses } from './types.gen';
+import type { AddImageTagData, AddImageTagErrors, AddImageTagResponses, CreatePasskeyLoginOptionsData, CreatePasskeyLoginOptionsErrors, CreatePasskeyLoginOptionsResponses, CreatePasskeyRegistrationOptionsData, CreatePasskeyRegistrationOptionsErrors, CreatePasskeyRegistrationOptionsResponses, CreatePersonalTokenData, CreatePersonalTokenErrors, CreatePersonalTokenResponses, CreateStorageBucketData, CreateStorageBucketErrors, CreateStorageBucketResponses, CreateTagData, CreateTagErrors, CreateTagResponses, CreateUserData, CreateUserErrors, CreateUserResponses, DeleteImageData, DeleteImageErrors, DeleteImageResponses, DeleteMyAvatarData, DeleteMyAvatarErrors, DeleteMyAvatarResponses, DeleteStorageBucketData, DeleteStorageBucketErrors, DeleteStorageBucketResponses, DeleteTagData, DeleteTagErrors, DeleteTagResponses, DeleteUserData, DeleteUserErrors, DeleteUserResponses, DisableStorageBucketData, DisableStorageBucketErrors, DisableStorageBucketResponses, EnableStorageBucketData, EnableStorageBucketErrors, EnableStorageBucketResponses, GetDashboardStatsData, GetDashboardStatsErrors, GetDashboardStatsResponses, GetImageData, GetImageErrors, GetImageResponses, GetImageStatsData, GetImageStatsErrors, GetImageStatsResponses, GetMeData, GetMeErrors, GetMeResponses, GetPublicConfigData, GetPublicConfigErrors, GetPublicConfigResponses, GetRandomImageData, GetRandomImageErrors, GetRandomImageResponses, GetSettingsData, GetSettingsErrors, GetSettingsResponses, GetStorageBucketData, GetStorageBucketErrors, GetStorageBucketResponses, GetUploadOptionsData, GetUploadOptionsErrors, GetUploadOptionsResponses, GetUserAvatarData, GetUserAvatarErrors, GetUserAvatarResponses, ImportImageData, ImportImageErrors, ImportImageResponses, ListImagesData, ListImagesErrors, ListImagesResponses, ListImageStoragesData, ListImageStoragesErrors, ListImageStoragesResponses, ListPasskeysData, ListPasskeysErrors, ListPasskeysResponses, ListPersonalTokensData, ListPersonalTokensErrors, ListPersonalTokensResponses, ListStorageBucketsData, ListStorageBucketsErrors, ListStorageBucketsResponses, ListTagsData, ListTagsErrors, ListTagsResponses, ListUsersData, ListUsersErrors, ListUsersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveImageTagData, RemoveImageTagErrors, RemoveImageTagResponses, RenamePasskeyData, RenamePasskeyErrors, RenamePasskeyResponses, ResetUserPasswordData, ResetUserPasswordErrors, ResetUserPasswordResponses, RevokePasskeyData, RevokePasskeyErrors, RevokePasskeyResponses, RevokePersonalTokenData, RevokePersonalTokenErrors, RevokePersonalTokenResponses, RevokeUserPasskeysData, RevokeUserPasskeysErrors, RevokeUserPasskeysResponses, TestStorageConnectionData, TestStorageConnectionErrors, TestStorageConnectionResponses, UpdateImageTagsData, UpdateImageTagsErrors, UpdateImageTagsResponses, UpdateMeData, UpdateMeErrors, UpdateMeResponses, UpdateMyAvatarData, UpdateMyAvatarErrors, UpdateMyAvatarResponses, UpdateSettingsData, UpdateSettingsErrors, UpdateSettingsResponses, UpdateStorageBucketData, UpdateStorageBucketErrors, UpdateStorageBucketResponses, UpdateTagData, UpdateTagErrors, UpdateTagResponses, UpdateUserData, UpdateUserErrors, UpdateUserPermissionsData, UpdateUserPermissionsErrors, UpdateUserPermissionsResponses, UpdateUserResponses, UploadImagesData, UploadImagesErrors, UploadImagesResponses, VerifyPasskeyLoginData, VerifyPasskeyLoginErrors, VerifyPasskeyLoginResponses, VerifyPasskeyRegistrationData, VerifyPasskeyRegistrationErrors, VerifyPasskeyRegistrationResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -191,6 +191,39 @@ export const revokePasskey = <ThrowOnError extends boolean = false>(options: Opt
     ...options,
     headers: {
         'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * 移除当前账户头像
+ */
+export const deleteMyAvatar = <ThrowOnError extends boolean = false>(options?: Options<DeleteMyAvatarData, ThrowOnError>): RequestResult<DeleteMyAvatarResponses, DeleteMyAvatarErrors, ThrowOnError> => (options?.client ?? client).delete<DeleteMyAvatarResponses, DeleteMyAvatarErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'oneimg-session',
+            type: 'apiKey'
+        }],
+    url: '/me/avatar',
+    ...options
+});
+
+/**
+ * 上传或替换当前账户头像
+ *
+ * 只接受浏览器会话。服务器把 JPEG、PNG、GIF、WebP 静态图居中裁成 256×256 并重新编码为 WebP，原图最大 10 MiB，不计入存储配额。
+ */
+export const updateMyAvatar = <ThrowOnError extends boolean = false>(options: Options<UpdateMyAvatarData, ThrowOnError>): RequestResult<UpdateMyAvatarResponses, UpdateMyAvatarErrors, ThrowOnError> => (options.client ?? client).put<UpdateMyAvatarResponses, UpdateMyAvatarErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    security: [{
+            in: 'cookie',
+            name: 'oneimg-session',
+            type: 'apiKey'
+        }],
+    url: '/me/avatar',
+    ...options,
+    headers: {
+        'Content-Type': null,
         ...options.headers
     }
 });
@@ -645,6 +678,21 @@ export const createUser = <ThrowOnError extends boolean = false>(options: Option
         'Content-Type': 'application/json',
         ...options.headers
     }
+});
+
+/**
+ * 读取用户头像
+ *
+ * 可以读取自己的头像；读取他人头像需要 users:read scope 和 user:list 权限。地址取自用户信息中的 avatar_url。
+ */
+export const getUserAvatar = <ThrowOnError extends boolean = false>(options: Options<GetUserAvatarData, ThrowOnError>): RequestResult<GetUserAvatarResponses, GetUserAvatarErrors, ThrowOnError> => (options.client ?? client).get<GetUserAvatarResponses, GetUserAvatarErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'oneimg-session',
+            type: 'apiKey'
+        }, { scheme: 'bearer', type: 'http' }],
+    url: '/users/{id}/avatar',
+    ...options
 });
 
 /**

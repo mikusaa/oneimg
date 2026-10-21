@@ -21,7 +21,10 @@ var (
 	ErrBucketNotFound   = errors.New("storage bucket does not exist")
 )
 
-type UserService struct{ db *gorm.DB }
+type UserService struct {
+	db      *gorm.DB
+	avatars *AvatarService
+}
 
 type UserListQuery struct {
 	Page, PageSize int
@@ -161,8 +164,12 @@ func (s *UserService) Delete(actorID, id int) error {
 	if id == models.SuperAdminID || id == actorID {
 		return ErrProtectedUser
 	}
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		var user models.User
+	if s.avatars != nil {
+		s.avatars.mu.Lock()
+		defer s.avatars.mu.Unlock()
+	}
+	var user models.User
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.First(&user, id).Error; err != nil {
 			return err
 		}
@@ -173,7 +180,14 @@ func (s *UserService) Delete(actorID, id int) error {
 			return err
 		}
 		return tx.Delete(&user).Error
-	})
+	}); err != nil {
+		return err
+	}
+	// 头像文件只在数据库删除提交后清理，失败只记录日志，不回滚已删除的用户。
+	if s.avatars != nil && user.Avatar != nil {
+		s.avatars.removeFile(*user.Avatar)
+	}
+	return nil
 }
 
 func (s *UserService) SetPermissions(actorID, id int, permission models.Permission) (models.User, error) {
