@@ -6,17 +6,21 @@ const props = defineProps<{
   options: readonly string[]
   /** 组的无障碍名称 */
   label: string
-  /** 至少保留一项 */
+  /** 至少保留一项（只算显示出来的） */
   keepOne?: boolean
+  /** 保留但不显示的值，如已不能上传的格式 */
+  hidden?: readonly string[]
 }>()
 const model = defineModel<string[]>({ required: true })
 const emit = defineEmits<{ blocked: [] }>()
 
-const extras = computed(() => model.value.filter(value => !props.options.some(option => option.toLowerCase() === value.toLowerCase())))
-const isOn = (value: string) => model.value.some(item => item.toLowerCase() === value.toLowerCase())
+const sameAs = (value: string) => (item: string) => item.toLowerCase() === value.toLowerCase()
+const extras = computed(() => model.value.filter(value => ![...props.options, ...(props.hidden ?? [])].some(sameAs(value))))
+const isOn = (value: string) => model.value.some(sameAs(value))
+const visibleCount = computed(() => model.value.filter(value => !props.hidden?.some(sameAs(value))).length)
 const toggle = (value: string) => {
   if (isOn(value)) {
-    if (props.keepOne && model.value.length === 1) return emit('blocked')
+    if (props.keepOne && visibleCount.value === 1) return emit('blocked')
     model.value = model.value.filter(item => item.toLowerCase() !== value.toLowerCase())
   } else model.value = [...model.value, value]
 }
