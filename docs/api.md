@@ -57,7 +57,7 @@ curl -sS "${ONEIMG_URL}/api/v1/upload-options" \
 
 `GET /api/v1/image-storages`（需要 `images:read`）返回当前用户可见媒体实际所在的存储 `id`、`name`、`type` 和 `disabled`，管理员包含全部媒体。已停用、容量已满或无上传权限的存储同样返回，适合显示存储名称和填充 `bucket_id` 筛选；选择上传目标仍应使用 `upload-options`。
 
-S3/R2 存储的直链域名是存储配置的 `config.public_domain`。`PATCH /api/v1/storage-buckets/{id}` 的 `config` 只需包含要修改的字段，只改域名不需要重新提供凭证，传空字符串表示改回经 OneImg 访问；格式错误或用于其他存储类型时返回 `422`，`errors[].field` 为 `config.public_domain`。系统设置已不再接受 `public_image_domain`，见[升级指南](upgrading.md#升级至-v420-之后版本的直链域名)。
+S3/R2 存储的直链域名是存储配置的 `config.public_domain`。`PATCH /api/v1/storage-buckets/{id}` 的 `config` 只需包含要修改的字段，只改域名不需要重新提供凭证，传空字符串表示改回经 OneImg 访问；格式错误或用于其他存储类型时返回 `422`，`errors[].field` 为 `config.public_domain`。系统设置已不再接受 `public_image_domain`，见[升级指南](upgrading.md#升级至-v430-的直链域名)。
 
 `PATCH /api/v1/settings` 只需包含要修改的字段，所有字段在一个事务中保存：任一字段无效时全部不保存，返回 `422`，`errors[].field` 是出错的字段名（与请求体一致，如 `main_image_quality`），`errors[].code` 一般为 `invalid`，默认存储已停用时为 `storage_disabled`。
 
