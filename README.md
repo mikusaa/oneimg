@@ -3,7 +3,7 @@
 [![Build](https://github.com/mikusaa/oneimg/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/mikusaa/oneimg/actions/workflows/build.yaml)
 [![GHCR 镜像](https://img.shields.io/badge/GHCR-ghcr.io%2Fmikusaa%2Foneimg-2496ED?logo=docker&logoColor=white)](https://github.com/mikusaa/oneimg/pkgs/container/oneimg)
 ![镜像架构](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-475569?logo=linux&logoColor=white)
-![Go 版本](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)
+![Go 版本](https://img.shields.io/badge/Go-1.26.10-00ADD8?logo=go&logoColor=white)
 ![Vue 版本](https://img.shields.io/badge/Vue-3-42B883?logo=vuedotjs&logoColor=white)
 ![SQLite](https://img.shields.io/badge/database-SQLite-003B57?logo=sqlite&logoColor=white)
 
@@ -70,7 +70,7 @@ docker run -d \
   -e APP_URL=http://localhost:8080 \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/uploads:/app/uploads" \
-  ghcr.io/mikusaa/oneimg:v4.4.0
+  ghcr.io/mikusaa/oneimg:v4.4.1
 ```
 
 访问 `http://localhost:8080`。镜像支持 `linux/amd64` 和 `linux/arm64`；`data` 保存数据库、配置和本地缩略图，`uploads` 保存本地媒体主文件，两者都需要持久化和备份。
@@ -101,6 +101,8 @@ docker exec oneimg cat /app/data/.initial_admin_password
 
 ## 升级与发布
 
+v4.4.1 更新 Go 工具链并收紧 HTTPS 证书校验，需更换为重新构建的镜像或二进制，见[升级指南](docs/upgrading.md#go-与-https-证书校验)。
+
 升级前应备份一致的数据库、配置和媒体。v4.4.0 起用户头像保存在 `data/avatars`，见[升级指南](docs/upgrading.md#升级至-v440-的用户头像)。v4.3.0 起本地存储的新文件统一写入 `uploads`，图片直链域名改为在存储页按存储设置，升级前请检查[存储路径](docs/upgrading.md#升级至-v430-的存储路径校验)和[直链域名](docs/upgrading.md#升级至-v430-的直链域名)。v4.2.0 起删除存储默认保留远端文件，删除或停用当前默认存储会被拒绝，见[升级指南](docs/upgrading.md#升级至-v420-的存储停用与删除)。升级至 v4.1.3 后需重新登录；改密或管理员重置会使旧会话和 PAT 失效。历史默认密码账号、可信代理、SVG 出口与缓存、图像限制及单实例运行要求，请按[升级指南](docs/upgrading.md)检查，不要直接用旧数据库撤销已完成的凭证撤销。
 
-查看 [v4.4.0 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.4.0)或[所有 Releases](https://github.com/mikusaa/oneimg/releases)。
+查看 [v4.4.1 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.4.1)或[所有 Releases](https://github.com/mikusaa/oneimg/releases)。

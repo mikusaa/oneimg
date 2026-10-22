@@ -4,7 +4,7 @@
 
 ## 项目结构与工具链
 
-- `backend/` 是 Go 服务，`frontend/` 是 Vue 界面；使用 Go 1.25、Node.js 22、pnpm 10，后端构建依赖 CGO。
+- `backend/` 是 Go 服务，`frontend/` 是 Vue 界面；使用 Go 1.26.10、Node.js 22、pnpm 10，后端构建依赖 CGO。
 - `api/openapi.yaml` 是公共契约，`frontend/src/api/generated/` 是生成客户端。
 - Go 测试、`frontend/tests/security/`、`internal/securityfixture/` 和 `internal/imagebudgetprobe/` 分别承担后端、浏览器、临时服务及容器资源验证。
 

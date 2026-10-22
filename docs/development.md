@@ -4,7 +4,9 @@
 
 ## 工具链与项目结构
 
-使用 Go 1.25、Node.js 22、pnpm 10。Go 构建需要 CGO 和 C / C++ 编译工具链；生产 Dockerfile 另外安装 WebP 开发库，运行镜像提供对应运行库。优先复用 Dockerfile 排除宿主机工具链差异，不随文档整理升级依赖。
+使用 Go 1.26.10、Node.js 22、pnpm 10。Go 构建需要 CGO 和 C / C++ 编译工具链；生产 Dockerfile 另外安装 WebP 开发库，运行镜像提供对应运行库。优先复用 Dockerfile 排除宿主机工具链差异，不随文档整理升级依赖。
+
+本地检查与构建前执行 `export GOTOOLCHAIN=go1.26.10`，并用 `go env GOVERSION` 确认实际版本。`go.mod` 声明的是最低版本，不会强制较新的本机工具链降级；例如 Go 1.27.1 仍受 [CVE-2026-111943](https://pkg.go.dev/vuln/GO-2026-6809) 影响，不能因版本号高于 1.26.10 就视为已修复。
 
 | 路径 | 职责 |
 | --- | --- |

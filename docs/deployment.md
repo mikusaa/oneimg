@@ -7,7 +7,7 @@
 推荐选择固定版本，便于确认运行内容和制定升级计划：
 
 ```bash
-docker pull ghcr.io/mikusaa/oneimg:v4.4.0
+docker pull ghcr.io/mikusaa/oneimg:v4.4.1
 ```
 
 按照 [README 的 `docker run` 示例](../README.md#快速启动)启动，按实际情况调整端口、`PUID`、`PGID`、`APP_URL` 和宿主机挂载目录。镜像提供 `linux/amd64`、`linux/arm64`，由 Docker 选择对应架构。
@@ -19,7 +19,7 @@ docker pull ghcr.io/mikusaa/oneimg:v4.4.0
 仓库中的 [Compose 模板](../docker-compose.yml.example)使用 `build: .`，会从当前检出的源码构建，并非拉取 GHCR 镜像。需要 Docker Engine 和 Compose v2：
 
 ```bash
-git clone --branch v4.4.0 --depth 1 https://github.com/mikusaa/oneimg.git
+git clone --branch v4.4.1 --depth 1 https://github.com/mikusaa/oneimg.git
 cd oneimg
 cp docker-compose.yml.example docker-compose.yml
 mkdir -p data uploads
