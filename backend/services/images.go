@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"oneimg/backend/database"
 	"oneimg/backend/models"
 	utilsBuckets "oneimg/backend/utils/buckets"
 	"oneimg/backend/utils/ftp"
@@ -19,6 +20,8 @@ import (
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"gorm.io/gorm"
 )
+
+var ErrImageListQuery = errors.New("invalid image list query")
 
 var ErrStorageDelete = errors.New("stored image could not be deleted")
 
@@ -47,7 +50,18 @@ type ImageRecord struct {
 func NewImageService(db *gorm.DB) *ImageService { return &ImageService{db: db} }
 
 func (s *ImageService) List(input ImageListQuery) ([]ImageRecord, int64, error) {
-	query := s.db.Model(&models.Image{}).Select("images.id")
+	sortFields := map[string]string{"created_at": "images.created_at", "file_size": "images.file_size", "filename": "images.file_name", "id": "images.id"}
+	if input.Sort == "" {
+		input.Sort = "created_at"
+	}
+	input.Order = strings.ToUpper(input.Order)
+	if input.Order == "" {
+		input.Order = "DESC"
+	}
+	if sortFields[input.Sort] == "" || (input.Order != "ASC" && input.Order != "DESC") || input.Page < 1 || input.PageSize < 1 {
+		return nil, 0, ErrImageListQuery
+	}
+	query := s.db.Model(&models.Image{})
 	if input.MediaType == "video" {
 		query = query.Where(models.VideoSQL)
 	} else if input.MediaType == "image" {
@@ -60,11 +74,15 @@ func (s *ImageService) List(input ImageListQuery) ([]ImageRecord, int64, error) 
 		query = query.Where("images.bucket_id = ?", *input.BucketID)
 	}
 	if strings.TrimSpace(input.Search) != "" {
-		pattern := "%" + strings.TrimSpace(input.Search) + "%"
-		query = query.Where("(images.file_name LIKE ? OR images.original_filename LIKE ? OR images.url LIKE ? OR images.content_hash LIKE ?)", pattern, pattern, pattern, pattern)
+		pattern := "%" + models.SearchKey(strings.TrimSpace(input.Search)) + "%"
+		expressions := make([]string, 0, 4)
+		for _, column := range []string{"images.file_name_search", "images.original_filename_search", "images.url_search", "images.content_hash_search"} {
+			expressions = append(expressions, database.SearchLike(s.db, column))
+		}
+		query = query.Where("("+strings.Join(expressions, " OR ")+")", pattern, pattern, pattern, pattern)
 	}
 	if input.UploaderRole != nil {
-		query = query.Joins("JOIN users uploader ON uploader.id = images.user_id").Where("uploader.role = ?", *input.UploaderRole)
+		query = query.Where("EXISTS (SELECT 1 FROM users uploader WHERE uploader.id = images.user_id AND uploader.role = ?)", *input.UploaderRole)
 	}
 	if input.Untagged {
 		query = query.Where("NOT EXISTS (SELECT 1 FROM image_to_tags WHERE image_to_tags.image_id = images.id)")
@@ -74,23 +92,47 @@ func (s *ImageService) List(input ImageListQuery) ([]ImageRecord, int64, error) 
 	}
 
 	var total int64
-	if err := query.Distinct("images.id").Count(&total).Error; err != nil {
+	if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	sortFields := map[string]string{"created_at": "images.created_at", "file_size": "images.file_size", "filename": "images.file_name", "id": "images.id"}
-	orderClause := sortFields[input.Sort] + " " + input.Order
+	field := sortFields[input.Sort]
+	if input.Sort == "filename" {
+		if s.db.Dialector.Name() == "postgres" {
+			field += ` COLLATE "C"`
+		} else {
+			field += " COLLATE BINARY"
+		}
+	}
+	if input.Sort == "created_at" && s.db.Dialector.Name() == "sqlite" {
+		field = "julianday(images.created_at)"
+	}
+	orderClause := field + " " + input.Order
+	if input.Sort == "created_at" {
+		orderClause = "CASE WHEN images.created_at IS NULL THEN 0 ELSE 1 END " + input.Order + ", " + orderClause
+	}
+	if input.Sort != "id" {
+		orderClause += ", images.id " + input.Order
+	}
 	ids := make([]int, 0)
-	if err := query.Distinct("images.id").Order(orderClause).Offset((input.Page - 1) * input.PageSize).Limit(input.PageSize).Find(&ids).Error; err != nil {
+	if err := query.Session(&gorm.Session{}).Select("images.id").Order(orderClause).Offset((input.Page - 1) * input.PageSize).Limit(input.PageSize).Find(&ids).Error; err != nil {
 		return nil, 0, err
 	}
 	if len(ids) == 0 {
 		return []ImageRecord{}, total, nil
 	}
-
-	var images []models.Image
-	fetchOrderFields := map[string]string{"created_at": "created_at", "file_size": "file_size", "filename": "file_name", "id": "id"}
-	if err := s.db.Where("id IN ?", ids).Order(fetchOrderFields[input.Sort] + " " + input.Order).Find(&images).Error; err != nil {
+	var fetched []models.Image
+	if err := s.db.Where("id IN ?", ids).Find(&fetched).Error; err != nil {
 		return nil, 0, err
+	}
+	byID := make(map[int]models.Image, len(fetched))
+	for _, image := range fetched {
+		byID[image.Id] = image
+	}
+	images := make([]models.Image, 0, len(ids))
+	for _, id := range ids {
+		if image, ok := byID[id]; ok {
+			images = append(images, image)
+		}
 	}
 	records, err := s.attachMetadata(images)
 	if err != nil {

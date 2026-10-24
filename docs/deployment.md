@@ -64,6 +64,8 @@ docker build -t oneimg:local .
 
 默认数据库路径为 `/app/data/data.db`。远端存储的媒体不在这些目录中，需要独立备份；数据库与配置仍需保留。备份应保持数据库、配置和媒体一致，操作见[升级指南](upgrading.md#通用升级流程)。
 
+头像、初始管理员密码和恢复码由 `STATE_DIR` 承载。SQLite 未设置此项时仍使用数据库所在目录；PostgreSQL 默认 `./data`。缩略图仍在 `data/thumbnails`，本地媒体仍在 `uploads`，设置 `STATE_DIR` 不会移动这些文件或改变 URL，也不改变 `.env` 的查找位置。使用 PostgreSQL 仍须持久化应用配置、状态与媒体。
+
 容器默认以 root 执行入口脚本，每次启动会递归调整 `/app/data`、`/app/uploads` 的属主，再以 `PUID:PGID` 运行应用，默认 `1000:1000`。Linux 上可用以下命令确认需要使用的属主：
 
 ```bash
@@ -94,6 +96,9 @@ id -g
 | `SERVER_PORT` | `8080`，应用监听端口；更改时同步容器端口映射 |
 | `APP_URL` | 标准部署为 `http://localhost:8080`；公网填写浏览器实际访问的地址 |
 | `SQLITE_PATH` | `./data/data.db`，相对于应用工作目录 |
+| `DB_TYPE` | `sqlite`；可选 `postgres`，未知值停止启动 |
+| `DATABASE_URL` | PostgreSQL 必填，详见[数据库选择](#数据库选择) |
+| `STATE_DIR` | SQLite 默认数据库目录，PostgreSQL 默认 `./data` |
 | `DEFAULT_USER` / `DEFAULT_PASS` | 新库初始化使用；默认 `admin` / 空，不用于重置已有账号 |
 | `SESSION_SECRET` | 首次生成并持久化，保持稳定 |
 | `CONFIG_SECRET` | 首次生成并持久化，用于敏感配置和 Passkey 凭据加密，必须保留 |
@@ -110,6 +115,64 @@ id -g
 - 修改 `docker run -e` 参数：备份并停止旧容器，按原挂载和新参数重建。单纯 `docker restart` 不会更新容器环境变量。
 
 不要为排查配置覆盖而输出完整 `.env` 或 `docker inspect` 环境列表到公开日志。
+
+## 数据库选择
+
+SQLite 仍为默认数据库。包含本次支持的源码构建可选择 PostgreSQL 16、17、18；上面的历史固定版本 `v4.4.1` 不包含此能力。PostgreSQL 首期只支持单个 OneImg 实例直连标准服务器、专用数据库和 `public` schema。连接池代理、多实例、读写分离及早期 PostgreSQL 数据库直接升级尚未支持。
+
+| 配置 | 默认值 | 规则 |
+| --- | --- | --- |
+| `DB_TYPE` | `sqlite` | 只接受 `sqlite` / `postgres` |
+| `DATABASE_URL` | 空 | `postgres://` / `postgresql://`，包含一个主机和数据库名 |
+| `SQLITE_PATH` | `./data/data.db` | 仅 SQLite 使用 |
+| `STATE_DIR` | 按数据库推导 | 保留头像、初始密码和恢复码 |
+| `DB_MAX_OPEN_CONNS` | `10` | PostgreSQL 最大连接数，必须大于 0 |
+| `DB_MAX_IDLE_CONNS` | `5` | 非负，不能超过最大连接数 |
+| `DB_CONN_MAX_LIFETIME` | `30m` | 正持续时间 |
+| `DB_CONN_MAX_IDLE_TIME` | `5m` | 正持续时间 |
+
+SQLite 连接策略保持原有行为。PostgreSQL URL 的 `connect_timeout` 默认 5 秒，支持 1–300 秒；初次连接检查也受此限制。连接失败或结构迁移失败会停止启动，不能通过自动创建 SQLite 绕过失败。已有业务对象但没有受支持迁移标记的 PostgreSQL schema 会被拒绝，应按[停机迁移](upgrading.md#sqlite-迁移到-postgresql)重新准备空目标。
+
+生产连接示意如下，密码中的保留字符须进行 URL 百分号编码：
+
+```dotenv
+DB_TYPE=postgres
+DATABASE_URL=postgresql://oneimg:URL_ENCODED_PASSWORD@db.example.com:5432/oneimg?sslmode=verify-full&sslrootcert=/run/certs/ca.pem&connect_timeout=5
+STATE_DIR=/app/data
+```
+
+未指定 `sslmode` 时采用 `verify-full`，验证 CA 和主机名。私有 CA 使用 `sslrootcert`；双向 TLS 可再配置 `sslcert`、`sslkey`，证书路径必须在应用容器内可读，私钥只向运行用户开放。仅显式 `sslmode=disable` 关闭 TLS，用于隔离开发网络；不支持 `require`、跳过主机名验证或旧的跳过证书校验开关。服务器必须使用 UTF-8 编码，应用角色需有 `public` 的建表、建索引和序列使用权限。
+
+PostgreSQL 会话时区固定 UTC；统计日、周、月、年边界使用应用时区，因此切换时保留原 `TZ`。
+
+### PostgreSQL Compose
+
+使用[独立模板](../docker-compose.postgres.yml.example)，从包含支持的当前源码构建。模板固定已验证的 `postgres:17.11`，数据库只接入内部网络，不映射宿主机端口；应用同时接入可访问远端存储的网络。不要用旧 tag 的源码执行以下步骤：
+
+```bash
+cp docker-compose.postgres.yml.example docker-compose.yml
+mkdir -p data uploads
+```
+
+在 Compose 插值文件中设置 `POSTGRES_PASSWORD`，并为 `DATABASE_URL` 填写同一密码的 URL 编码形式，例如 `postgresql://oneimg:URL_ENCODED_PASSWORD@postgres:5432/oneimg?sslmode=disable`。此模板中的显式 `disable` 仅适用于该隔离数据库网络；跨主机连接改为 `verify-full` 并挂载证书。按需要设置 `PUID`、`PGID`、公开地址与 Passkey 参数，再运行：
+
+```bash
+docker compose up -d --build
+docker compose logs --tail 100 oneimg
+```
+
+数据库卷与 `data`、`uploads` 分别持久化。不要使用 `docker compose down -v` 删除仍需保留的数据库卷。已有 SQLite 部署不能只修改 `DB_TYPE` 后启动，应先完成迁移。
+
+### PostgreSQL 备份与恢复
+
+停止 OneImg 和其他写入进程，使数据库、配置和媒体处于同一停机点。使用该数据库版本的工具创建备份；Compose 示例：
+
+```bash
+mkdir -p backup
+docker compose exec -T postgres pg_dump -U oneimg -d oneimg -Fc > backup/oneimg.dump
+```
+
+同时备份应用 `.env`、`STATE_DIR`、`data/thumbnails`、`uploads` 和远端媒体，限制备份权限。`pg_dump` 不包含服务器角色、TLS 文件或本地媒体。先在独立空数据库用 `pg_restore --exit-on-error` 验证恢复，再按原配置和文件路径启动隔离应用；不要向仍在服务的数据库覆盖恢复。备份、恢复时避免把连接密码放入命令历史或日志。
 
 ## 反向代理与可信地址
 

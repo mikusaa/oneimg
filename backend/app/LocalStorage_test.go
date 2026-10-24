@@ -1,30 +1,24 @@
 package app
 
 import (
-	"path/filepath"
 	"testing"
 
 	"oneimg/backend/database"
 	"oneimg/backend/models"
-
-	"gorm.io/driver/sqlite"
+	"oneimg/internal/testdb"
 )
 
 func storageInitDB(t *testing.T) *database.Database {
 	t.Helper()
-	db, err := database.NewDB(sqlite.Open(filepath.Join(t.TempDir(), "data.db")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.DB.AutoMigrate(&models.Buckets{}, &models.Image{}); err != nil {
-		t.Fatal(err)
-	}
+	db := testdb.New(t)
 	return db
 }
 
 func TestInitDefaultStorageNamesNewLocalStorage(t *testing.T) {
 	db := storageInitDB(t)
-	InitDefaultStorage(db)
+	if err := InitDefaultStorage(db); err != nil {
+		t.Fatal(err)
+	}
 
 	var buckets []models.Buckets
 	if err := db.DB.Find(&buckets).Error; err != nil {
@@ -42,7 +36,9 @@ func TestInitDefaultStorageKeepsExistingName(t *testing.T) {
 	if err := db.DB.Create(&existing).Error; err != nil {
 		t.Fatal(err)
 	}
-	InitDefaultStorage(db)
+	if err := InitDefaultStorage(db); err != nil {
+		t.Fatal(err)
+	}
 
 	var buckets []models.Buckets
 	if err := db.DB.Find(&buckets).Error; err != nil {
@@ -50,5 +46,33 @@ func TestInitDefaultStorageKeepsExistingName(t *testing.T) {
 	}
 	if len(buckets) != 1 || buckets[0].Name != "本地默认存储" {
 		t.Fatalf("existing storage changed: %+v", buckets)
+	}
+}
+
+func TestInitDefaultStorageFailureCanBeRetried(t *testing.T) {
+	db := storageInitDB(t)
+	occupied := models.Buckets{Id: 2, Name: "occupied", Type: "webdav"}
+	if err := db.DB.Create(&occupied).Error; err != nil {
+		t.Fatal(err)
+	}
+	image := models.Image{FileName: "legacy", Storage: "s3", FileSize: 10}
+	if err := db.DB.Create(&image).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := InitDefaultStorage(db); err == nil {
+		t.Fatal("fixed ID collision was ignored")
+	}
+	var defaults int64
+	if err := db.DB.Model(&models.Buckets{}).Where("type='default'").Count(&defaults).Error; err != nil || defaults != 0 {
+		t.Fatal("failed initialization left a default that would skip the retry", err)
+	}
+	if err := db.DB.Delete(&occupied).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := InitDefaultStorage(db); err != nil {
+		t.Fatal("initialization could not be retried", err)
+	}
+	if err := db.DB.First(&image, image.Id).Error; err != nil || image.BucketId != 2 {
+		t.Fatal("legacy storage assignment was skipped", err)
 	}
 }

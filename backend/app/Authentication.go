@@ -31,7 +31,7 @@ func InitDefaultUser(cfg *config.Config, db *database.Database) error {
 			if err != nil {
 				return err
 			}
-			path := filepath.Join(filepath.Dir(cfg.SqlitePath), ".initial_admin_password")
+			path := filepath.Join(cfg.StateDirectory(), ".initial_admin_password")
 			if err := localsecret.Write(path, password); err != nil {
 				return err
 			}
@@ -49,7 +49,7 @@ func InitDefaultUser(cfg *config.Config, db *database.Database) error {
 
 func MigrateAuthenticationState(db *gorm.DB, cfg *config.Config) error {
 	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&models.PersonalAccessToken{}).Where("auth_version = 0").
+		if err := tx.Model(&models.PersonalAccessToken{}).Where("auth_version = 0 AND EXISTS (SELECT 1 FROM users WHERE users.id = personal_access_tokens.user_id)").
 			UpdateColumn("auth_version", gorm.Expr("(SELECT auth_version FROM users WHERE users.id = personal_access_tokens.user_id)")).Error; err != nil {
 			return err
 		}
@@ -64,7 +64,7 @@ func MigrateAuthenticationState(db *gorm.DB, cfg *config.Config) error {
 		if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte("123456")) != nil {
 			return nil
 		}
-		path := filepath.Join(filepath.Dir(cfg.SqlitePath), ".admin_recovery_code")
+		path := filepath.Join(cfg.StateDirectory(), ".admin_recovery_code")
 		if user.PasswordChangeRequired && user.BootstrapCodeHash != nil {
 			if code, err := localsecret.Read(path); err == nil && localsecret.Matches(code, *user.BootstrapCodeHash) {
 				return nil

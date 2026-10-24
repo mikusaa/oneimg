@@ -4,39 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
-	"oneimg/backend/database"
 	"oneimg/backend/models"
+	"oneimg/internal/testdb"
 
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func newServiceTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := database.NewDB(sqlite.Open(filepath.Join(t.TempDir(), "oneimg.db")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.DB.AutoMigrate(
-		&models.Tags{},
-		&models.User{},
-		&models.PasskeyCredential{},
-		&models.PersonalAccessToken{},
-		&models.Image{},
-		&models.Settings{},
-		&models.ImageToTags{},
-		&models.Buckets{},
-	); err != nil {
-		t.Fatal(err)
-	}
-	return db.DB
+	return testdb.New(t).DB
 }
 
 func createServiceTestUser(t *testing.T, db *gorm.DB, username, password string, role int) models.User {
@@ -328,7 +310,10 @@ func TestDashboardStatsQueriesAreIndependentAndUserScoped(t *testing.T) {
 		})
 	}
 
-	trend := service.ImageTrend(admin, "day")
+	trend, err := service.ImageTrend(admin, "day")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(trend) != 30 || trend[len(trend)-2].Count != 1 || trend[len(trend)-1].Count != 2 {
 		t.Fatalf("unexpected daily trend tail: %#v", trend[len(trend)-2:])
 	}

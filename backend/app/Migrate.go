@@ -1,121 +1,54 @@
 package app
 
 import (
-	"log"
+	"errors"
+	"fmt"
+	"gorm.io/gorm"
+	"math"
 	"oneimg/backend/database"
 	"oneimg/backend/models"
 	"oneimg/backend/utils/buckets"
 )
 
-func Migrate(db *database.Database) {
-	var images []models.Image
-	defaultBucket := make(map[int]models.Image)
-	s3Bucket := make(map[int]models.Image)
-	r2Bucket := make(map[int]models.Image)
-	ftpBucket := make(map[int]models.Image)
-	webdavBucket := make(map[int]models.Image)
-
-	if err := db.DB.Find(&images).Error; err != nil {
-		log.Printf("[数据迁移] 查询图片列表失败: %s", err.Error())
-		return
-	}
-	log.Printf("[数据迁移] 共查询到 %d 张图片，开始分类处理", len(images))
-
-	for _, image := range images {
-		switch image.Storage {
-		case "default":
-			defaultBucket[image.Id] = image
-		case "s3":
-			s3Bucket[image.Id] = image
-		case "r2":
-			r2Bucket[image.Id] = image
-		case "ftp":
-			ftpBucket[image.Id] = image
-		case "webdav":
-			webdavBucket[image.Id] = image
+func Migrate(db *database.Database) error {
+	return db.DB.Transaction(func(tx *gorm.DB) error {
+		var images []models.Image
+		if err := tx.Find(&images).Error; err != nil {
+			return fmt.Errorf("legacy storage lookup failed (%s)", database.ErrorCode(err))
 		}
-	}
-
-	if len(defaultBucket) > 0 {
-		log.Printf("[数据迁移-default] 共处理 %d 张图片", len(defaultBucket))
-		err := db.DB.Model(&models.Image{}).Where("storage = ?", "default").Updates(map[string]any{
-			"bucket_id": 1,
-			"storage":   "default",
-		}).Error
-		if err != nil {
-			log.Printf("[数据迁移-default] 批量更新图片失败: %s", err.Error())
-		} else {
-			log.Printf("[数据迁移-default] 图片绑定桶ID=1 完成")
+		for _, item := range []struct {
+			kind string
+			id   int
+			name string
+		}{
+			{"default", 1, LocalStorageName}, {"s3", 2, "S3对象存储"}, {"r2", 3, "Cloudflare R2存储"}, {"ftp", 4, "FTP文件存储"}, {"webdav", 5, "WebDAV存储"},
+		} {
+			var usage uint64
+			var count int
+			for _, image := range images {
+				if image.Storage == item.kind {
+					if image.FileSize < 0 || uint64(image.FileSize) > math.MaxInt64-usage {
+						return errors.New("legacy storage size out of range")
+					}
+					usage += uint64(image.FileSize)
+					count++
+				}
+			}
+			if count == 0 {
+				continue
+			}
+			if item.kind != "default" {
+				bucket := models.Buckets{Id: item.id, Name: item.name, Type: item.kind, Capacity: 1099511627776, Usage: usage, Config: getBucketConfig(item.kind)}
+				if err := tx.Create(&bucket).Error; err != nil {
+					return fmt.Errorf("legacy storage creation failed (%s)", database.ErrorCode(err))
+				}
+			}
+			if err := tx.Model(&models.Image{}).Where("storage = ?", item.kind).Update("bucket_id", item.id).Error; err != nil {
+				return err
+			}
 		}
-	}
-
-	handleBucketMigrate(db, "s3", 2, "S3对象存储", s3Bucket)
-	handleBucketMigrate(db, "r2", 3, "Cloudflare R2存储", r2Bucket)
-	handleBucketMigrate(db, "ftp", 4, "FTP文件存储", ftpBucket)
-	handleBucketMigrate(db, "webdav", 5, "WebDAV存储", webdavBucket)
-
-	log.Printf("[数据迁移] 所有存储类型迁移流程执行完毕")
-
-	// 检查默认用户是否设置了角色
-	var user models.User
-	if err := db.DB.Where("id = ?", 1).First(&user).Error; err != nil {
-		log.Printf("[数据迁移] 查询默认用户失败: %s", err.Error())
-		return
-	}
-	if user.Role == 0 {
-		log.Printf("[数据迁移] 默认用户未设置角色，将设置为 admin")
-		user.Role = 1
-		if err := db.DB.Save(&user).Error; err != nil {
-			log.Printf("[数据迁移] 更新默认用户角色失败: %s", err.Error())
-			return
-		}
-	}
-	log.Printf("[数据迁移] 默认用户角色设置为 admin")
-}
-
-func handleBucketMigrate(db *database.Database, storageType string, bucketId int, bucketName string, imageMap map[int]models.Image) {
-	imageCount := len(imageMap)
-	if imageCount == 0 {
-		return
-	}
-	log.Printf("[数据迁移-%s] 共处理 %d 张图片，开始创建存储桶+统计容量", storageType, imageCount)
-
-	tx := db.DB.Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-			log.Printf("[数据迁移-%s] 程序异常，事务回滚: %v", storageType, r)
-		}
-	}()
-
-	var totalUsage uint64
-	for _, img := range imageMap {
-		totalUsage += uint64(img.FileSize)
-	}
-
-	bucket := models.Buckets{
-		Id:       bucketId,
-		Name:     bucketName,
-		Type:     storageType,
-		Capacity: 1099511627776,
-		Config:   getBucketConfig(storageType),
-		Usage:    totalUsage,
-	}
-
-	if err := tx.Create(&bucket).Error; err != nil {
-		tx.Rollback()
-		log.Printf("[数据迁移-%s] 创建存储桶失败，事务回滚: %s", storageType, err.Error())
-		return
-	}
-
-	if err := tx.Model(&models.Image{}).Where("storage = ?", storageType).Update("bucket_id", bucket.Id).Error; err != nil {
-		tx.Rollback()
-		log.Printf("[数据迁移-%s] 批量更新图片bucket_id失败，事务回滚: %s", storageType, err.Error())
-		return
-	}
-
-	tx.Commit()
-	log.Printf("[数据迁移-%s] 迁移完成 存储桶ID:%d 总图片数:%d 总占用容量:%d Byte", storageType, bucket.Id, imageCount, totalUsage)
+		return tx.Model(&models.User{}).Where("id = ? AND role = 0", models.SuperAdminID).Update("role", models.RoleAdmin).Error
+	})
 }
 
 func getBucketConfig(storageType string) map[string]any {

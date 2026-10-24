@@ -7,6 +7,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"oneimg/backend/models"
 	"oneimg/backend/utils/localsecret"
+	"oneimg/internal/testdb"
 )
 
 func TestPasswordRotationAndTokenCreationRace(t *testing.T) {
@@ -70,9 +71,7 @@ func TestPasswordRotationAndTokenCreationRace(t *testing.T) {
 		t.Fatal("reset affected actor")
 	}
 	// A failed PAT revoke must roll back both the password and version.
-	if err := db.Exec("CREATE TRIGGER fail_revoke BEFORE UPDATE ON personal_access_tokens BEGIN SELECT RAISE(ABORT, 'injected failure'); END").Error; err != nil {
-		t.Fatal(err)
-	}
+	testdb.RejectWrites(t, db, "personal_access_tokens", "UPDATE")
 	input.AuthVersion = updated.AuthVersion
 	if _, err := tokens.Create(user.ID, input); err != nil {
 		t.Fatal(err)

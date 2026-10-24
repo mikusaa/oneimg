@@ -61,6 +61,7 @@ func (s *StatsService) imageScope(user models.User) *gorm.DB {
 
 func (s *StatsService) Dashboard(user models.User) (DashboardStats, error) {
 	var result DashboardStats
+	var err error
 	// GORM chain values retain clauses after use, so each aggregate starts from a fresh scope.
 	if err := s.imageScope(user).Where("NOT (" + models.VideoSQL + ")").Count(&result.TotalImages).Error; err != nil {
 		return result, err
@@ -77,23 +78,37 @@ func (s *StatsService) Dashboard(user models.User) (DashboardStats, error) {
 	result.ImageSize = result.TotalSize - result.VideoSize
 	now := s.now()
 	today := localDay(now)
-	result.TodayUploads = countBetween(s.imageScope(user), today, today.AddDate(0, 0, 1))
+	result.TodayUploads, err = countBetween(s.imageScope(user), today, today.AddDate(0, 0, 1))
+	if err != nil {
+		return result, err
+	}
 	month := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	result.MonthUploads = countBetween(s.imageScope(user), month, month.AddDate(0, 1, 0))
-	result.TodayVideoUploads = countBetween(s.imageScope(user).Where(models.VideoSQL), today, today.AddDate(0, 0, 1))
+	result.MonthUploads, err = countBetween(s.imageScope(user), month, month.AddDate(0, 1, 0))
+	if err != nil {
+		return result, err
+	}
+	result.TodayVideoUploads, err = countBetween(s.imageScope(user).Where(models.VideoSQL), today, today.AddDate(0, 0, 1))
+	if err != nil {
+		return result, err
+	}
 	result.TodayImageUploads = result.TodayUploads - result.TodayVideoUploads
-	result.MonthVideoUploads = countBetween(s.imageScope(user).Where(models.VideoSQL), month, month.AddDate(0, 1, 0))
+	result.MonthVideoUploads, err = countBetween(s.imageScope(user).Where(models.VideoSQL), month, month.AddDate(0, 1, 0))
+	if err != nil {
+		return result, err
+	}
 	result.MonthImageUploads = result.MonthUploads - result.MonthVideoUploads
 	var recent []models.Image
 	if err := s.imageScope(user).Order("created_at DESC").Limit(10).Find(&recent).Error; err != nil {
 		return result, err
 	}
-	var err error
 	result.RecentImages, err = s.Images().attachMetadata(recent)
 	if err != nil {
 		return result, err
 	}
-	result.UploadTrend = trend(s.imageScope(user), now, "day", 7)
+	result.UploadTrend, err = trend(s.imageScope(user), now, "day", 7)
+	if err != nil {
+		return result, err
+	}
 	if err := s.imageScope(user).Select("mime_type format, COUNT(*) count, COALESCE(SUM(file_size), 0) size").Group("mime_type").Scan(&result.FormatStats).Error; err != nil {
 		return result, err
 	}
@@ -122,12 +137,12 @@ func (s *StatsService) Dashboard(user models.User) (DashboardStats, error) {
 // Images returns an image service sharing the same database transaction scope.
 func (s *StatsService) Images() *ImageService { return NewImageService(s.db) }
 
-func (s *StatsService) ImageTrend(user models.User, period string) []TrendPoint {
+func (s *StatsService) ImageTrend(user models.User, period string) ([]TrendPoint, error) {
 	counts := map[string]int{"day": 30, "week": 12, "month": 12, "year": 5}
 	return trend(s.imageScope(user), s.now(), period, counts[period])
 }
 
-func trend(scope *gorm.DB, now time.Time, period string, count int) []TrendPoint {
+func trend(scope *gorm.DB, now time.Time, period string, count int) ([]TrendPoint, error) {
 	result := make([]TrendPoint, 0, count)
 	for i := count - 1; i >= 0; i-- {
 		var start, end time.Time
@@ -140,8 +155,7 @@ func trend(scope *gorm.DB, now time.Time, period string, count int) []TrendPoint
 			end = start.AddDate(0, 0, 7)
 			label = start.Format("2006-01-02")
 		case "month":
-			value := now.AddDate(0, -i, 0)
-			start = time.Date(value.Year(), value.Month(), 1, 0, 0, 0, 0, value.Location())
+			start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, -i, 0)
 			end = start.AddDate(0, 1, 0)
 			label = start.Format("2006-01")
 		case "year":
@@ -154,19 +168,31 @@ func trend(scope *gorm.DB, now time.Time, period string, count int) []TrendPoint
 			end = start.AddDate(0, 0, 1)
 			label = start.Format("2006-01-02")
 		}
-		total := countBetween(scope, start, end)
-		videos := countBetween(scope.Session(&gorm.Session{}).Where(models.VideoSQL), start, end)
+		total, err := countBetween(scope, start, end)
+		if err != nil {
+			return nil, err
+		}
+		videos, err := countBetween(scope.Session(&gorm.Session{}).Where(models.VideoSQL), start, end)
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, TrendPoint{Date: label, Count: total, VideoCount: videos, ImageCount: total - videos})
 	}
-	return result
+	return result, nil
 }
 
 func localDay(value time.Time) time.Time {
 	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, value.Location())
 }
 
-func countBetween(scope *gorm.DB, start, end time.Time) int64 {
+func countBetween(scope *gorm.DB, start, end time.Time) (int64, error) {
 	var count int64
-	scope.Session(&gorm.Session{}).Where("julianday(created_at) >= julianday(?) AND julianday(created_at) < julianday(?)", start.UTC().Format(time.RFC3339Nano), end.UTC().Format(time.RFC3339Nano)).Count(&count)
-	return count
+	query := scope.Session(&gorm.Session{})
+	if scope.Dialector.Name() == "sqlite" {
+		query = query.Where("julianday(created_at) >= julianday(?) AND julianday(created_at) < julianday(?)", start.UTC().Format(time.RFC3339Nano), end.UTC().Format(time.RFC3339Nano))
+	} else {
+		query = query.Where("created_at >= ? AND created_at < ?", start.UTC(), end.UTC())
+	}
+	err := query.Count(&count).Error
+	return count, err
 }

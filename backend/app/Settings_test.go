@@ -1,30 +1,24 @@
 package app
 
 import (
-	"path/filepath"
 	"testing"
 
 	"oneimg/backend/database"
 	"oneimg/backend/models"
-
-	"gorm.io/driver/sqlite"
+	"oneimg/internal/testdb"
 )
 
 func settingsDB(t *testing.T) *database.Database {
 	t.Helper()
-	db, err := database.NewDB(sqlite.Open(filepath.Join(t.TempDir(), "data.db")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.DB.AutoMigrate(&models.Settings{}); err != nil {
-		t.Fatal(err)
-	}
+	db := testdb.New(t)
 	return db
 }
 
 func TestInitSettingsUsesOneImgDefaults(t *testing.T) {
 	db := settingsDB(t)
-	InitSettings(db)
+	if err := InitSettings(db); err != nil {
+		t.Fatal(err)
+	}
 
 	var setting models.Settings
 	if err := db.DB.First(&setting).Error; err != nil {
@@ -45,7 +39,9 @@ func TestInitSettingsKeepsExistingSiteTitle(t *testing.T) {
 	if err := db.DB.Create(&existing).Error; err != nil {
 		t.Fatal(err)
 	}
-	InitSettings(db)
+	if err := InitSettings(db); err != nil {
+		t.Fatal(err)
+	}
 
 	var settings []models.Settings
 	if err := db.DB.Find(&settings).Error; err != nil {

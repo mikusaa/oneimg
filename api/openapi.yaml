@@ -255,7 +255,10 @@ paths:
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Sort' }
         - { $ref: '#/components/parameters/Order' }
-        - { name: q, in: query, schema: { type: string } }
+        - name: q
+          in: query
+          description: "首尾空白移除后按 NFC + Unicode case fold + NFC 进行包含匹配；不去重音或兼容折叠。% 匹配任意字符序列，_ 匹配归一化后一个字符，反斜杠按字面值匹配。"
+          schema: { type: string }
         - { name: bucket_id, in: query, schema: { type: integer, minimum: 1 } }
         - { name: tag_ids, in: query, description: 以逗号分隔的正整数 ID, schema: { type: string } }
         - { name: untagged, in: query, schema: { type: boolean } }
@@ -481,6 +484,7 @@ paths:
       tags: [Statistics]
       responses:
         '200': { $ref: '#/components/responses/DashboardStatsResponse' }
+        '500': { $ref: '#/components/responses/StatsReadFailedResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
   /stats/images:
     get:
@@ -491,6 +495,7 @@ paths:
         - { name: period, in: query, schema: { type: string, enum: [day, week, month, year], default: month } }
       responses:
         '200': { $ref: '#/components/responses/DataResponse' }
+        '500': { $ref: '#/components/responses/StatsReadFailedResponse' }
         default: { $ref: '#/components/responses/ProblemResponse' }
   /users:
     get:
@@ -503,7 +508,10 @@ paths:
         - { $ref: '#/components/parameters/Sort' }
         - { $ref: '#/components/parameters/Order' }
         - { name: id, in: query, schema: { type: integer, minimum: 1 } }
-        - { name: username, in: query, schema: { type: string } }
+        - name: username
+          in: query
+          description: "搜索与图库 q 使用相同 Unicode 忽略大小写及 %、_ 通配符规则；反斜杠为字面值。登录和用户名唯一性不变。"
+          schema: { type: string }
         - { name: role, in: query, schema: { type: integer, enum: [1, 3] } }
       responses:
         '200': { $ref: '#/components/responses/UserCollectionResponse' }
@@ -629,6 +637,10 @@ components:
       required: true
       content: { application/json: { schema: { $ref: '#/components/schemas/StorageRequest' } } }
   responses:
+    StatsReadFailedResponse:
+      description: 数据库统计查询失败，返回 stats_read_failed，不返回全零成功响应
+      headers: { X-Request-ID: { schema: { type: string } } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
     UpdatedAccountResponse:
       description: 账户已更新，需要重新登录；改密会撤销全部会话与个人令牌
       headers: { X-Request-ID: { schema: { type: string } } }
@@ -845,8 +857,8 @@ components:
         id: { type: integer }
         name: { type: string }
         type: { type: string, enum: [default, s3, r2, ftp, webdav] }
-        capacity_bytes: { type: integer, format: int64, minimum: 0, description: OneImg 配置的逻辑配额，0 表示无限制 }
-        usage_bytes: { type: integer, format: int64, minimum: 0, description: OneImg 管理的主图和已成功保存的缩略图占用 }
+        capacity_bytes: { type: integer, format: int64, minimum: 0, maximum: 9223372036854775807, description: OneImg 配置的逻辑配额，0 表示无限制 }
+        usage_bytes: { type: integer, format: int64, minimum: 0, maximum: 9223372036854775807, description: OneImg 管理的主图和已成功保存的缩略图占用 }
         usage_exact: { type: boolean, description: false 表示 usage_bytes 包含历史数据的保守估算 }
         filesystem: { $ref: '#/components/schemas/StorageFilesystem' }
         config: { $ref: '#/components/schemas/StorageConfig' }
@@ -948,7 +960,7 @@ components:
     StorageRequest:
       type: object
       required: [name, type, capacity_bytes, config]
-      properties: { id: { type: integer, minimum: 1 }, name: { type: string }, type: { type: string, enum: [default, s3, r2, ftp, webdav] }, capacity_bytes: { type: integer, minimum: 0, description: OneImg 配置的逻辑配额，0 表示无限制 }, config: { $ref: '#/components/schemas/StorageConfig' } }
+      properties: { id: { type: integer, minimum: 1 }, name: { type: string }, type: { type: string, enum: [default, s3, r2, ftp, webdav] }, capacity_bytes: { type: integer, format: int64, minimum: 0, maximum: 9223372036854775807, description: OneImg 配置的逻辑配额，0 表示无限制；超出 int64 返回 422 validation_error }, config: { $ref: '#/components/schemas/StorageConfig' } }
     CreateUserRequest:
       type: object
       required: [username, password, role]

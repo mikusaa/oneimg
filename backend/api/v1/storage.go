@@ -256,7 +256,7 @@ func handleStorageError(c *gin.Context, err error) bool {
 		writeProblem(c, http.StatusUnprocessableEntity, "validation_error", "存储配置无效")
 	case errors.Is(err, services.ErrStorageDelete):
 		writeProblem(c, http.StatusBadGateway, "storage_delete_failed", "物理文件删除失败，存储桶和数据库记录已保留")
-	case strings.Contains(strings.ToLower(err.Error()), "unique"):
+	case errors.Is(err, gorm.ErrDuplicatedKey):
 		writeProblem(c, http.StatusConflict, "storage_name_conflict", "存储桶名称已存在")
 	default:
 		writeProblem(c, http.StatusInternalServerError, "storage_operation_failed", "存储操作失败")

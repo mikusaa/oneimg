@@ -19,6 +19,7 @@ import (
 	"oneimg/backend/models"
 	"oneimg/backend/services"
 	"oneimg/backend/utils/passkeys"
+	"oneimg/internal/testdb"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -37,8 +38,8 @@ func setupTestRouter(t *testing.T, cfg *config.Config) (*gin.Engine, *app.System
 		cfg.AppURL = "http://localhost:8080"
 	}
 	config.App = cfg
-	database.InitDB(cfg)
-	db := database.GetDB()
+	db := testdb.New(t)
+	database.SetDB(db)
 	if err := db.DB.Create(&models.Settings{}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -738,6 +739,9 @@ func TestStorageDirectDomainIsPerBucket(t *testing.T) {
 	}
 	createR2 := func(name, domain string) storagePayload {
 		t.Helper()
+		if err := database.SyncSequences(db, nil); err != nil {
+			t.Fatal(err)
+		}
 		body := `{"name":"` + name + `","type":"r2","capacity_bytes":1073741824,"config":{"r2_endpoint":"https://r2.example.com","r2_bucket":"` + name + `","r2_access_key":"ak","r2_secret_key":"sk","public_domain":"` + domain + `"}}`
 		response := call(http.MethodPost, "/api/v1/storage-buckets", body)
 		if response.Code != http.StatusCreated {
@@ -878,6 +882,20 @@ func TestDashboardStatsWithSession(t *testing.T) {
 	}
 	if payload.Data.TotalImages != 2 || payload.Data.TotalSize != 3072 || payload.Data.TodayUploads != 2 || payload.Data.MonthUploads != 2 {
 		t.Fatalf("dashboard response = %#v", payload.Data)
+	}
+	if err := system.Database.DB.Migrator().DropTable(&models.Image{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/api/v1/stats/dashboard", "/api/v1/stats/images?period=month"} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		for _, cookie := range login.Result().Cookies() {
+			request.AddCookie(cookie)
+		}
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "stats_read_failed") {
+			t.Fatal("statistics query failure was hidden", response.Code, response.Body.String())
+		}
 	}
 }
 

@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/driver/sqlite"
 	"oneimg/backend/config"
 	"oneimg/backend/database"
 	"oneimg/backend/models"
 	"oneimg/backend/services"
 	"oneimg/backend/utils/localsecret"
+	"oneimg/internal/testdb"
 )
 
 func TestNormalLegacyPATMigrationPreservesAuthentication(t *testing.T) {
@@ -48,13 +48,7 @@ func TestNormalLegacyPATMigrationPreservesAuthentication(t *testing.T) {
 func authenticationDB(t *testing.T) (*config.Config, *database.Database) {
 	t.Helper()
 	cfg := &config.Config{SqlitePath: filepath.Join(t.TempDir(), "data.db"), DefaultUser: "admin"}
-	db, err := database.NewDB(sqlite.Open(cfg.SqlitePath))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.DB.AutoMigrate(&models.User{}, &models.PersonalAccessToken{}); err != nil {
-		t.Fatal(err)
-	}
+	db := testdb.New(t)
 	return cfg, db
 }
 

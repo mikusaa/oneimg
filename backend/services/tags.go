@@ -78,7 +78,7 @@ func (s *TagService) Create(name string) (models.Tags, error) {
 	}
 	item := models.Tags{Name: name}
 	if err := s.db.Create(&item).Error; err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return models.Tags{}, ErrTagConflict
 		}
 		return models.Tags{}, err
@@ -96,7 +96,7 @@ func (s *TagService) Update(id int, name string) (models.Tags, error) {
 		return models.Tags{}, err
 	}
 	if err := s.db.Model(&item).Update("name", name).Error; err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return models.Tags{}, ErrTagConflict
 		}
 		return models.Tags{}, err

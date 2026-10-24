@@ -13,6 +13,7 @@ type User struct {
 	ID                     int        `json:"id" gorm:"type:integer;primaryKey;autoIncrement"`
 	Role                   int        `json:"role" gorm:"default:1"`
 	Username               string     `json:"username" gorm:"unique;not null"`
+	UsernameSearch         string     `json:"-" gorm:"type:text"`
 	Password               string     `json:"-" gorm:"not null"`
 	AuthVersion            int64      `json:"-" gorm:"not null;default:1"`
 	PasswordChangeRequired bool       `json:"password_change_required" gorm:"not null;default:false"`

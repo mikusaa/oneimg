@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"oneimg/backend/database"
 	"oneimg/backend/models"
 
 	"gorm.io/gorm"
@@ -104,7 +105,8 @@ func localStoredBytes(image models.Image, uploadsRoot, dataRoot string) (int64, 
 	if err != nil || !thumbnailInfo.Mode().IsRegular() {
 		return 0, false
 	}
-	return total + thumbnailInfo.Size(), true
+	total, err = database.StorageBytes(total, thumbnailInfo.Size())
+	return total, err == nil
 }
 
 func storedPath(root, value, prefix string) (string, bool) {

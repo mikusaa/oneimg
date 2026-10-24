@@ -75,7 +75,7 @@ func (s *Server) passkeyLoginVerify(c *gin.Context) {
 		return s.services.Passkeys.LoginUser(rawID, userHandle)
 	}, ceremony.Session, c.Request)
 	if err != nil || credential == nil {
-		log.Printf("Passkey 登录失败: %v", err)
+		log.Print("Passkey 登录校验失败")
 		writeProblem(c, http.StatusUnauthorized, "passkey_login_failed", "Passkey 登录失败")
 		return
 	}

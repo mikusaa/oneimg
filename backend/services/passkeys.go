@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"oneimg/backend/database"
 	"oneimg/backend/models"
 	passkeyutil "oneimg/backend/utils/passkeys"
 
@@ -120,7 +121,7 @@ func (s *PasskeyService) Create(userID int, name string, credential *webauthn.Cr
 		}
 		return tx.Create(&item).Error
 	})
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unique") {
+	if err != nil && errors.Is(err, gorm.ErrDuplicatedKey) {
 		return models.PasskeyCredential{}, ErrPasskeyNameConflict
 	}
 	return item, err
@@ -133,7 +134,7 @@ func (s *PasskeyService) Rename(userID, id int, name string) (models.PasskeyCred
 	}
 	var duplicate int64
 	if err := s.db.Model(&models.PasskeyCredential{}).
-		Where("user_id = ? AND id <> ? AND LOWER(name) = LOWER(?)", userID, id, name).
+		Where("user_id = ? AND id <> ? AND "+database.PasskeyNameSQL(s.db, "name")+" = "+database.PasskeyNameSQL(s.db, "?"), userID, id, name).
 		Count(&duplicate).Error; err != nil {
 		return models.PasskeyCredential{}, err
 	}
@@ -142,6 +143,9 @@ func (s *PasskeyService) Rename(userID, id int, name string) (models.PasskeyCred
 	}
 	updated := s.db.Model(&models.PasskeyCredential{}).Where("id = ? AND user_id = ?", id, userID).Update("name", name)
 	if updated.Error != nil {
+		if errors.Is(updated.Error, gorm.ErrDuplicatedKey) {
+			return models.PasskeyCredential{}, ErrPasskeyNameConflict
+		}
 		return models.PasskeyCredential{}, updated.Error
 	}
 	if updated.RowsAffected == 0 {

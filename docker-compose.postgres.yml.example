@@ -1,0 +1,53 @@
+# This feature requires a source build containing PostgreSQL support.
+services:
+  oneimg:
+    build: .
+    image: oneimg:postgres-local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks: [web, database]
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: Asia/Shanghai
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      DB_TYPE: postgres
+      # Internal, isolated development network. Remote deployments use verify-full.
+      DATABASE_URL: ${DATABASE_URL:?Set the percent-encoded PostgreSQL URL in the Compose environment}
+      STATE_DIR: /app/data
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-}
+      PASSKEY_ORIGINS: ${PASSKEY_ORIGINS:-}
+      PASSKEY_RP_NAME: ${PASSKEY_RP_NAME:-OneImg}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  postgres:
+    image: postgres:17.11
+    restart: unless-stopped
+    networks: [database]
+    environment:
+      POSTGRES_USER: oneimg
+      POSTGRES_DB: oneimg
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the database password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oneimg -d oneimg"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+networks:
+  web: {}
+  database:
+    internal: true
+volumes:
+  postgres-data: {}

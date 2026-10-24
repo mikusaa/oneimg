@@ -42,7 +42,11 @@ func TestVideoStatsAndFilters(t *testing.T) {
 			t.Fatalf("bad stats for %s: %+v", tt.user.Username, got)
 		}
 		for _, period := range []string{"day", "week", "month", "year"} {
-			for _, point := range service.ImageTrend(tt.user, period) {
+			points, err := service.ImageTrend(tt.user, period)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, point := range points {
 				if point.Count != point.ImageCount+point.VideoCount {
 					t.Fatalf("bad trend %+v", point)
 				}

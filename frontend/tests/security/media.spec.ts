@@ -37,7 +37,7 @@ test('historical metadata stays data in the gallery inspector and viewer', async
   const inspector = page.getByRole('dialog', { name: 'photo"><img src=x onerror="window.previewInjected=1">.png' })
   await expect(inspector).toBeVisible()
   await expect(inspector).toContainText('photo"><img src=x onerror="window.previewInjected=1">.png')
-  await expect(inspector).toContainText('tag"><img src=x onerror="window.previewInjected=1">')
+  await expect(inspector).toContainText('t"><img src=x onerror="window.previewInjected=1">')
   await expectInert(page, inspector)
   // 链接里的引号被编码，HTML 格式里的文件名被转义
   expect(await inspector.getByRole('textbox', { name: 'URL 链接' }).inputValue()).toContain('legacy%22')

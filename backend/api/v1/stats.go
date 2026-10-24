@@ -54,7 +54,12 @@ func (s *Server) imageStats(c *gin.Context) {
 		return
 	}
 	user, _ := currentUser(c)
-	writeData(c, http.StatusOK, toTrendDTOs(s.services.Stats.ImageTrend(*user, period)), nil)
+	items, err := s.services.Stats.ImageTrend(*user, period)
+	if err != nil {
+		writeProblem(c, http.StatusInternalServerError, "stats_read_failed", "读取统计数据失败")
+		return
+	}
+	writeData(c, http.StatusOK, toTrendDTOs(items), nil)
 }
 
 func toTrendDTOs(items []services.TrendPoint) []trendDTO {
