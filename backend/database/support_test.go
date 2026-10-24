@@ -158,6 +158,11 @@ func TestSchemaRestartBackfillAndPasskeyConstraint(t *testing.T) {
 	if err := db.Create(&image).Error; err != nil {
 		t.Fatal(err)
 	}
+	// Compare against the stored value: PostgreSQL keeps microseconds, while
+	// time.Now() on Linux carries nanoseconds.
+	if err := db.First(&image, image.Id).Error; err != nil {
+		t.Fatal(err)
+	}
 	created := image.CreatedAt
 	if err := db.Exec("UPDATE images SET file_name_search='old'").Error; err != nil {
 		t.Fatal(err)
