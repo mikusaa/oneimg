@@ -6,7 +6,7 @@ import StorageDeleteDialog from '@/components/storage/StorageDeleteDialog.vue'
 import StorageDomainDialog from '@/components/storage/StorageDomainDialog.vue'
 import StorageFormDialog from '@/components/storage/StorageFormDialog.vue'
 import { storageAccess } from '@/components/storage/storageInfo'
-import { confirm, toast, UiButton } from '@/components/ui'
+import { confirm, toast, UiButton, UiSelect } from '@/components/ui'
 import { useSession } from '@/composables/useSession'
 import { loadUploadOptions } from '@/composables/useUploadQueue'
 import { hasPermission } from '@/utils/permissions.ts'
@@ -55,7 +55,7 @@ onMounted(load)
 /* ---------- 默认存储 ---------- */
 const selectedDefault = ref(0)
 const savingDefault = ref(false)
-const defaultSelect = ref<HTMLSelectElement | null>(null)
+const defaultSelect = ref<InstanceType<typeof UiSelect> | null>(null)
 const saveDefault = async () => {
   if (savingDefault.value || selectedDefault.value === defaultStorage.value) return
   savingDefault.value = true
@@ -86,8 +86,8 @@ const explainDefault = async (storage: StorageBucket, action: '停用' | '删除
   if (!ok) return
   // 弹窗关闭时会把焦点还给触发按钮，等它卸载后再移动焦点
   await dialogsClosed()
-  defaultSelect.value?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  defaultSelect.value?.focus()
+  defaultSelect.value?.el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  defaultSelect.value?.el?.focus()
 }
 const dialogsClosed = () => new Promise<void>(resolve => {
   const started = performance.now()
@@ -191,18 +191,18 @@ const directCount = computed(() => storages.value.filter(storage => storageAcces
         </div>
       </div>
       <div class="flex flex-none gap-2">
-        <select
+        <UiSelect
           ref="defaultSelect"
           v-model.number="selectedDefault"
           :disabled="!canSettings || savingDefault"
           :title="canSettings ? undefined : '需要「存储与上传」设置权限'"
           aria-labelledby="storage-default-title"
-          class="h-9 w-[220px] rounded-[10px] border border-oi-line-2 bg-oi-raised px-2.5 text-[13.5px] text-oi-ink outline-none focus:border-oi-accent focus:shadow-[0_0_0_3px_var(--oi-ring)] disabled:opacity-60 max-[760px]:w-auto max-[760px]:flex-1"
+          class="w-[220px] max-[760px]:w-auto max-[760px]:flex-1"
         >
           <option v-for="storage in storages" :key="storage.id" :value="storage.id" :disabled="storage.disabled">
             {{ storage.disabled ? `${storage.name}（已停用）` : storage.name }}
           </option>
-        </select>
+        </UiSelect>
         <UiButton v-if="canSettings" variant="primary" :disabled="selectedDefault === defaultStorage || savingDefault" @click="saveDefault">保存</UiButton>
       </div>
     </section>

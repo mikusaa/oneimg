@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { api, errorMessage, type CreateTokenRequest, type PersonalAccessToken } from '@/api/client.ts'
 import LinkBox from '@/components/media/LinkBox.vue'
 import SettingSection from '@/components/settings/SettingSection.vue'
-import { confirm, toast, UiButton, UiInput } from '@/components/ui'
+import { confirm, toast, UiButton, UiInput, UiSelect } from '@/components/ui'
 import { formatDateTime } from '@/utils/format'
 
 type TokenScope = CreateTokenRequest['scopes'][number]
@@ -133,13 +133,9 @@ const sorted = computed(() => [...props.tokens].sort((a, b) => Number(!!a.revoke
         </div>
         <div class="flex flex-col gap-1.5">
           <label for="token-expiration" class="text-[12.5px] font-[550] text-oi-text">有效期</label>
-          <select
-            id="token-expiration"
-            v-model.number="form.expiration"
-            class="h-9 rounded-[10px] border border-oi-line-2 bg-oi-raised px-2.5 text-[13.5px] text-oi-ink outline-none focus:border-oi-accent focus:shadow-[0_0_0_3px_var(--oi-ring)]"
-          >
+          <UiSelect id="token-expiration" v-model.number="form.expiration">
             <option v-for="option in EXPIRATIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+          </UiSelect>
         </div>
       </div>
       <fieldset class="flex min-w-0 flex-col gap-2">

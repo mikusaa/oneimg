@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { UiButton, UiDialog, UiDrawer, UiField, UiInput, UiMenu, UiMenuItem, UiMenuLabel, UiMenuRadioGroup, UiMenuRadioItem, UiMenuSegmented, UiMenuSeparator, UiPopover, UiSegmented, UiSwitch, confirm, toast } from '@/components/ui'
+import { UiButton, UiDialog, UiDrawer, UiField, UiInput, UiMenu, UiMenuItem, UiMenuLabel, UiMenuRadioGroup, UiMenuRadioItem, UiMenuSegmented, UiMenuSeparator, UiPopover, UiSegmented, UiSelect, UiSwitch, confirm, toast } from '@/components/ui'
 import { useTheme } from '@/composables/useTheme'
 
 // 开发环境专用预览页（/_ui），用来核对基础组件在浅色 / 深色下的外观和键盘交互
@@ -20,6 +20,7 @@ const note = ref('')
 const enabled = ref(true)
 const off = ref(false)
 const format = ref('markdown')
+const sort = ref('new')
 const view = ref('grid')
 const dialogOpen = ref(false)
 const drawerOpen = ref(false)
@@ -101,6 +102,23 @@ const askNormal = async () => {
       </UiField>
       <UiField label="禁用状态" for="sc-dis">
         <UiInput id="sc-dis" model-value="不可编辑" disabled />
+      </UiField>
+      <UiField label="下拉选择" for="sc-sort">
+        <div class="flex flex-wrap items-center gap-2">
+          <UiSelect id="sc-sort" v-model="sort">
+            <option value="new">最新上传</option>
+            <option value="old">最早上传</option>
+            <option value="size">文件最大</option>
+          </UiSelect>
+          <UiSelect v-model="sort" size="sm" aria-label="小尺寸下拉选择">
+            <option value="new">最新上传</option>
+            <option value="old">最早上传</option>
+            <option value="size">文件最大</option>
+          </UiSelect>
+          <UiSelect model-value="new" disabled aria-label="禁用的下拉选择">
+            <option value="new">不可选择</option>
+          </UiSelect>
+        </div>
       </UiField>
     </section>
 

@@ -10,7 +10,7 @@ import { SORT_OPTIONS, type GalleryFilter, type GallerySort, type MediaKind, typ
 import MediaThumb from '@/components/media/MediaThumb.vue'
 import MediaViewer from '@/components/media/MediaViewer.vue'
 import TagManagerDialog from '@/components/tags/TagManagerDialog.vue'
-import { confirm, toast, UiButton, UiDrawer, UiSegmented } from '@/components/ui'
+import { confirm, toast, UiButton, UiDrawer, UiSegmented, UiSelect } from '@/components/ui'
 import { LINK_FORMATS, useLinkFormat } from '@/composables/useLinkFormat'
 import { useSession } from '@/composables/useSession'
 import { loadTags, tagById, tagColor } from '@/composables/useTags'
@@ -316,12 +316,12 @@ onBeforeUnmount(() => {
           <i class="ri-filter-3-line" aria-hidden="true" />
         </UiButton>
         <span class="flex-1" />
-        <select v-model="filter.sort" class="gallery-input" aria-label="排序">
+        <UiSelect v-model="filter.sort" aria-label="排序">
           <option v-for="option in SORT_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-        <select v-model="linkFormat" class="gallery-input" aria-label="复制的链接格式" title="复制的链接格式">
+        </UiSelect>
+        <UiSelect v-model="linkFormat" aria-label="复制的链接格式" title="复制的链接格式">
           <option v-for="format in LINK_FORMATS" :key="format.value" :value="format.value">{{ format.label }}</option>
-        </select>
+        </UiSelect>
         <UiSegmented v-model="view" :options="viewOptions" aria-label="显示方式" />
       </div>
 
