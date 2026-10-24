@@ -79,17 +79,13 @@ func MigrateSchema(value *gorm.DB) error {
 		if err := tx.Exec(index).Error; err != nil {
 			return errors.New("cannot create Passkey name index")
 		}
-		var done int64
-		if err := tx.Model(&SchemaMigration{}).Where("id = ?", SearchVersion).Count(&done).Error; err != nil {
-			return err
+		// Runs on every start: an older build written to this schema after a
+		// rollback leaves derived keys missing or stale despite the marker.
+		if err := syncSearchKeys(tx); err != nil {
+			return errors.New("search backfill failed")
 		}
-		if done == 0 {
-			if err := backfillSearch(tx); err != nil {
-				return errors.New("search backfill failed")
-			}
-			if err := MarkMigration(tx, SearchVersion); err != nil {
-				return err
-			}
+		if err := MarkMigration(tx, SearchVersion); err != nil {
+			return err
 		}
 		return MarkMigration(tx, SchemaVersion)
 	})
@@ -107,11 +103,17 @@ func MarkMigration(tx *gorm.DB, id string) error {
 	}
 	return nil
 }
-func backfillSearch(tx *gorm.DB) error {
+
+// syncSearchKeys rewrites only rows whose derived keys differ from the current rule.
+func syncSearchKeys(tx *gorm.DB) error {
 	var users []models.User
-	if err := tx.Select("id", "username").FindInBatches(&users, 250, func(batch *gorm.DB, _ int) error {
+	if err := tx.Select("id", "username", "username_search").FindInBatches(&users, 250, func(batch *gorm.DB, _ int) error {
 		for _, user := range users {
-			if err := tx.Model(&models.User{}).Where("id = ?", user.ID).UpdateColumn("username_search", models.SearchKey(user.Username)).Error; err != nil {
+			key := models.SearchKey(user.Username)
+			if user.UsernameSearch == key {
+				continue
+			}
+			if err := tx.Model(&models.User{}).Where("id = ?", user.ID).UpdateColumn("username_search", key).Error; err != nil {
 				return err
 			}
 		}
@@ -120,12 +122,21 @@ func backfillSearch(tx *gorm.DB) error {
 		return err
 	}
 	var images []models.Image
-	return tx.Select("id", "file_name", "original_filename", "url", "content_hash").FindInBatches(&images, 250, func(batch *gorm.DB, _ int) error {
+	return tx.Select("id", "file_name", "original_filename", "url", "content_hash", "file_name_search", "original_filename_search", "url_search", "content_hash_search").FindInBatches(&images, 250, func(batch *gorm.DB, _ int) error {
 		for _, image := range images {
-			values := map[string]any{"file_name": image.FileName, "original_filename": image.OriginalFileName, "url": image.Url, "content_hash": image.ContentHash}
-			models.SearchUpdates(values)
-			for _, name := range []string{"file_name", "original_filename", "url", "content_hash"} {
-				delete(values, name)
+			values := map[string]any{}
+			for column, item := range map[string]struct{ original, current string }{
+				"file_name_search":         {image.FileName, image.FileNameSearch},
+				"original_filename_search": {image.OriginalFileName, image.OriginalFileNameSearch},
+				"url_search":               {image.Url, image.URLSearch},
+				"content_hash_search":      {image.ContentHash, image.ContentHashSearch},
+			} {
+				if key := models.SearchKey(item.original); key != item.current {
+					values[column] = key
+				}
+			}
+			if len(values) == 0 {
+				continue
 			}
 			if err := tx.Model(&models.Image{}).Where("id = ?", image.Id).UpdateColumns(values).Error; err != nil {
 				return err
@@ -179,6 +190,15 @@ func SearchLike(db *gorm.DB, column string) string {
 		return column + ` COLLATE "C" LIKE ? ESCAPE ''`
 	}
 	return column + " LIKE ?"
+}
+
+// BinaryOrder sorts text by code point on both backends, independent of the
+// PostgreSQL database locale.
+func BinaryOrder(db *gorm.DB, column string) string {
+	if db.Dialector.Name() == "postgres" {
+		return column + ` COLLATE "C"`
+	}
+	return column + " COLLATE BINARY"
 }
 
 // PasskeyNameSQL retains SQLite's ASCII-only name comparison on both backends.

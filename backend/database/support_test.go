@@ -185,12 +185,52 @@ func TestSchemaRestartBackfillAndPasskeyConstraint(t *testing.T) {
 	}
 }
 
+func TestSchemaRepairsSearchKeysWrittenAfterRollback(t *testing.T) {
+	db := testdb.New(t).DB
+	user := models.User{Username: "张三", Password: "hash"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	current := models.Image{FileName: "Straße.png", OriginalFileName: "Straße.png", Url: "/uploads/a.png", ContentHash: "ABC"}
+	if err := db.Create(&current).Error; err != nil {
+		t.Fatal(err)
+	}
+	// An older build ignores the derived columns: it renames without updating
+	// the key and inserts rows without one, while the search marker remains.
+	if err := db.Exec("UPDATE users SET username = ? WHERE id = ?", "Renamed", user.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO images (url, file_name, original_filename, file_size, bucket_id, user_id, content_hash) VALUES (?, ?, ?, 1, 1, 1, ?)", "/uploads/Rollback.png", "Rollback.png", "", "DEF").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.MigrateSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.First(&user, user.ID).Error; err != nil || user.UsernameSearch != "renamed" {
+		t.Fatal("stale username key was not repaired", user.UsernameSearch, err)
+	}
+	var legacy models.Image
+	if err := db.Where("file_name = ?", "Rollback.png").First(&legacy).Error; err != nil {
+		t.Fatal(err)
+	}
+	if legacy.FileNameSearch != "rollback.png" || legacy.URLSearch != "/uploads/rollback.png" || legacy.ContentHashSearch != "def" || legacy.OriginalFileNameSearch != "" {
+		t.Fatal("missing image keys were not repaired", legacy)
+	}
+	if err := db.First(&current, current.Id).Error; err != nil || current.FileNameSearch != "strasse.png" {
+		t.Fatal("current image key changed", current.FileNameSearch, err)
+	}
+}
+
 func TestSchemaBackfillFailureRollsBack(t *testing.T) {
 	db := testdb.New(t).DB
 	if err := db.Create(&models.User{Username: "before", Password: "hash"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Where("id = ?", database.SearchVersion).Delete(&database.SchemaMigration{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// Only stale keys are rewritten, so the injected failure needs one.
+	if err := db.Exec("UPDATE users SET username_search = NULL").Error; err != nil {
 		t.Fatal(err)
 	}
 	testdb.RejectWrites(t, db, "users", "UPDATE")

@@ -435,6 +435,41 @@ func TestJSONAndTimeValidation(t *testing.T) {
 	}
 }
 
+func TestOrphanReportIgnoresNullBucketPermissions(t *testing.T) {
+	db, err := database.Open(&config.Config{SqlitePath: filepath.Join(t.TempDir(), "source.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := database.MigrateSchema(db.DB); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DB.Create(&models.Buckets{Id: 1, Name: "local", Type: "default", Config: map[string]any{}}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for id, permission := range map[int]any{
+		1: `{"codes":null,"buckets":null}`,
+		2: `{"codes":[],"buckets":[]}`,
+		3: `{"codes":[],"buckets":[null]}`,
+		4: nil,
+		5: `{"codes":[],"buckets":[1,404]}`,
+	} {
+		if err := db.DB.Create(&models.User{ID: id, Username: "user" + string(rune('0'+id)), Password: "hash"}).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := db.DB.Exec("UPDATE users SET permission = ? WHERE id = ?", permission, id).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	var output bytes.Buffer
+	if err := reportOrphans(db.DB, &output); err != nil {
+		t.Fatal(err)
+	}
+	if got := output.String(); got != "historical dangling references users.permission.buckets references=1 preserved\n" {
+		t.Fatalf("unexpected dangling reference report: %q", got)
+	}
+}
+
 func TestCLIRejectsInvalidConfigurationWithoutCreatingFiles(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)

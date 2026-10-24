@@ -140,6 +140,30 @@ func TestUnicodeSearchAndStablePagination(t *testing.T) {
 	}
 }
 
+func TestUsernameSortIsBinaryOnBothBackends(t *testing.T) {
+	db := newServiceTestDB(t)
+	for _, name := range []string{"admin", "Zed", "École", "Straße", "张三"} {
+		createServiceTestUser(t, db, name, "password", models.RoleUser)
+	}
+	service := NewUserService(db)
+	for order, want := range map[string][]string{
+		"ASC":  {"Straße", "Zed", "admin", "École", "张三"},
+		"DESC": {"张三", "École", "admin", "Zed", "Straße"},
+	} {
+		items, _, err := service.List(UserListQuery{Page: 1, PageSize: 10, Sort: "username", Order: order})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, item := range items {
+			got = append(got, item.User.Username)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s username order = %v, want %v", order, got, want)
+		}
+	}
+}
+
 func TestImageExistsFiltersAndTimeOrdering(t *testing.T) {
 	db := newServiceTestDB(t)
 	if err := db.Create(&models.Settings{}).Error; err != nil {

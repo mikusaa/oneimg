@@ -242,8 +242,9 @@ func reportOrphans(tx *gorm.DB, output io.Writer) error {
 		}
 	}
 	var count int64
+	// json_each yields one NULL row for "buckets": null, which is not a reference.
 	if err := tx.Raw(`SELECT COUNT(*) FROM users u, json_each(u.permission, '$.buckets') p
-WHERE NOT EXISTS (SELECT 1 FROM buckets b WHERE b.id=p.value)`).Scan(&count).Error; err != nil {
+WHERE p.type <> 'null' AND NOT EXISTS (SELECT 1 FROM buckets b WHERE b.id=p.value)`).Scan(&count).Error; err != nil {
 		return fail(3, "cannot inspect source permission bucket references")
 	}
 	if count > 0 {

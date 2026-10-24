@@ -97,11 +97,7 @@ func (s *ImageService) List(input ImageListQuery) ([]ImageRecord, int64, error) 
 	}
 	field := sortFields[input.Sort]
 	if input.Sort == "filename" {
-		if s.db.Dialector.Name() == "postgres" {
-			field += ` COLLATE "C"`
-		} else {
-			field += " COLLATE BINARY"
-		}
+		field = database.BinaryOrder(s.db, field)
 	}
 	if input.Sort == "created_at" && s.db.Dialector.Name() == "sqlite" {
 		field = "julianday(images.created_at)"

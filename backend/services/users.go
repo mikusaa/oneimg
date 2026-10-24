@@ -58,7 +58,7 @@ func (s *UserService) List(input UserListQuery) ([]UserRecord, int64, error) {
 		return nil, 0, err
 	}
 	var users []models.User
-	orderFields := map[string]string{"id": "id", "username": "username", "created_at": "created_at"}
+	orderFields := map[string]string{"id": "id", "username": database.BinaryOrder(s.db, "username"), "created_at": "created_at"}
 	if err := query.Order(orderFields[input.Sort] + " " + input.Order).Offset((input.Page - 1) * input.PageSize).Limit(input.PageSize).Find(&users).Error; err != nil {
 		return nil, 0, err
 	}
