@@ -5,11 +5,9 @@
 ![镜像架构](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-475569?logo=linux&logoColor=white)
 ![Go 版本](https://img.shields.io/badge/Go-1.26.10-00ADD8?logo=go&logoColor=white)
 ![Vue 版本](https://img.shields.io/badge/Vue-3-42B883?logo=vuedotjs&logoColor=white)
-![SQLite](https://img.shields.io/badge/database-SQLite-003B57?logo=sqlite&logoColor=white)
+![数据库](https://img.shields.io/badge/database-SQLite%20%7C%20PostgreSQL-336791?logo=postgresql&logoColor=white)
 
-OneImg 是面向个人图床和受控多账号使用的自托管媒体管理工具：上传图片后直接复制可引用的链接，再在图库里按标签、存储和日期整理。本项目是基于 [onexru/oneimg](https://github.com/onexru/oneimg) 维护的个人部署分支，使用 Go、Vue 3 和 SQLite，单个容器即可运行。
-
-当前源码也可选择 PostgreSQL 16 / 17 / 18，见[数据库部署](docs/deployment.md#数据库选择)和[SQLite 停机迁移](docs/upgrading.md#sqlite-迁移到-postgresql)。下方 `v4.4.1` 固定镜像示例仍使用 SQLite，尚不包含 PostgreSQL 支持。
+OneImg 是面向个人图床和受控多账号使用的自托管媒体管理工具：上传图片后直接复制可引用的链接，再在图库里按标签、存储和日期整理。本项目是基于 [onexru/oneimg](https://github.com/onexru/oneimg) 维护的个人部署分支，使用 Go 和 Vue 3；默认使用 SQLite 单容器运行，也可连接 PostgreSQL。
 
 ![OneImg 图库：按日期分组，侧栏按类型、标签、存储和上传者筛选](docs/images/gallery.webp)
 
@@ -19,6 +17,7 @@ OneImg 是面向个人图床和受控多账号使用的自托管媒体管理工�
 - **复制链接顺手**：上传结果、文件详情和全屏查看器都能复制 URL、Markdown、HTML、BBCode 等格式，图库可批量复制，所选格式保存在当前浏览器。
 - **图库好找**：按上传日期分组，可按类型、标签、存储和上传者筛选，按文件名、URL 或内容哈希搜索；筛选条件保存在地址中，可以收藏。统计页显示数量、体积、上传趋势和格式分布。
 - **多种存储**：支持本地、S3/R2、WebDAV 和 FTP。本地存储可设置 CDN 域名，每个 S3/R2 存储可单独设置直链域名；停用存储不影响已有外链，删除存储默认保留远端文件。
+- **数据库可选**：默认 SQLite，开箱即用；也可使用 PostgreSQL 16–18，并提供 SQLite 停机迁移与校验命令。
 - **账号与集成**：多账号与细粒度权限，密码和 Passkey 登录，带 scope 的个人访问令牌（PAT）及 API v1。
 - **可选视频**：开启后可上传 MP4 / WebM 原文件并在站内播放，不转码、不依赖 FFmpeg。
 - **稳妥的默认值**：新图片只接受内容确为 JPEG / PNG / GIF / WebP 的文件，拒绝 SVG 和改扩展名的伪装文件；服务器限制图像尺寸；首次启动生成随机管理员密码。这些措施用于降低常见风险，不等于完整的安全保证，部署要求见[升级指南](docs/upgrading.md)。
@@ -57,34 +56,63 @@ OneImg 是面向个人图床和受控多账号使用的自托管媒体管理工�
 
 ## 快速启动
 
-已安装 Docker 的新部署可直接使用固定版本镜像。以下命令在当前目录创建持久化目录，映射端口 `8080`：
+需要 Docker Engine 和 Compose v2 及以上版本。镜像支持 `linux/amd64` 和 `linux/arm64`。新建一个空目录，按需选择数据库：
+
+| 数据库 | 适合 | 数据位置 |
+| --- | --- | --- |
+| SQLite（默认） | 个人图床，单容器，数据都在挂载目录中 | `data/data.db` |
+| PostgreSQL 16–18 | 接入已有数据库运维、统一备份或托管数据库 | PostgreSQL 服务器 |
+
+两种方式都需要持久化并备份 `data`（配置、密钥、缩略图、头像）和 `uploads`（本地媒体主文件）。
+
+### 使用 SQLite
 
 ```bash
+mkdir oneimg && cd oneimg
+curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/mikusaa/oneimg/v4.5.0/docker-compose.yml.example
 mkdir -p data uploads
-
-docker run -d \
-  --name oneimg \
-  --restart unless-stopped \
-  -p 8080:8080 \
-  -e PUID=1000 \
-  -e PGID=1000 \
-  -e TZ=Asia/Shanghai \
-  -e APP_URL=http://localhost:8080 \
-  -v "$(pwd)/data:/app/data" \
-  -v "$(pwd)/uploads:/app/uploads" \
-  ghcr.io/mikusaa/oneimg:v4.4.1
+docker compose up -d
 ```
 
-访问 `http://localhost:8080`。镜像支持 `linux/amd64` 和 `linux/arm64`；`data` 保存数据库、配置和本地缩略图，`uploads` 保存本地媒体主文件，两者都需要持久化和备份。
+### 使用 PostgreSQL
 
-示例使用 `1000:1000` 作为文件属主；如需更换用户、使用 Compose、从源码构建或通过公网域名访问，请先阅读[部署指南](docs/deployment.md)。公网部署需设置实际的 `APP_URL`，配置 HTTPS 和可信代理。
+[PostgreSQL 模板](docker-compose.postgres.yml.example)会同时启动 `postgres:17.11`，数据库只在 Compose 内部网络可达，数据保存在卷 `postgres-data`。连接地址由模板拼出，只需生成一个仅含字母和数字的密码：
+
+```bash
+mkdir oneimg && cd oneimg
+curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/mikusaa/oneimg/v4.5.0/docker-compose.postgres.yml.example
+mkdir -p data uploads
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)" > .env
+chmod 600 .env
+docker compose up -d
+```
+
+已有 PostgreSQL 服务器时，改用上面的 SQLite 模板，取消其中 `DB_TYPE`、`DATABASE_URL` 两行的注释，并在 `.env` 中写入连接地址（同样设为 `chmod 600`）。密码中的保留字符须 URL 编码；未写 `sslmode` 时默认 `verify-full`，私有 CA、权限等要求见[连接已有 PostgreSQL](docs/deployment.md#连接已有-postgresql)：
+
+```dotenv
+DATABASE_URL=postgresql://oneimg:URL_ENCODED_PASSWORD@db.example.com:5432/oneimg?sslmode=verify-full
+```
+
+已有 SQLite 部署不能只改 `DB_TYPE` 切换，需按[停机迁移](docs/upgrading.md#sqlite-迁移到-postgresql)导入。
+
+### 访问与公网部署
+
+启动后访问 `http://localhost:8080`，用 `docker compose logs --tail 100 oneimg` 查看启动日志。模板默认以 `1000:1000` 作为文件属主、时区为 `Asia/Shanghai`，可在 `.env` 中用 `PUID`、`PGID`、`TZ` 覆盖。
+
+通过公网域名访问时，在 `.env` 中设置浏览器实际访问的地址，并配置 HTTPS 与可信代理，见[部署指南](docs/deployment.md#反向代理与可信地址)：
+
+```dotenv
+APP_URL=https://oneimg.example.com
+```
+
+不用 Compose、从源码构建或自定义配置，见[部署指南](docs/deployment.md)。
 
 ## 首次登录
 
-默认用户名为 `admin`，不再提供共享默认密码。上述新部署首次启动后，通过服务器读取随机初始密码：
+默认用户名为 `admin`，不再提供共享默认密码。新部署首次启动后，通过服务器读取随机初始密码：
 
 ```bash
-docker exec oneimg cat /app/data/.initial_admin_password
+docker compose exec oneimg cat /app/data/.initial_admin_password
 ```
 
 首次登录必须修改密码，之后重新登录；即使显式设置了初始密码，也需要完成首次改密。初始密码文件权限为 `0600`，不要将其放入截图、日志或公开文档。
@@ -103,8 +131,10 @@ docker exec oneimg cat /app/data/.initial_admin_password
 
 ## 升级与发布
 
-v4.4.1 更新 Go 工具链并收紧 HTTPS 证书校验，需更换为重新构建的镜像或二进制，见[升级指南](docs/upgrading.md#go-与-https-证书校验)。
+升级前应备份一致的数据库、配置和媒体，再将 `docker-compose.yml` 中的镜像改为新版本，执行 `docker compose pull` 和 `docker compose up -d`，详见[通用升级流程](docs/upgrading.md#通用升级流程)。
 
-升级前应备份一致的数据库、配置和媒体。v4.4.0 起用户头像保存在 `data/avatars`，见[升级指南](docs/upgrading.md#升级至-v440-的用户头像)。v4.3.0 起本地存储的新文件统一写入 `uploads`，图片直链域名改为在存储页按存储设置，升级前请检查[存储路径](docs/upgrading.md#升级至-v430-的存储路径校验)和[直链域名](docs/upgrading.md#升级至-v430-的直链域名)。v4.2.0 起删除存储默认保留远端文件，删除或停用当前默认存储会被拒绝，见[升级指南](docs/upgrading.md#升级至-v420-的存储停用与删除)。升级至 v4.1.3 后需重新登录；改密或管理员重置会使旧会话和 PAT 失效。历史默认密码账号、可信代理、SVG 出口与缓存、图像限制及单实例运行要求，请按[升级指南](docs/upgrading.md)检查，不要直接用旧数据库撤销已完成的凭证撤销。
+v4.5.0 新增可选 PostgreSQL，已有 SQLite 部署无需改配置即可升级。首次启动会回填搜索字段，图片较多时启动更慢；图库和用户搜索改为统一的大小写规则，见[搜索兼容性](docs/upgrading.md#搜索与降级兼容性)。改用 PostgreSQL 需停机迁移；切换后接受新写入，就不能无损回到 SQLite。
 
-查看 [v4.4.1 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.4.1)或[所有 Releases](https://github.com/mikusaa/oneimg/releases)。
+跨越多个版本时，逐项检查[升级指南](docs/upgrading.md#按版本检查兼容性)：v4.4.1 收紧 HTTPS 证书校验；v4.4.0 起用户头像保存在 `data/avatars`；v4.3.0 起本地存储新文件统一写入 `uploads`，直链域名改为按存储设置；v4.2.0 起删除存储默认保留远端文件；v4.1.3 起改密或管理员重置会使旧会话和 PAT 失效。历史默认密码账号、可信代理、SVG 出口与缓存、图像限制及单实例运行要求同样见升级指南；不要用旧数据库备份让已撤销的凭据重新生效。
+
+查看 [v4.5.0 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.5.0)或[所有 Releases](https://github.com/mikusaa/oneimg/releases)。

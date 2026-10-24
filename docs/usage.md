@@ -101,7 +101,7 @@ URL 导入仅用于图片，且不能访问被禁止的内网地址。批量上�
 
 `import-local` 将现有 `uploads` 下的图片登记到图库，不移动或重命名原图，也不改变原始主文件 URL。只扫描 JPEG、PNG、GIF、WebP，跳过缩略图目录；新增缩略图使用独立随机名称。导入仍受图片大小、格式和尺寸限制。
 
-先备份 `data` 和 `uploads`，确认目标用户 / 存储桶，再停止正常服务，避免两个进程同时写数据库和存储。以下示例适用于[现有 Compose 部署](deployment.md#使用-compose-从源码部署)，使用已经构建的同一版本：
+先备份 `data` 和 `uploads`，确认目标用户 / 存储桶，再停止正常服务，避免两个进程同时写数据库和存储。以下示例适用于[现有 Compose 部署](deployment.md#使用-compose-部署)，使用与正常服务相同的镜像版本：
 
 ```bash
 docker compose stop oneimg

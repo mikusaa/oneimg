@@ -7,14 +7,14 @@
 1. 确认当前版本、目标版本与部署方式，阅读跨越版本的升级说明。记录现有镜像、挂载目录、环境变量来源及反向代理配置，不将凭据写入公开记录。
 2. 停止应用和其他写入进程，备份一致的 SQLite、持久化应用配置和本地媒体；默认至少包括完整 `data` 与 `uploads`。远端对象使用独立备份机制。不要在应用写入时只复制单个 SQLite 主文件而遗漏未检查点的 WAL。
 3. 在隔离目录恢复备份副本验证启动迁移；移除或替换副本中的生产存储凭据，不能让验证实例继续访问生产对象。使用同一候选版本，不让新旧实例同时写原库或存储。
-4. 按原挂载和配置替换应用。镜像部署先拉取固定版本，再停止并重建容器；Compose 源码部署先检出已审阅版本，再执行 `docker compose up -d --build`。不要丢弃原持久化目录或稳定密钥。
+4. 按原挂载和配置替换应用。镜像部署先拉取固定版本，再停止并重建容器；Compose 部署修改模板中的镜像 tag 后执行 `docker compose pull` 和 `docker compose up -d`；源码构建先检出已审阅版本，再执行 `docker compose up -d --build`。不要丢弃原持久化目录或稳定密钥。
 5. 检查启动日志、登录 / 改密、历史外链、上传、删除、存储与统计，再完成[部署环境验收](#部署环境验收)。失败时保留日志并停止写入，按[恢复与回滚](#恢复与回滚)处理。
 
 以上步骤不代替实际备份和恢复演练。发布记录中的检查结果不能证明你的代理、存储和资源限制已经验收。
 
 ## SQLite 迁移到 PostgreSQL
 
-此能力需要包含 PostgreSQL 支持的源码构建，`v4.4.1` 镜像不提供迁移命令。目标为 PostgreSQL 16、17、18 的专用 UTF-8 数据库和空 `public` schema；早期 PostgreSQL 直接升级、在线迁移、合并导入和反向迁移不在支持范围。
+此能力自 v4.5.0 起提供，更早的镜像不包含迁移命令。目标为 PostgreSQL 16、17、18 的专用 UTF-8 数据库和空 `public` schema；早期 PostgreSQL 直接升级、在线迁移、合并导入和反向迁移不在支持范围。
 
 ### 准备与预检
 
@@ -54,7 +54,7 @@ export ONEIMG_ENV_FILE=/backup/application.env
 
 ### 在容器中迁移
 
-使用已构建的 PostgreSQL Compose 模板，先仅启动数据库服务。以下命令沿用模板中的目标连接，原应用配置保存在 `data/.env`，一致备份位于 `backup/oneimg.db`：
+使用 [PostgreSQL Compose 模板](deployment.md#postgresql-compose)，先仅启动数据库服务。以下命令沿用模板中的目标连接，原应用配置保存在 `data/.env`，一致备份位于 `backup/oneimg.db`：
 
 ```bash
 docker compose up -d postgres
