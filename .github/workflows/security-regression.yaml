@@ -14,6 +14,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.10'
+      - name: Go 格式检查
+        run: |
+          unformatted="$(gofmt -l $(git ls-files --cached --others --exclude-standard '*.go'))"
+          if [ -n "$unformatted" ]; then
+            echo "以下文件需要运行 gofmt -w："
+            echo "$unformatted"
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22

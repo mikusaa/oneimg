@@ -79,6 +79,7 @@ pnpm install --frozen-lockfile
 pnpm run openapi:check
 pnpm run build
 cd ..
+gofmt -l $(git ls-files --cached --others --exclude-standard '*.go')
 go test ./...
 go test -race ./...
 go vet ./...
@@ -88,11 +89,11 @@ pnpm run test:security
 cd ..
 ```
 
-`pnpm run build` 包含 TypeScript 类型检查；Playwright 会启动 `internal/securityfixture`，监听 `127.0.0.1:18089`，使用临时 SQLite / 媒体、固定测试账号，不复用已有服务。fixture 不是生产入口，不应映射到公网，也不会代替真实远端存储验收。
+`gofmt -l` 无输出表示格式通过；有输出时对列出的文件运行 `gofmt -w` 后复查。`pnpm run build` 包含 TypeScript 类型检查；Playwright 会启动 `internal/securityfixture`，监听 `127.0.0.1:18089`，使用临时 SQLite / 媒体、固定测试账号，不复用已有服务。fixture 不是生产入口，不应映射到公网，也不会代替真实远端存储验收。
 
 浏览器回归覆盖上传页 / 图库恶意历史元数据、预览操作、移动端和历史 SVG 主动内容阻断。存储、上传、去重、公开读取、Range、动画 WebP、视频、本地导入、认证撤销等后端行为由相关 Go 回归覆盖；仍需按本次改动补充缺失用例。
 
-`Build` 工作流执行契约检查、前端构建、SQLite 测试及 PostgreSQL 17 门禁后才构建发布镜像，标签构建同样执行门禁；本地验证不触发发布。`Security` 保留 SQLite 全量 / 竞态 / `go vet` / 三浏览器检查，并增加 PostgreSQL 16、17、18 全量后端矩阵，17 额外执行竞态与三浏览器。它们不验证部署者的真实代理、生产存储或目标机器内存上界。
+`Build` 工作流执行契约检查、前端构建、SQLite 测试及 PostgreSQL 17 门禁后才构建发布镜像，标签构建同样执行门禁；本地验证不触发发布。`Security` 先执行 `gofmt` 格式检查，保留 SQLite 全量 / 竞态 / `go vet` / 三浏览器检查，并增加 PostgreSQL 16、17、18 全量后端矩阵，17 额外执行竞态与三浏览器。它们不验证部署者的真实代理、生产存储或目标机器内存上界。
 
 纯文档与工作流显示名称变更，可检查链接、命令与当前实现的一致性、工作流结构、变更范围和 `git diff --check`，无需访问真实存储或重复跑资源压力测试。其他改动按范围选择检查；报告时分别列明本次通过、未运行及环境受限项目，不引用旧结果冒充本次验证。
 
