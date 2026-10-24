@@ -1,6 +1,10 @@
+# OneImg + SQLite（默认）。用法见 docs/deployment.md#使用-compose-部署
+# 复制为 docker-compose.yml，可在同目录的 .env 中覆盖 ${变量}。
 services:
   oneimg:
-    build: .
+    image: ghcr.io/mikusaa/oneimg:v4.5.0
+    # 从当前检出的源码构建时，注释上一行并启用下一行
+    # build: .
     container_name: oneimg
     restart: unless-stopped
     ports:
@@ -11,13 +15,16 @@ services:
     environment:
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
-      TZ: Asia/Shanghai
+      TZ: ${TZ:-Asia/Shanghai}
       APP_URL: ${APP_URL:-http://localhost:8080}
       PASSKEY_RP_ID: ${PASSKEY_RP_ID:-}
       PASSKEY_ORIGINS: ${PASSKEY_ORIGINS:-}
       PASSKEY_RP_NAME: ${PASSKEY_RP_NAME:-OneImg}
+      # 连接已有的 PostgreSQL 16–18 时启用以下两行，见 docs/deployment.md#连接已有-postgresql
+      # DB_TYPE: postgres
+      # DATABASE_URL: ${DATABASE_URL:?设置 URL 编码后的 PostgreSQL 连接地址}
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "10m"
+        max-size: 10m
         max-file: "3"

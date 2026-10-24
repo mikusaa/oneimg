@@ -1,57 +1,69 @@
 # 部署指南
 
-新部署的最短启动步骤见 [README](../README.md#快速启动)。本篇说明部署方式、持久化、配置和公网访问；已有部署请先阅读[升级指南](upgrading.md)。
+新部署的最短启动步骤见 [README](../README.md#快速启动)。本篇说明部署方式、持久化、配置、数据库和公网访问；已有部署请先阅读[升级指南](upgrading.md)。
 
-## 使用 GHCR 镜像
+## 使用 Compose 部署
 
-推荐选择固定版本，便于确认运行内容和制定升级计划：
+推荐使用仓库提供的 Compose 模板，默认拉取固定版本的 GHCR 镜像。需要 Docker Engine 和 Compose v2 及以上版本，镜像提供 `linux/amd64`、`linux/arm64`，由 Docker 选择对应架构。
 
-```bash
-docker pull ghcr.io/mikusaa/oneimg:v4.4.1
-```
+| 模板 | 数据库 | 说明 |
+| --- | --- | --- |
+| [docker-compose.yml.example](../docker-compose.yml.example) | SQLite，或已有的 PostgreSQL | 单个应用容器；连接外部数据库时启用模板中的两行，见[连接已有 PostgreSQL](#连接已有-postgresql) |
+| [docker-compose.postgres.yml.example](../docker-compose.postgres.yml.example) | 内置 PostgreSQL | 同时启动数据库容器，见 [PostgreSQL Compose](#postgresql-compose) |
 
-按照 [README 的 `docker run` 示例](../README.md#快速启动)启动，按实际情况调整端口、`PUID`、`PGID`、`APP_URL` 和宿主机挂载目录。镜像提供 `linux/amd64`、`linux/arm64`，由 Docker 选择对应架构。
+最短步骤见 [README](../README.md#快速启动)：下载模板为 `docker-compose.yml`，创建 `data`、`uploads`，执行 `docker compose up -d`。
 
-`latest` 会随主线构建更新，不适合用来确认某个固定版本。升级已有容器不能只执行拉取命令，应先完成备份，再使用原挂载和配置重建容器，见[通用升级流程](upgrading.md#通用升级流程)。
-
-## 使用 Compose 从源码部署
-
-仓库中的 [Compose 模板](../docker-compose.yml.example)使用 `build: .`，会从当前检出的源码构建，并非拉取 GHCR 镜像。需要 Docker Engine 和 Compose v2：
-
-```bash
-git clone --branch v4.4.1 --depth 1 https://github.com/mikusaa/oneimg.git
-cd oneimg
-cp docker-compose.yml.example docker-compose.yml
-mkdir -p data uploads
-```
-
-如需更换文件属主或使用公开域名，启动前在项目根目录创建供 Compose 插值的 `.env`：
+模板中的 `${变量}` 由项目目录的 `.env` 覆盖，常用项如下；本机试用可不创建此文件：
 
 ```dotenv
 PUID=1000
 PGID=1000
+TZ=Asia/Shanghai
 APP_URL=https://oneimg.example.com
 PASSKEY_RP_ID=oneimg.example.com
 PASSKEY_ORIGINS=https://oneimg.example.com
 PASSKEY_RP_NAME=OneImg
 ```
 
-本机试用可不创建此文件，模板的访问地址默认为 `http://localhost:8080`。确认配置后启动：
+修改后执行 `docker compose up -d` 重建容器，用 `docker compose logs --tail 100 oneimg` 查看启动日志。停止服务使用 `docker compose down`，不会删除绑定挂载的 `data`、`uploads` 和命名卷；不要在需要保留数据时执行 `docker compose down -v` 或额外清理目录。
+
+`latest` 会随主线构建更新，不适合用来确认某个固定版本。升级时先完成备份，再修改模板中的镜像 tag，执行 `docker compose pull` 和 `docker compose up -d`，见[通用升级流程](upgrading.md#通用升级流程)。
+
+### 从源码构建
+
+检出已审阅的版本，在 `docker-compose.yml` 中注释 `image:` 行并启用 `build: .`：
 
 ```bash
+git clone --branch v4.5.0 --depth 1 https://github.com/mikusaa/oneimg.git
+cd oneimg
+cp docker-compose.yml.example docker-compose.yml
+mkdir -p data uploads
 docker compose up -d --build
-docker compose logs --tail 100 oneimg
 ```
 
-停止服务使用 `docker compose down`，不会删除绑定挂载的 `data` 和 `uploads`。不要在需要保留数据时额外执行目录清理。
+也可以单独构建镜像 `docker build -t oneimg:local .`，再把 Compose 或 `docker run` 中的镜像名替换为 `oneimg:local`。生产 Dockerfile 按顺序构建前端和 Go 后端，并提供 CGO / WebP 运行库。需要直接构建二进制或进行本地开发时，见[开发指南](development.md#工具链与项目结构)，不要只复制二进制而忽略运行库和持久化目录。
 
-也可以单独从源码构建镜像，再将 README 示例末尾的镜像名替换为 `oneimg:local`：
+## 使用 docker run
+
+不使用 Compose 时，以下命令以 SQLite 启动，在当前目录创建持久化目录并映射端口 `8080`：
 
 ```bash
-docker build -t oneimg:local .
+mkdir -p data uploads
+
+docker run -d \
+  --name oneimg \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -e TZ=Asia/Shanghai \
+  -e APP_URL=http://localhost:8080 \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/uploads:/app/uploads" \
+  ghcr.io/mikusaa/oneimg:v4.5.0
 ```
 
-生产 Dockerfile 按顺序构建前端和 Go 后端，并提供 CGO / WebP 运行库。需要直接构建二进制或进行本地开发时，见[开发指南](development.md#工具链与项目结构)，不要只复制二进制而忽略运行库和持久化目录。
+连接 PostgreSQL 时增加 `-e DB_TYPE=postgres` 和 `-e DATABASE_URL=...`，要求见[连接已有 PostgreSQL](#连接已有-postgresql)。连接地址含密码，不要写进 shell 历史或公开脚本，可改用 `--env-file` 指向权限为 `0600` 的文件。初始密码用 `docker exec oneimg cat /app/data/.initial_admin_password` 读取。
 
 ## 持久化与文件权限
 
@@ -85,7 +97,7 @@ id -g
 | 容器环境变量 | 容器中的应用 / 入口脚本 | 仅 `docker run -e`、Compose `environment` 等显式传入的值可见 |
 | 持久化应用配置 `data/.env` | OneImg | 首次启动自动生成，保存应用默认配置和稳定密钥 |
 
-当前 Compose 模板只对 `PUID`、`PGID`、`APP_URL` 和三个 `PASSKEY_*` 变量使用插值，`TZ` 固定为 `Asia/Shanghai`。将 `TRUSTED_PROXIES`、`IMAGE_MAX_PIXELS` 或 `IMAGE_MAX_DIMENSION` 只写进项目根目录的 `.env` **不会生效**；使用此模板时，应修改宿主机持久化目录中的 `data/.env`。
+Compose 模板只对 `PUID`、`PGID`、`TZ`、`APP_URL`、三个 `PASSKEY_*` 变量，以及数据库连接用的 `POSTGRES_PASSWORD` / `DATABASE_URL` 使用插值。将 `TRUSTED_PROXIES`、`IMAGE_MAX_PIXELS` 或 `IMAGE_MAX_DIMENSION` 只写进项目根目录的 `.env` **不会生效**；使用模板时，应修改宿主机持久化目录中的 `data/.env`。
 
 应用选择配置文件的顺序是：`ONEIMG_ENV_FILE` 指定的路径 → 工作目录中已存在的 `.env` → `data/.env`。这是选择一个文件，不是依次合并三个文件。标准镜像工作目录为 `/app`，通常使用 `/app/data/.env`；直接运行源码时要特别注意根目录 `.env` 可能被当成应用配置。
 
@@ -118,7 +130,7 @@ id -g
 
 ## 数据库选择
 
-SQLite 仍为默认数据库。包含本次支持的源码构建可选择 PostgreSQL 16、17、18；上面的历史固定版本 `v4.4.1` 不包含此能力。PostgreSQL 首期只支持单个 OneImg 实例直连标准服务器、专用数据库和 `public` schema。连接池代理、多实例、读写分离及早期 PostgreSQL 数据库直接升级尚未支持。
+SQLite 为默认数据库，无需额外配置。v4.5.0 起可选择 PostgreSQL 16、17、18，此前版本不包含此能力。PostgreSQL 首期只支持单个 OneImg 实例直连标准服务器、专用数据库和 `public` schema；连接池代理、多实例、读写分离及早期 PostgreSQL 数据库直接升级尚未支持。
 
 | 配置 | 默认值 | 规则 |
 | --- | --- | --- |
@@ -133,35 +145,36 @@ SQLite 仍为默认数据库。包含本次支持的源码构建可选择 Postgr
 
 SQLite 连接策略保持原有行为。PostgreSQL URL 的 `connect_timeout` 默认 5 秒，支持 1–300 秒；初次连接检查也受此限制。连接失败或结构迁移失败会停止启动，不能通过自动创建 SQLite 绕过失败。已有业务对象但没有受支持迁移标记的 PostgreSQL schema 会被拒绝，应按[停机迁移](upgrading.md#sqlite-迁移到-postgresql)重新准备空目标。
 
-生产连接示意如下，密码中的保留字符须进行 URL 百分号编码：
-
-```dotenv
-DB_TYPE=postgres
-DATABASE_URL=postgresql://oneimg:URL_ENCODED_PASSWORD@db.example.com:5432/oneimg?sslmode=verify-full&sslrootcert=/run/certs/ca.pem&connect_timeout=5
-STATE_DIR=/app/data
-```
-
-未指定 `sslmode` 时采用 `verify-full`，验证 CA 和主机名。私有 CA 使用 `sslrootcert`；双向 TLS 可再配置 `sslcert`、`sslkey`，证书路径必须在应用容器内可读，私钥只向运行用户开放。仅显式 `sslmode=disable` 关闭 TLS，用于隔离开发网络；不支持 `require`、跳过主机名验证或旧的跳过证书校验开关。服务器必须使用 UTF-8 编码，应用角色需有 `public` 的建表、建索引和序列使用权限。
-
-PostgreSQL 会话时区固定 UTC；统计日、周、月、年边界使用应用时区，因此切换时保留原 `TZ`。
+PostgreSQL 会话时区固定 UTC；统计日、周、月、年边界使用应用时区，因此切换时保留原 `TZ`。已有 SQLite 部署不能只修改 `DB_TYPE` 后启动，应先完成迁移。
 
 ### PostgreSQL Compose
 
-使用[独立模板](../docker-compose.postgres.yml.example)，从包含支持的当前源码构建。模板固定已验证的 `postgres:17.11`，数据库只接入内部网络，不映射宿主机端口；应用同时接入可访问远端存储的网络。不要用旧 tag 的源码执行以下步骤：
+[PostgreSQL 模板](../docker-compose.postgres.yml.example)同时启动应用和固定版本 `postgres:17.11`。数据库只接入内部网络，不映射宿主机端口，也不能访问外网；应用同时接入可访问远端存储的普通网络。
 
 ```bash
-cp docker-compose.postgres.yml.example docker-compose.yml
+curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/mikusaa/oneimg/v4.5.0/docker-compose.postgres.yml.example
 mkdir -p data uploads
-```
-
-在 Compose 插值文件中设置 `POSTGRES_PASSWORD`，并为 `DATABASE_URL` 填写同一密码的 URL 编码形式，例如 `postgresql://oneimg:URL_ENCODED_PASSWORD@postgres:5432/oneimg?sslmode=disable`。此模板中的显式 `disable` 仅适用于该隔离数据库网络；跨主机连接改为 `verify-full` 并挂载证书。按需要设置 `PUID`、`PGID`、公开地址与 Passkey 参数，再运行：
-
-```bash
-docker compose up -d --build
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)" > .env
+chmod 600 .env
+docker compose up -d
 docker compose logs --tail 100 oneimg
 ```
 
-数据库卷与 `data`、`uploads` 分别持久化。不要使用 `docker compose down -v` 删除仍需保留的数据库卷。已有 SQLite 部署不能只修改 `DB_TYPE` 后启动，应先完成迁移。
+模板用 `POSTGRES_PASSWORD` 同时初始化数据库和拼出应用的 `DATABASE_URL`（`postgres:5432`、`sslmode=disable`），因此密码只能含字母和数字。显式 `disable` 仅适用于这个内部网络；把数据库移到其他主机时，改用[连接已有 PostgreSQL](#连接已有-postgresql)。
+
+数据库首次初始化后，修改 `.env` 中的密码不会改变已有角色的密码。数据库保存在命名卷 `postgres-data`，与 `data`、`uploads` 分别持久化；不要使用 `docker compose down -v` 删除仍需保留的数据库卷。
+
+### 连接已有 PostgreSQL
+
+为 OneImg 准备专用的 UTF-8 数据库和应用角色，角色需有 `public` 的建表、建索引和序列使用权限。使用 [SQLite 模板](../docker-compose.yml.example)时，取消 `DB_TYPE`、`DATABASE_URL` 两行的注释，在项目目录的 `.env` 中写入连接地址并设为 `chmod 600`：
+
+```dotenv
+DATABASE_URL=postgresql://oneimg:URL_ENCODED_PASSWORD@db.example.com:5432/oneimg?sslmode=verify-full&connect_timeout=5
+```
+
+密码中的保留字符须进行 URL 百分号编码。头像、初始密码和恢复码默认仍写入 `/app/data`，`data` 和 `uploads` 照常持久化。
+
+未指定 `sslmode` 时采用 `verify-full`，验证 CA 和主机名；公共 CA 签发的证书使用镜像内置的根证书。私有 CA 使用 `sslrootcert`，双向 TLS 可再配置 `sslcert`、`sslkey`，证书须挂载到容器内（例如 `/run/certs/ca.pem`），私钥只向运行用户开放。仅显式 `sslmode=disable` 关闭 TLS，用于隔离网络；不支持 `require`、跳过主机名验证或旧的跳过证书校验开关。
 
 ### PostgreSQL 备份与恢复
 
