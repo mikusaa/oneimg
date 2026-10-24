@@ -38,6 +38,10 @@ module.exports = {
           scrim: 'var(--oi-scrim)',
         },
       },
+      backgroundImage: {
+        // UiSelect 的下拉箭头，颜色取 --oi-muted 的浅色值，深色主题下同样可读
+        'oi-caret': `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2380868c'%3E%3Cpath d='M12 15l-5-5h10z'/%3E%3C/svg%3E")`,
+      },
       borderRadius: {
         'oi-sm': 'var(--oi-r-sm)',
         oi: 'var(--oi-r)',

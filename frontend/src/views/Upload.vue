@@ -7,7 +7,7 @@ import MediaViewer from '@/components/media/MediaViewer.vue'
 import StorageTypeIcon from '@/components/storage/StorageTypeIcon.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import {
-  confirm, toast, UiButton, UiDialog, UiField, UiInput, UiMenu, UiMenuLabel, UiMenuRadioGroup, UiMenuRadioItem, UiPopover, UiSwitch,
+  confirm, toast, UiButton, UiDialog, UiField, UiInput, UiMenu, UiMenuLabel, UiMenuRadioGroup, UiMenuRadioItem, UiPopover, UiSelect, UiSwitch,
 } from '@/components/ui'
 import { LINK_FORMATS, useLinkFormat } from '@/composables/useLinkFormat'
 import { useSession } from '@/composables/useSession'
@@ -285,9 +285,9 @@ watch(completedBatches, () => { void loadStats() })
           <div class="flex flex-wrap items-center gap-2">
             <UiButton variant="ghost" size="sm" :disabled="busy" title="只清空列表，不删除已上传的文件" @click="clearItems">清空列表</UiButton>
             <template v-if="done.length && !queued.length">
-              <select v-model="linkFormat" class="upload-select" aria-label="链接格式">
+              <UiSelect v-model="linkFormat" size="sm" aria-label="链接格式">
                 <option v-for="format in LINK_FORMATS" :key="format.value" :value="format.value">{{ format.label }}</option>
-              </select>
+              </UiSelect>
               <UiButton variant="primary" size="sm" @click="copyAll"><i class="ri-file-copy-line" aria-hidden="true" />复制全部</UiButton>
             </template>
             <UiButton v-if="queued.length" variant="accent" size="sm" :disabled="busy || noStorage" @click="startUpload">
@@ -437,11 +437,6 @@ watch(completedBatches, () => { void loadStats() })
   font-family: var(--oi-mono); color: var(--oi-muted); background: var(--oi-raised); border: 1px solid var(--oi-line);
 }
 .upload-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--oi-faint); }
-.upload-select {
-  height: 30px; border-radius: 8px; border: 1px solid var(--oi-line-2); background: var(--oi-raised); color: var(--oi-ink);
-  padding: 0 8px; font-size: 12.5px; outline: none;
-}
-.upload-select:focus-visible { border-color: var(--oi-accent); box-shadow: 0 0 0 3px var(--oi-ring); }
 
 .upload-drop {
   position: relative; border-radius: 22px; padding: 56px 24px; text-align: center; cursor: pointer; outline: none;

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import type { TagUsage } from '@/api/client.ts'
-import { toast, UiButton, UiDialog } from '@/components/ui'
+import { toast, UiButton, UiDialog, UiSelect } from '@/components/ui'
 import { createTag, deleteTag, renameTag, tagColor, tagNameError, TAG_NAME_MAX, useTags } from '@/composables/useTags'
 
 // 管理标签：搜索、排序、新建、重命名、单个或批量删除；「未使用」配合「全选未使用」用来清理
@@ -133,11 +133,11 @@ const showTag = (id: number) => {
         <i class="ri-search-line pointer-events-none absolute left-[11px] top-1/2 -translate-y-1/2 text-base text-oi-faint" aria-hidden="true" />
         <input v-model="state.query" type="search" placeholder="搜索标签" aria-label="搜索标签" class="tm-input w-full !pl-[34px]">
       </label>
-      <select v-model="state.sort" class="tm-input w-auto" aria-label="排序">
+      <UiSelect v-model="state.sort" aria-label="排序">
         <option value="count">使用最多</option>
         <option value="name">按名称</option>
         <option value="new">最新创建</option>
-      </select>
+      </UiSelect>
       <UiButton :variant="state.unused ? 'primary' : 'default'" :aria-pressed="state.unused" @click="toggleUnused">
         <i class="ri-ghost-line" aria-hidden="true" />未使用 {{ unusedCount }}
       </UiButton>
