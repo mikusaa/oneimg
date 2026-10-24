@@ -188,6 +188,19 @@ v4.4.0 支持在账户设置上传头像：
 
 完整更新摘要见 [v4.4.0 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.4.0)。
 
+### 升级至 v4.5.0 的数据库与搜索
+
+v4.5.0 新增可选 PostgreSQL 16–18，SQLite 仍为默认：
+
+- 已有 SQLite 部署无需修改配置。首次启动按主键分批回填搜索用的隐藏字段，完成前不开放服务，图片较多时启动更慢；失败可再次启动重试。
+- 图库和用户搜索改为统一的大小写折叠规则，结果范围可能扩大，见[搜索与降级兼容性](#搜索与降级兼容性)。
+- 改用 PostgreSQL 需按 [SQLite 迁移到 PostgreSQL](#sqlite-迁移到-postgresql) 停机导入和复核，不能只修改 `DB_TYPE`。仍只支持单个 OneImg 实例。
+- Compose 模板改为拉取固定版本镜像；已复制的旧模板（`build: .`）继续可用，见[部署指南](deployment.md#使用-compose-部署)。
+
+回滚限制：早于 v4.5.0 的版本只支持 SQLite，降级应恢复上线前的完整备份。PostgreSQL 接受新写入后，没有无损迁回 SQLite 的方式。
+
+完整更新摘要见 [v4.5.0 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.5.0)。
+
 ## 初始化与账号恢复
 
 ### 新安装
