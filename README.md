@@ -9,6 +9,8 @@
 
 OneImg 是面向个人图床和受控多账号使用的自托管媒体管理工具：上传图片后直接复制可引用的链接，再在图库里按标签、存储和日期整理。本项目是基于 [onexru/oneimg](https://github.com/onexru/oneimg) 维护的个人部署分支，使用 Go、Vue 3 和 SQLite，单个容器即可运行。
 
+当前源码也可选择 PostgreSQL 16 / 17 / 18，见[数据库部署](docs/deployment.md#数据库选择)和[SQLite 停机迁移](docs/upgrading.md#sqlite-迁移到-postgresql)。下方 `v4.4.1` 固定镜像示例仍使用 SQLite，尚不包含 PostgreSQL 支持。
+
 ![OneImg 图库：按日期分组，侧栏按类型、标签、存储和上传者筛选](docs/images/gallery.webp)
 
 ## 功能重点

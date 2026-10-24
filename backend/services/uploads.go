@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"time"
 
+	"oneimg/backend/database"
 	"oneimg/backend/interfaces"
 	"oneimg/backend/models"
 	"oneimg/backend/utils/uploads"
@@ -96,26 +97,21 @@ func (s *UploadService) UploadBatch(c *gin.Context, user models.User, files []*m
 		}
 		image := models.Image{Id: uploaded.ID}
 		if !uploaded.Duplicate {
-			storageBytes := uploaded.FileSize
-			if storageBytes < 0 {
-				storageBytes = 0
-			}
-			if uploaded.ThumbnailSize > 0 {
-				storageBytes += uploaded.ThumbnailSize
-			}
+			storageBytes, sizeErr := database.StorageBytes(uploaded.FileSize, uploaded.ThumbnailSize)
 			image = models.Image{Url: uploaded.URL, Thumbnail: uploaded.ThumbnailURL, FileName: uploaded.FileName,
 				OriginalFileName: uploaded.OriginalFileName, OriginalFileSize: uploaded.OriginalFileSize,
 				FileSize: uploaded.FileSize, MimeType: uploaded.MimeType, Width: uploaded.Width, Height: uploaded.Height,
 				Storage: uploaded.Storage, BucketId: bucketID, UserId: user.ID, ContentHash: uploaded.ContentHash,
 				StorageBytes: &storageBytes}
 			err := s.db.Transaction(func(tx *gorm.DB) error {
-				updated := tx.Model(&models.Buckets{}).
-					Where("id = ? AND (capacity = 0 OR usage + ? <= capacity)", bucketID, storageBytes).
-					UpdateColumn("usage", gorm.Expr("usage + ?", storageBytes))
-				if updated.Error != nil {
-					return updated.Error
+				if sizeErr != nil {
+					return sizeErr
 				}
-				if updated.RowsAffected == 0 {
+				reserved, err := database.ReserveUsage(tx, bucketID, storageBytes)
+				if err != nil {
+					return err
+				}
+				if !reserved {
 					return ErrStorageCapacityExceeded
 				}
 				if err := tx.Create(&image).Error; err != nil {

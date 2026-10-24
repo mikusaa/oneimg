@@ -273,7 +273,7 @@ export type StorageRequest = {
     name: string;
     type: 'default' | 's3' | 'r2' | 'ftp' | 'webdav';
     /**
-     * OneImg 配置的逻辑配额，0 表示无限制
+     * OneImg 配置的逻辑配额，0 表示无限制；超出 int64 返回 422 validation_error
      */
     capacity_bytes: number;
     config: StorageConfig;
@@ -966,6 +966,9 @@ export type ListImagesData = {
         page_size?: number;
         sort?: string;
         order?: 'asc' | 'desc';
+        /**
+         * 首尾空白移除后按 NFC + Unicode case fold + NFC 进行包含匹配；不去重音或兼容折叠。% 匹配任意字符序列，_ 匹配归一化后一个字符，反斜杠按字面值匹配。
+         */
         q?: string;
         bucket_id?: number;
         /**
@@ -1588,6 +1591,10 @@ export type GetDashboardStatsData = {
 
 export type GetDashboardStatsErrors = {
     /**
+     * 数据库统计查询失败，返回 stats_read_failed，不返回全零成功响应
+     */
+    500: Problem;
+    /**
      * RFC 9457 问题详情
      */
     default: Problem;
@@ -1617,6 +1624,10 @@ export type GetImageStatsData = {
 
 export type GetImageStatsErrors = {
     /**
+     * 数据库统计查询失败，返回 stats_read_failed，不返回全零成功响应
+     */
+    500: Problem;
+    /**
      * RFC 9457 问题详情
      */
     default: Problem;
@@ -1642,6 +1653,9 @@ export type ListUsersData = {
         sort?: string;
         order?: 'asc' | 'desc';
         id?: number;
+        /**
+         * 搜索与图库 q 使用相同 Unicode 忽略大小写及 %、_ 通配符规则；反斜杠为字面值。登录和用户名唯一性不变。
+         */
         username?: string;
         role?: 1 | 3;
     };

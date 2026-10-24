@@ -38,7 +38,6 @@ func TestCreateDefaultEnvUsesDataDirectory(t *testing.T) {
 		t.Fatalf("generated environment file has unexpected Passkey defaults")
 	}
 	for _, key := range []string{
-		"DB_TYPE",
 		"DB_HOST",
 		"DB_PORT",
 		"DB_USER",

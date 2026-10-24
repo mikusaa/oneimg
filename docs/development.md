@@ -2,6 +2,8 @@
 
 本篇面向维护者。用户安装与配置见[部署指南](deployment.md)，部署者上线前检查见[升级指南](upgrading.md#部署环境验收)。工作约定见根目录 [AGENTS.md](../AGENTS.md)。
 
+当前源码默认使用 SQLite，也支持 PostgreSQL 16、17、18。安装与迁移分别见[部署指南](deployment.md#数据库选择)和[升级指南](upgrading.md#sqlite-迁移到-postgresql)；[设计评估](postgresql-assessment.md)保留实施前的历史背景。
+
 ## 工具链与项目结构
 
 使用 Go 1.26.10、Node.js 22、pnpm 10。Go 构建需要 CGO 和 C / C++ 编译工具链；生产 Dockerfile 另外安装 WebP 开发库，运行镜像提供对应运行库。优先复用 Dockerfile 排除宿主机工具链差异，不随文档整理升级依赖。
@@ -77,6 +79,7 @@ pnpm install --frozen-lockfile
 pnpm run openapi:check
 pnpm run build
 cd ..
+gofmt -l $(git ls-files --cached --others --exclude-standard '*.go')
 go test ./...
 go test -race ./...
 go vet ./...
@@ -86,13 +89,34 @@ pnpm run test:security
 cd ..
 ```
 
-`pnpm run build` 包含 TypeScript 类型检查；Playwright 会启动 `internal/securityfixture`，监听 `127.0.0.1:18089`，使用临时 SQLite / 媒体、固定测试账号，不复用已有服务。fixture 不是生产入口，不应映射到公网，也不会代替真实远端存储验收。
+`gofmt -l` 无输出表示格式通过；有输出时对列出的文件运行 `gofmt -w` 后复查。`pnpm run build` 包含 TypeScript 类型检查；Playwright 会启动 `internal/securityfixture`，监听 `127.0.0.1:18089`，使用临时 SQLite / 媒体、固定测试账号，不复用已有服务。fixture 不是生产入口，不应映射到公网，也不会代替真实远端存储验收。
 
 浏览器回归覆盖上传页 / 图库恶意历史元数据、预览操作、移动端和历史 SVG 主动内容阻断。存储、上传、去重、公开读取、Range、动画 WebP、视频、本地导入、认证撤销等后端行为由相关 Go 回归覆盖；仍需按本次改动补充缺失用例。
 
-`Build` 工作流执行契约检查、前端构建、后端测试并发布镜像；`Security` 另含竞态检查、`go vet` 和三浏览器回归。它们不验证部署者的真实代理、生产存储或目标机器内存上界。
+`Build` 工作流执行契约检查、前端构建、SQLite 测试及 PostgreSQL 17 门禁后才构建发布镜像，标签构建同样执行门禁；本地验证不触发发布。`Security` 先执行 `gofmt` 格式检查，保留 SQLite 全量 / 竞态 / `go vet` / 三浏览器检查，并增加 PostgreSQL 16、17、18 全量后端矩阵，17 额外执行竞态与三浏览器。它们不验证部署者的真实代理、生产存储或目标机器内存上界。
 
 纯文档与工作流显示名称变更，可检查链接、命令与当前实现的一致性、工作流结构、变更范围和 `git diff --check`，无需访问真实存储或重复跑资源压力测试。其他改动按范围选择检查；报告时分别列明本次通过、未运行及环境受限项目，不引用旧结果冒充本次验证。
+
+## 双数据库测试
+
+`internal/testdb` 默认使用临时 SQLite；显式设置 `ONEIMG_TEST_POSTGRES_URL` 后，普通应用、服务、API、路由、本地导入和迁移测试使用 PostgreSQL。URL 为空、连接失败或初始化失败会让测试失败，不跳过或回退。每个测试创建随机 schema，每条连接固定 `search_path`，清理只删除自己创建的 schema；测试角色需要 `CREATE SCHEMA` 权限。旧 SQLite schema 升级测试继续使用临时 SQLite。
+
+在独立 PostgreSQL 测试实例上设置 URL，禁止使用生产连接或生产角色：
+
+```bash
+# ONEIMG_TEST_POSTGRES_URL 通过测试专用环境文件或安全的交互方式设置
+go test ./...
+go test -race ./...
+go vet ./...
+cd frontend
+pnpm run test:security
+```
+
+浏览器 fixture 继承同一 URL，仍只监听 loopback，并使用独立 schema、临时媒体与测试账号。分别在 PostgreSQL 16、17、18 执行完整后端检查，17 执行三浏览器和竞态；未设置 URL 的运行只证明 SQLite 行为。
+
+表结构统一走 `database.MigrateSchema`，不要在业务测试另列 `AutoMigrate` 模型；显式 ID 种子写入后调用 `SyncSequences`。新增搜索原字段更新必须在同一 SQL 中维护派生字段，变更搜索规则必须增加回填版本。
+
+`backend/database` 覆盖连接配置、TLS CA / 主机名、超时、脱敏、Passkey 索引、64 位 ID、序列与回填；`backend/services` 覆盖 Unicode、分页、时区边界和配额并发；`backend/utils/dbmigrate` 覆盖只读源、全字段验证、错误密钥 / 数据、复制与约束失败、事务回滚及提交结果不确定。TLS 测试使用临时 CA 的本地握手；实际部署的证书链和远端存储仍需单独验收。
 
 ## 无外网隔离的浏览器验收
 

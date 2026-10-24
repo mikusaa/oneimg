@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -20,7 +21,14 @@ type Config struct {
 	AppURL string
 
 	// SQLite 数据库
-	SqlitePath string
+	SqlitePath        string
+	DBType            string
+	DatabaseURL       string
+	StateDir          string
+	DBMaxOpenConns    int
+	DBMaxIdleConns    int
+	DBConnMaxLifetime time.Duration
+	DBConnMaxIdleTime time.Duration
 
 	// 默认用户
 	DefaultUser string
@@ -90,8 +98,15 @@ TRUSTED_PROXIES=
 IMAGE_MAX_PIXELS=40000000
 IMAGE_MAX_DIMENSION=16384
 
-# SQLite 数据库
+# 数据库（postgres 使用 DATABASE_URL，默认验证 TLS 证书及主机名）
+DB_TYPE=sqlite
 SQLITE_PATH=./data/data.db
+DATABASE_URL=
+STATE_DIR=
+DB_MAX_OPEN_CONNS=10
+DB_MAX_IDLE_CONNS=5
+DB_CONN_MAX_LIFETIME=30m
+DB_CONN_MAX_IDLE_TIME=5m
 
 # 默认用户配置
 DEFAULT_USER=admin
@@ -162,10 +177,6 @@ func NewConfig() {
 
 	// SQLite 配置
 	sqlitePath := getEnv("SQLITE_PATH", "./data/data.db")
-	// 确保SQLite目录存在
-	if err := os.MkdirAll(filepath.Dir(sqlitePath), 0755); err != nil {
-		log.Printf("警告：创建SQLite目录失败：%v", err)
-	}
 
 	// 默认用户配置
 	defaultUser := getEnv("DEFAULT_USER", "admin")
@@ -205,6 +216,9 @@ func NewConfig() {
 		PasskeyRPName:  passkeyRPName,
 		TrustedProxies: trustedProxies,
 		ImageMaxPixels: pixels, ImageMaxDimension: dimension,
+	}
+	if err := App.loadDatabaseEnvironment(); err != nil {
+		log.Fatal(err)
 	}
 
 	log.Println("✅ 配置初始化完成")

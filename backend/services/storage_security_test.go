@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"oneimg/backend/config"
+	"oneimg/backend/database"
 	"oneimg/backend/models"
 )
 
@@ -26,6 +27,9 @@ func TestStorageTestAuthorizationAndCredentialBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := StorageInput{Name: "test", Type: "webdav", Config: map[string]any{"webdav_url": upstream.URL, "webdav_user": "user", "webdav_pass": "secret"}}
+	if err := database.SyncSequences(db, nil); err != nil {
+		t.Fatal(err)
+	}
 	bucket, err := service.Create(input)
 	if err != nil {
 		t.Fatal(err)

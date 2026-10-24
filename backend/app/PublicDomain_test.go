@@ -6,22 +6,20 @@ import (
 	"oneimg/backend/models"
 	"oneimg/backend/utils/publicurl"
 
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"oneimg/backend/database"
+	"oneimg/internal/testdb"
 )
 
 func openPublicDomainDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	if err := db.AutoMigrate(&models.Buckets{}, &models.Settings{}); err != nil {
-		t.Fatalf("migrate database: %v", err)
-	}
+	db := testdb.New(t).DB
 	local := models.Buckets{Id: 1, Name: "local", Type: "default", Config: map[string]any{}}
 	if err := db.Create(&local).Error; err != nil {
 		t.Fatalf("create local bucket: %v", err)
+	}
+	if err := database.SyncSequences(db, nil); err != nil {
+		t.Fatal(err)
 	}
 	return db
 }

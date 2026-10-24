@@ -14,6 +14,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.10'
+      - name: Go 格式检查
+        run: |
+          unformatted="$(gofmt -l $(git ls-files --cached --others --exclude-standard '*.go'))"
+          if [ -n "$unformatted" ]; then
+            echo "以下文件需要运行 gofmt -w："
+            echo "$unformatted"
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -32,6 +40,56 @@ jobs:
           go test -race ./...
           go vet ./...
       - name: 浏览器安全回归
+        working-directory: frontend
+        run: |
+          pnpm exec playwright install --with-deps chromium firefox webkit
+          pnpm run test:security
+  postgres:
+    name: PostgreSQL ${{ matrix.postgres }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17', '18']
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_DB: oneimg_test
+          POSTGRES_PASSWORD: oneimg-ci-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d oneimg_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ONEIMG_TEST_POSTGRES_URL: postgres://postgres:oneimg-ci-test-only@127.0.0.1:5432/oneimg_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: 锁定依赖、接口契约和前端
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run openapi:check
+          pnpm run build
+      - name: 数据库、初始化、服务、API、本地导入和停机迁移
+        run: go test ./...
+      - name: PostgreSQL 17 竞态检查
+        if: matrix.postgres == '17'
+        run: go test -race ./...
+      - name: PostgreSQL 17 三浏览器回归
+        if: matrix.postgres == '17'
         working-directory: frontend
         run: |
           pnpm exec playwright install --with-deps chromium firefox webkit

@@ -12,6 +12,77 @@
 
 以上步骤不代替实际备份和恢复演练。发布记录中的检查结果不能证明你的代理、存储和资源限制已经验收。
 
+## SQLite 迁移到 PostgreSQL
+
+此能力需要包含 PostgreSQL 支持的源码构建，`v4.4.1` 镜像不提供迁移命令。目标为 PostgreSQL 16、17、18 的专用 UTF-8 数据库和空 `public` schema；早期 PostgreSQL 直接升级、在线迁移、合并导入和反向迁移不在支持范围。
+
+### 准备与预检
+
+1. 先用本次支持版本以 **SQLite 模式**正常启动，完成结构、认证和计量等升级并确认应用可用，然后停止 OneImg 和所有写入进程。工具不替代旧版本升级。
+2. 备份完整数据库、原配置、`STATE_DIR`、本地上传和缩略图，以及远端媒体。保留 `CONFIG_SECRET`、`SESSION_SECRET`、应用时区、域名与 Passkey RP / Origin；不要生成新密钥。WAL 模式使用 SQLite 备份命令创建独立一致备份，或在停写并确认检查点完成后备份，不能只复制仍有未合并 WAL 的主文件。工具拒绝源旁非空 `-wal`。
+3. 准备空目标和专用应用角色，配置目标 `DATABASE_URL`。将 `ONEIMG_ENV_FILE` 指向原应用配置的只读副本；迁移命令始终以 PostgreSQL 为目标，无需提前修改原文件中的 `DB_TYPE=sqlite`，也不会生成新的配置文件。迁移进程不应能访问生产远端存储。
+4. 执行只读预检。源库必须已具备当前迁移标记；预检核对全部数据、加密字段、类型和目标条件，不建表。发现无效 UTF-8、NUL、JSON、时间、负数、超长或超范围字段时，停止并先在隔离副本查明原因，不截断或忽略错误。
+
+```bash
+# 在已安全设置原 CONFIG_SECRET 和目标连接的环境中执行
+export ONEIMG_ENV_FILE=/backup/application.env
+./oneimg db-migrate --source /backup/oneimg.db --dry-run
+```
+
+目标连接读取 `DATABASE_URL`。源库始终只读，并在一致性事务中扫描。已知废弃表 `image_storages` 和列 `settings.multi_storage_sync` 只报告、不迁入；未识别的扩展结构会拒绝，原始备份始终保留。
+
+### 导入与复核
+
+```bash
+./oneimg db-migrate --source /backup/oneimg.db
+./oneimg db-migrate --source /backup/oneimg.db --verify-only
+```
+
+导入在单个 PostgreSQL 事务内锁定迁移、重查空目标、建表、批量复制、全量校验、同步序列并记录完成标记。保留业务 ID、SQL `NULL`、零值、原始 URL、权限、认证版本、受限状态、有效 / 到期 / 撤销 PAT、加密 Passkey 和存储配置；不重新加密、不修改媒体、不用重新计算的计量覆盖原值。时间转换为 UTC 微秒，输出精度归一化字段数；搜索键按当前规则重算。
+
+每张表按主键顺序比较全部字段的规范化摘要，并检查序列下一可用位置。摘要和敏感值不输出，失败只报告表名、必要的行 ID 和列名。历史悬空关联原样保留并报告，不能以修复这些关联为由删掉媒体或恢复旧凭据。
+
+| 退出码 | 含义与处理 |
+| --- | --- |
+| `0` | 该操作成功；导入成功后仍执行只读复核和切换验收 |
+| `2` | 参数或配置错误，修正后重试 |
+| `3` | 源库或空目标等前提不满足，检查原因 |
+| `1` | 执行 / 校验失败，目标事务回滚；普通重试仍要求空目标 |
+| `4` | 提交结果不确定，保留现场并运行 `--verify-only`，不要清空、重导或启动写入 |
+
+`--verify-only` 只读比较源与带完整导入标记的目标。结果不确定后，只有完整复核通过才能继续切换；若失败，先检查目标对象与事务结果，不自动删除目标。没有覆盖、清空、合并、部分续传或忽略错误选项。
+
+### 在容器中迁移
+
+使用已构建的 PostgreSQL Compose 模板，先仅启动数据库服务。以下命令沿用模板中的目标连接，原应用配置保存在 `data/.env`，一致备份位于 `backup/oneimg.db`：
+
+```bash
+docker compose up -d postgres
+docker compose run --rm --no-deps \
+  --user "${PUID:-1000}:${PGID:-1000}" --entrypoint /app/main \
+  -v "${PWD}/backup:/backup:ro" \
+  -v "${PWD}/data:/app/data:ro" \
+  -v "${PWD}/uploads:/app/uploads:ro" \
+  -e ONEIMG_ENV_FILE=/app/data/.env \
+  oneimg db-migrate --source /backup/oneimg.db --dry-run
+```
+
+预检成功后，以同一命令去掉 `--dry-run` 导入，最后换成 `--verify-only` 复核。显式 UID/GID 须对备份和配置有读取权限。`--entrypoint /app/main` 绕过普通入口脚本的递归 `chown`，避免修改只读挂载；不要通过移除只读标记解决失败。应用迁移进程只需要数据库网络和备份，不需要写入状态或媒体。
+
+### 切换与回滚
+
+浏览器会话保存在应用进程内存中，停机切换后需要重新登录；密码、PAT 和 Passkey 的有效或撤销状态按源库保留。
+
+1. 完整复核通过后，配置正常应用使用目标连接。自定义 SQLite 路径的部署应将 `STATE_DIR` 显式设为原状态目录，或完整复制头像和恢复文件。上传目录和 `data/thumbnails` 保持原挂载路径。
+2. 在限制用户访问、其他写入进程仍停止的情况下启动单个实例，核对历史 URL、缩略图、头像、密码登录、有效与撤销 PAT、Passkey、受限账号状态、统计和配额。再在隔离测试对象上检查上传、读取、删除及自动 ID，然后开放访问。
+3. PostgreSQL 接受新写入前，可切回原 SQLite 与对应文件快照。接受新写入后，旧备份仅能恢复到切换前状态，本期没有无损反向迁移。必须核对新媒体和凭证撤销差异，不能让切换后已撤销的凭据因旧快照恢复而重新有效。
+
+### 搜索与降级兼容性
+
+图库和用户搜索统一使用 `NFC(UnicodeCaseFold(NFC(value)))`，结果范围扩大，例如 `Straße` 可被 `STRASSE` 搜到，希腊字母变体和组合字符也按统一规则匹配。重音差异、全角 / 半角不合并；`%`、`_` 仍为通配符，反斜杠按字面值匹配。登录名、用户名唯一约束、Passkey 名称身份规则和原始媒体路径不变，详见[API 搜索语义](api.md#搜索与排序)。
+
+SQLite 首次升级会按主键分批回填隐藏派生字段，完成前不开放服务；失败可再次启动重试，不改变业务时间。之后每次启动都会核对这些字段，只改写缺失或与当前规则不一致的行；图片很多时启动会多花一些时间。因此回滚期间旧程序新增或改名的记录，再次升级后仍可被搜到。降级仍应恢复上线前的完整备份。
+
 ## Go 与 HTTPS 证书校验
 
 v4.4.1 将构建工具链更新为 Go 1.26.10，修复 [CVE-2026-111943](https://pkg.go.dev/vuln/GO-2026-6809)：拒绝包含已不再可信的中间 CA 证书的证书链。已有二进制必须重新编译，镜像部署必须替换为修复后重新构建的镜像；只升级宿主机 Go 或更新容器内 CA 证书包不能替代这次工具链更新。
@@ -121,7 +192,7 @@ v4.4.0 支持在账户设置上传头像：
 
 ### 新安装
 
-默认用户名为 `admin`。`DEFAULT_PASS` 为空或仍为旧模板的 `123456` 时，生成独立随机密码，存入 SQLite 同目录的 `.initial_admin_password`，权限 `0600`，日志只提示位置。标准容器路径的读取命令为：
+默认用户名为 `admin`。`DEFAULT_PASS` 为空或仍为旧模板的 `123456` 时，生成独立随机密码，存入 `STATE_DIR` 的 `.initial_admin_password`（SQLite 默认仍为数据库同目录），权限 `0600`，日志只提示位置。标准容器路径的读取命令为：
 
 ```bash
 docker exec oneimg cat /app/data/.initial_admin_password
@@ -131,7 +202,7 @@ docker exec oneimg cat /app/data/.initial_admin_password
 
 ### 历史默认密码账号
 
-当历史 ID `1` 账号仍使用 `123456` 时，启动将其置为受限状态，并在数据库同目录生成 `.admin_recovery_code`。标准容器中由有权操作服务器的人读取：
+当历史 ID `1` 账号仍使用 `123456` 时，启动将其置为受限状态，并在 `STATE_DIR` 生成 `.admin_recovery_code`。标准容器中由有权操作服务器的人读取：
 
 ```bash
 docker exec oneimg cat /app/data/.admin_recovery_code

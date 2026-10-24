@@ -11,6 +11,7 @@ import (
 
 	"oneimg/backend/app"
 	"oneimg/backend/routes"
+	"oneimg/backend/utils/dbmigrate"
 	"oneimg/backend/utils/localimport"
 )
 
@@ -20,6 +21,9 @@ import (
 var fs embed.FS
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "db-migrate" {
+		os.Exit(dbmigrate.RunCLI(os.Args[2:]))
+	}
 	system := app.Init()
 
 	if len(os.Args) > 1 && os.Args[1] == "import-local" {

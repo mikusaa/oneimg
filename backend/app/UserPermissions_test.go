@@ -5,19 +5,11 @@ import (
 	"testing"
 
 	"oneimg/backend/models"
-
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"oneimg/internal/testdb"
 )
 
 func TestMigrateLegacyUserPermissions(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.AutoMigrate(&models.User{}); err != nil {
-		t.Fatal(err)
-	}
+	db := testdb.New(t).DB
 	rows := []struct {
 		id, role int
 		name     string

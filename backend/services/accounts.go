@@ -90,7 +90,7 @@ func (s *AccountService) Register(username, password string) (models.User, error
 		Permission: models.Permission{Codes: []string{}, Buckets: []int{}},
 	}
 	if err := s.db.Create(&user).Error; err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return models.User{}, ErrUsernameConflict
 		}
 		return models.User{}, err
@@ -137,6 +137,7 @@ func (s *AccountService) Update(userID int, currentPassword string, username, pa
 			return models.User{}, ErrUsernameInvalid
 		}
 		updates["username"] = name
+		updates["username_search"] = models.SearchKey(name)
 	}
 	if password != nil {
 		if len(*password) < 6 || len(*password) > 100 || *password == "123456" || bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(*password)) == nil {
@@ -169,7 +170,7 @@ func (s *AccountService) Update(userID int, currentPassword string, username, pa
 		}
 		return tx.Model(&current).Updates(updates).Error
 	}); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return models.User{}, ErrUsernameConflict
 		}
 		return models.User{}, err

@@ -22,7 +22,9 @@ type SettingsFieldError struct {
 func (e *SettingsFieldError) Error() string { return e.Field + ": " + e.Message }
 func (e *SettingsFieldError) Unwrap() error { return ErrSettingsValidation }
 
-func fieldError(field, message string) error { return &SettingsFieldError{Field: field, Message: message} }
+func fieldError(field, message string) error {
+	return &SettingsFieldError{Field: field, Message: message}
+}
 
 type SettingsService struct{ db *gorm.DB }
 

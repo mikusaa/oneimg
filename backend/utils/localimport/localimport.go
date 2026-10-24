@@ -21,6 +21,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"oneimg/backend/database"
 	"oneimg/backend/models"
 	"oneimg/backend/utils/images"
 )
@@ -199,7 +200,7 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 	var existing models.Image
 	result := i.db.Where("url = ?", imageURL).Limit(1).Find(&existing)
 	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
-		return fmt.Errorf("check existing image: %w", result.Error)
+		return fmt.Errorf("check existing image failed (%s)", database.ErrorCode(result.Error))
 	}
 	if result.RowsAffected > 0 {
 		updated, err := i.updateExistingImage(&existing, path, createdAt)
@@ -288,17 +289,22 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 	}
 	storageBytes := int64(len(fileBytes))
 	if len(info.ThumbnailBytes) > 0 {
-		storageBytes += int64(len(info.ThumbnailBytes))
+		var sizeErr error
+		storageBytes, sizeErr = database.StorageBytes(storageBytes, int64(len(info.ThumbnailBytes)))
+		if sizeErr != nil {
+			if thumbnailURL != "" {
+				_ = os.Remove(filepath.Join(i.options.DataRoot, strings.TrimPrefix(thumbnailURL, "/")))
+			}
+			return sizeErr
+		}
 	}
 	imageModel.StorageBytes = &storageBytes
 	if err := i.db.Transaction(func(tx *gorm.DB) error {
-		updated := tx.Model(&models.Buckets{}).
-			Where("id = ? AND (capacity = 0 OR usage + ? <= capacity)", i.options.BucketID, storageBytes).
-			UpdateColumn("usage", gorm.Expr("usage + ?", storageBytes))
-		if updated.Error != nil {
-			return updated.Error
+		reserved, err := database.ReserveUsage(tx, i.options.BucketID, storageBytes)
+		if err != nil {
+			return err
 		}
-		if updated.RowsAffected == 0 {
+		if !reserved {
 			return fmt.Errorf("storage bucket does not exist or capacity exceeded")
 		}
 		return tx.Create(&imageModel).Error
@@ -306,7 +312,7 @@ func (i *Importer) importFile(root, path string, summary *Summary) error {
 		if thumbnailURL != "" {
 			_ = os.Remove(filepath.Join(i.options.DataRoot, strings.TrimPrefix(thumbnailURL, "/")))
 		}
-		return fmt.Errorf("create image record: %w", err)
+		return fmt.Errorf("create image record failed (%s)", database.ErrorCode(err))
 	}
 
 	summary.Imported++
@@ -350,8 +356,8 @@ func (i *Importer) updateExistingImage(existing *models.Image, path string, crea
 	if i.options.DryRun {
 		return true, nil
 	}
-	if err := i.db.Model(existing).Updates(updates).Error; err != nil {
-		return false, fmt.Errorf("update existing image: %w", err)
+	if err := i.db.Model(existing).Updates(models.SearchUpdates(updates)).Error; err != nil {
+		return false, fmt.Errorf("update existing image failed (%s)", database.ErrorCode(err))
 	}
 	return true, nil
 }

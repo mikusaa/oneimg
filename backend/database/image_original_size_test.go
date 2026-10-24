@@ -38,7 +38,10 @@ func TestInitDBAddsOriginalFileSizeWithoutGuessingLegacyValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	InitDB(&config.Config{SqlitePath: path})
+	if err := InitDB(&config.Config{SqlitePath: path}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 	if !db.DB.Migrator().HasColumn(&models.Image{}, "original_file_size") {
 		t.Fatal("original_file_size column was not added")
 	}

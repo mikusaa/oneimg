@@ -27,11 +27,11 @@ func New(db *database.Database, cfg *config.Config) *Services {
 		Tokens: NewTokenService(db.DB, cfg.ConfigSecret),
 	}
 	result.Accounts = NewAccountService(db.DB)
-	result.Accounts.recoveryPath = filepath.Join(filepath.Dir(cfg.SqlitePath), ".admin_recovery_code")
+	result.Accounts.recoveryPath = filepath.Join(cfg.StateDirectory(), ".admin_recovery_code")
 	result.Passkeys = NewPasskeyService(db.DB, result.Accounts)
 	result.Tags = NewTagService(db.DB)
 	result.Images = NewImageService(db.DB)
-	result.Avatars = NewAvatarService(db.DB, filepath.Join(filepath.Dir(cfg.SqlitePath), "avatars"))
+	result.Avatars = NewAvatarService(db.DB, filepath.Join(cfg.StateDirectory(), "avatars"))
 	result.Users = NewUserService(db.DB)
 	result.Users.avatars = result.Avatars
 	result.Settings = NewSettingsService(db.DB)

@@ -13,23 +13,17 @@ import (
 	"time"
 
 	"github.com/chai2010/webp"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"oneimg/backend/models"
 	"oneimg/backend/utils/images"
+	"oneimg/internal/testdb"
 )
 
 func testDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("gorm.Open() error = %v", err)
-	}
-	if err := db.AutoMigrate(&models.Image{}, &models.Buckets{}, &models.Settings{}); err != nil {
-		t.Fatalf("AutoMigrate() error = %v", err)
-	}
+	db := testdb.New(t).DB
 	if err := db.Create(&models.Buckets{Id: 1, Name: "local", Type: "default", Config: map[string]any{}}).Error; err != nil {
 		t.Fatalf("create default bucket: %v", err)
 	}
@@ -139,9 +133,7 @@ func TestSameStemThumbnailsAndRollbackDoNotTouchOtherObjects(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := db.Exec("CREATE TRIGGER reject_import BEFORE INSERT ON images BEGIN SELECT RAISE(ABORT, 'injected failure'); END").Error; err != nil {
-		t.Fatal(err)
-	}
+	testdb.RejectWrites(t, db, "images", "INSERT")
 	writeFile(t, filepath.Join(root, "failed.png"), encodePNG(t))
 	summary, err = NewImporter(db, quietOptions(root, dataRoot)).Run()
 	if err != nil || summary.Failed != 1 {

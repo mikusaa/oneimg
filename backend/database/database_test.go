@@ -13,7 +13,10 @@ import (
 
 func TestInitDBDoesNotCreateStorageSyncSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "new.db")
-	InitDB(&config.Config{SqlitePath: path})
+	if err := InitDB(&config.Config{SqlitePath: path}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 
 	if db.DB.Migrator().HasTable("image_storages") {
 		t.Fatal("new database should not create image_storages")
@@ -43,7 +46,10 @@ func TestInitDBPreservesLegacyStorageSyncSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	InitDB(&config.Config{SqlitePath: path})
+	if err := InitDB(&config.Config{SqlitePath: path}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 	if !db.DB.Migrator().HasTable("image_storages") {
 		t.Fatal("legacy image_storages table should be preserved")
 	}
@@ -73,7 +79,10 @@ func TestInitDBAddsTagIndexWithoutRebuildingLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	InitDB(&config.Config{SqlitePath: path})
+	if err := InitDB(&config.Config{SqlitePath: path}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 	if !db.DB.Migrator().HasIndex(&models.ImageToTags{}, "idx_image_to_tags_tag_id") {
 		t.Fatal("image_to_tags should have a tag_id index")
 	}

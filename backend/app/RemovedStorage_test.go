@@ -5,22 +5,19 @@ import (
 
 	"oneimg/backend/models"
 
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"oneimg/backend/database"
+	"oneimg/internal/testdb"
 )
 
 func TestResetRemovedStorageDefaults(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	if err := db.AutoMigrate(&models.Buckets{}, &models.Settings{}); err != nil {
-		t.Fatalf("migrate database: %v", err)
-	}
+	db := testdb.New(t).DB
 
 	localBucket := models.Buckets{Id: 1, Name: "local", Type: "default", Config: map[string]any{}}
 	if err := db.Create(&localBucket).Error; err != nil {
 		t.Fatalf("create local bucket: %v", err)
+	}
+	if err := database.SyncSequences(db, nil); err != nil {
+		t.Fatal(err)
 	}
 	removedBucket := models.Buckets{Name: "removed", Type: "telegram", Config: map[string]any{}}
 	if err := db.Create(&removedBucket).Error; err != nil {

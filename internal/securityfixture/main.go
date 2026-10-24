@@ -2,14 +2,19 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -19,9 +24,22 @@ import (
 	"oneimg/backend/models"
 	"oneimg/backend/routes"
 	"oneimg/backend/services"
+	"oneimg/internal/testdb"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() (err error) {
+	// Unwind cleanup before reporting a setup failure, including partial seeds.
+	defer func() {
+		if recover() != nil {
+			err = errors.New("disposable browser fixture initialization failed")
+		}
+	}()
 	root, err := os.Getwd()
 	must(err)
 	temp, err := os.MkdirTemp("", "oneimg-security-browser-*")
@@ -31,14 +49,17 @@ func main() {
 	must(os.Mkdir("uploads", 0700))
 	cfg := &config.Config{AppURL: "http://127.0.0.1:18089", SqlitePath: filepath.Join(temp, "test.db"), SessionSecret: "test-only-session-secret", ConfigSecret: "test-only-config-secret"}
 	config.App = cfg
-	database.InitDB(cfg)
-	db := database.GetDB()
+	db, cleanup, err := testdb.Open(cfg.SqlitePath)
+	must(err)
+	defer cleanup()
+	must(database.MigrateSchema(db.DB))
+	database.SetDB(db)
 	hash, err := bcrypt.GenerateFromPassword([]byte("browser-test-password"), bcrypt.MinCost)
 	must(err)
 	must(db.DB.Create(&models.User{ID: 1, Username: "browser-test", Password: string(hash), Role: models.RoleAdmin}).Error)
 	must(db.DB.Create(&models.Settings{}).Error)
 	must(db.DB.Create(&models.Buckets{Id: 1, Name: `storage"><script>window.previewInjected=1</script>`, Type: "default"}).Error)
-	tag := models.Tags{Name: `tag"><img src=x onerror="window.previewInjected=1">`}
+	tag := models.Tags{Name: `t"><img src=x onerror="window.previewInjected=1">`}
 	must(db.DB.Create(&tag).Error)
 	filename := `legacy"#? onerror="window.previewInjected=1.png`
 	file, err := os.Create(filepath.Join("uploads", filename))
@@ -57,6 +78,7 @@ func main() {
 	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><style>@font-face{font-family:evil;src:url('/svg-font')}text{font-family:evil}</style><rect width="80" height="80" fill="red"/><script>window.svgInjected=1;fetch('/svg-leak')</script><image href="/svg-external"/><text y="20">text</text><foreignObject width="100" height="100"><div xmlns="http://www.w3.org/1999/xhtml"><iframe src="/svg-frame"></iframe><form action="/svg-form"><button type="submit">submit</button></form></div></foreignObject></svg>`
 	must(os.WriteFile("uploads/legacy.svg", []byte(svg), 0600))
 	must(db.DB.Create(&models.Image{Id: 2, Url: "/uploads/legacy.svg", FileName: "legacy.svg", MimeType: "image/svg+xml", Width: 100, Height: 100, Storage: "default", BucketId: 1, UserId: 1}).Error)
+	must(database.SyncSequences(db.DB, nil))
 	system := &app.System{Config: cfg, Database: db, Services: services.New(db, cfg)}
 	router := routes.SetupRoutes(os.DirFS(root), system)
 	var attempts atomic.Int64
@@ -68,11 +90,26 @@ func main() {
 	}
 	router.GET("/__security/csp-requests", func(c *gin.Context) { c.JSON(http.StatusOK, attempts.Load()) })
 	log.Println("Disposable browser fixture ready on loopback :18089")
-	must(http.ListenAndServe("127.0.0.1:18089", router))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	server := &http.Server{Addr: "127.0.0.1:18089", Handler: router, ReadHeaderTimeout: 5 * time.Second}
+	serveError := make(chan error, 1)
+	go func() { serveError <- server.ListenAndServe() }()
+	select {
+	case <-ctx.Done():
+		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdown)
+	case err := <-serveError:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return errors.New("disposable browser fixture failed")
+		}
+	}
+	return nil
 }
 
 func must(err error) {
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }

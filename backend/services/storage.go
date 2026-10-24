@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -162,6 +163,9 @@ func readFilesystemMetrics(path string) (*FilesystemMetrics, error) {
 }
 
 func validateStorageInput(input StorageInput, allowDefault bool) (StorageInput, error) {
+	if input.CapacityBytes > math.MaxInt64 {
+		return input, ErrStorageCapacity
+	}
 	input.Name = strings.TrimSpace(input.Name)
 	input.Type = strings.ToLower(strings.TrimSpace(input.Type))
 	valid := map[string]bool{"s3": true, "r2": true, "ftp": true, "webdav": true}

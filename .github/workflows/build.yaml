@@ -26,6 +26,19 @@ jobs:
     runs-on: ubuntu-latest
     # 正常 17–28 分钟；QEMU 挂起时尽早失败，而不是等到 6 小时上限
     timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_DB: oneimg_test
+          POSTGRES_PASSWORD: oneimg-ci-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d oneimg_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
 
     steps:
       - name: 检出代码
@@ -54,6 +67,11 @@ jobs:
           go-version: '1.26.10'
 
       - name: 后端测试
+        run: go test ./...
+
+      - name: PostgreSQL 17 发布构建门禁
+        env:
+          ONEIMG_TEST_POSTGRES_URL: postgres://postgres:oneimg-ci-test-only@127.0.0.1:5432/oneimg_test?sslmode=disable
         run: go test ./...
 
       - name: 配置 QEMU

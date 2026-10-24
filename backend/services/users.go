@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"oneimg/backend/database"
 	"oneimg/backend/models"
 
 	"golang.org/x/crypto/bcrypt"
@@ -47,7 +48,7 @@ func (s *UserService) List(input UserListQuery) ([]UserRecord, int64, error) {
 		query = query.Where("id = ?", *input.ID)
 	}
 	if strings.TrimSpace(input.Username) != "" {
-		query = query.Where("username LIKE ?", "%"+strings.TrimSpace(input.Username)+"%")
+		query = query.Where(database.SearchLike(s.db, "username_search"), "%"+models.SearchKey(strings.TrimSpace(input.Username))+"%")
 	}
 	if input.Role != nil {
 		query = query.Where("role = ?", *input.Role)
@@ -57,7 +58,7 @@ func (s *UserService) List(input UserListQuery) ([]UserRecord, int64, error) {
 		return nil, 0, err
 	}
 	var users []models.User
-	orderFields := map[string]string{"id": "id", "username": "username", "created_at": "created_at"}
+	orderFields := map[string]string{"id": "id", "username": database.BinaryOrder(s.db, "username"), "created_at": "created_at"}
 	if err := query.Order(orderFields[input.Sort] + " " + input.Order).Offset((input.Page - 1) * input.PageSize).Limit(input.PageSize).Find(&users).Error; err != nil {
 		return nil, 0, err
 	}
@@ -111,7 +112,7 @@ func (s *UserService) Create(username, password string, role int) (models.User, 
 	}
 	user := models.User{Username: username, Password: string(hash), Role: role, Permission: models.Permission{Codes: []string{}, Buckets: []int{}}}
 	if err := s.db.Create(&user).Error; err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return models.User{}, ErrUsernameConflict
 		}
 		return models.User{}, err
@@ -134,6 +135,7 @@ func (s *UserService) Update(actorID, id int, username *string, role *int) (mode
 			return models.User{}, ErrUsernameInvalid
 		}
 		updates["username"] = name
+		updates["username_search"] = models.SearchKey(name)
 	}
 	if role != nil {
 		if *role != models.RoleAdmin && *role != models.RoleUser {
@@ -149,7 +151,7 @@ func (s *UserService) Update(actorID, id int, username *string, role *int) (mode
 		return models.User{}, errors.New("no user fields supplied")
 	}
 	if err := s.db.Model(&user).Updates(updates).Error; err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return models.User{}, ErrUsernameConflict
 		}
 		return models.User{}, err

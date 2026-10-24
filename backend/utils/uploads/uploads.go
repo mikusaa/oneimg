@@ -61,7 +61,7 @@ func findDuplicateUploadResult(c *gin.Context, bucket *models.Buckets, contentHa
 		Limit(1).
 		Find(&imageModel)
 	if result.Error != nil {
-		log.Printf("检查重复图片失败: %v", result.Error)
+		log.Printf("检查重复图片失败 (%s)", database.ErrorCode(result.Error))
 		return nil
 	}
 	if result.RowsAffected == 0 {
