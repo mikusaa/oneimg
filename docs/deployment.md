@@ -34,7 +34,7 @@ PASSKEY_RP_NAME=OneImg
 检出已审阅的版本，在 `docker-compose.yml` 中注释 `image:` 行并启用 `build: .`：
 
 ```bash
-git clone --branch v4.5.0 --depth 1 https://github.com/mikusaa/oneimg.git
+git clone --branch v4.5.1 --depth 1 https://github.com/mikusaa/oneimg.git
 cd oneimg
 cp docker-compose.yml.example docker-compose.yml
 mkdir -p data uploads
@@ -60,7 +60,7 @@ docker run -d \
   -e APP_URL=http://localhost:8080 \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/uploads:/app/uploads" \
-  ghcr.io/mikusaa/oneimg:v4.5.0
+  ghcr.io/mikusaa/oneimg:v4.5.1
 ```
 
 连接 PostgreSQL 时增加 `-e DB_TYPE=postgres` 和 `-e DATABASE_URL=...`，要求见[连接已有 PostgreSQL](#连接已有-postgresql)。连接地址含密码，不要写进 shell 历史或公开脚本，可改用 `--env-file` 指向权限为 `0600` 的文件。初始密码用 `docker exec oneimg cat /app/data/.initial_admin_password` 读取。
@@ -152,7 +152,7 @@ PostgreSQL 会话时区固定 UTC；统计日、周、月、年边界使用应�
 [PostgreSQL 模板](../docker-compose.postgres.yml.example)同时启动应用和固定版本 `postgres:17.11`。数据库只接入内部网络，不映射宿主机端口，也不能访问外网；应用同时接入可访问远端存储的普通网络。
 
 ```bash
-curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/mikusaa/oneimg/v4.5.0/docker-compose.postgres.yml.example
+curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/mikusaa/oneimg/v4.5.1/docker-compose.postgres.yml.example
 mkdir -p data uploads
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)" > .env
 chmod 600 .env

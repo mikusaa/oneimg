@@ -69,7 +69,7 @@ OneImg 是面向个人图床和受控多账号使用的自托管媒体管理工�
 
 ```bash
 mkdir oneimg && cd oneimg
-curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/mikusaa/oneimg/v4.5.0/docker-compose.yml.example
+curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/mikusaa/oneimg/v4.5.1/docker-compose.yml.example
 mkdir -p data uploads
 docker compose up -d
 ```
@@ -80,7 +80,7 @@ docker compose up -d
 
 ```bash
 mkdir oneimg && cd oneimg
-curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/mikusaa/oneimg/v4.5.0/docker-compose.postgres.yml.example
+curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/mikusaa/oneimg/v4.5.1/docker-compose.postgres.yml.example
 mkdir -p data uploads
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)" > .env
 chmod 600 .env
@@ -137,4 +137,4 @@ v4.5.0 新增可选 PostgreSQL，已有 SQLite 部署无需改配置即可升级
 
 跨越多个版本时，逐项检查[升级指南](docs/upgrading.md#按版本检查兼容性)：v4.4.1 收紧 HTTPS 证书校验；v4.4.0 起用户头像保存在 `data/avatars`；v4.3.0 起本地存储新文件统一写入 `uploads`，直链域名改为按存储设置；v4.2.0 起删除存储默认保留远端文件；v4.1.3 起改密或管理员重置会使旧会话和 PAT 失效。历史默认密码账号、可信代理、SVG 出口与缓存、图像限制及单实例运行要求同样见升级指南；不要用旧数据库备份让已撤销的凭据重新生效。
 
-查看 [v4.5.0 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.5.0)或[所有 Releases](https://github.com/mikusaa/oneimg/releases)。
+查看 [v4.5.1 发布说明](https://github.com/mikusaa/oneimg/releases/tag/v4.5.1)或[所有 Releases](https://github.com/mikusaa/oneimg/releases)。
