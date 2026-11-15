@@ -24,7 +24,10 @@ export function mediaLink(media: MediaRecord, format: string, url = media.url ||
     if (video) return `<video src="${html(url)}" ${format === 'gif' ? 'autoplay loop muted' : 'controls'} playsinline></video>`
     return `<img src="${html(url)}" alt="${html(name)}">`
   }
-  if (format === 'markdown') return `${video ? '' : '!'}[${markdown(name)}](<${url.replace(/[<>\s\\]/g, char => encodeURIComponent(char))}>)`
+  if (format === 'markdown') {
+    const destination = url.replace(/[<>\s\\]/g, char => encodeURIComponent(char))
+    return `${video ? '' : '!'}[${markdown(name)}](${/[()]/.test(destination) ? `<${destination}>` : destination})`
+  }
   if (format === 'bbcode') return video ? `[url=${url}]${name}[/url]` : `[img]${url}[/img]`
   return url
 }
