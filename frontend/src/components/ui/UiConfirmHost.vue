@@ -25,6 +25,7 @@ const onOpenChange = (open: boolean) => { if (!open && confirmState.resolve) set
     :description="options.description"
     :icon="options.icon || (options.danger ? 'ri-error-warning-line' : 'ri-question-line')"
     :tone="options.danger ? 'danger' : 'default'"
+    elevated
     @update:open="onOpenChange"
   >
     <template v-if="options.points?.length" #header>

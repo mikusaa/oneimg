@@ -12,7 +12,9 @@ const props = withDefaults(defineProps<{
   wide?: boolean
   /** 右上角显示关闭按钮；Esc 和点遮罩始终可以关闭 */
   closeButton?: boolean
-}>(), { tone: 'default', wide: false, closeButton: false })
+  /** 盖在全屏查看器（z-180）之上，全局确认弹窗用；提示条仍在它上面（z-200） */
+  elevated?: boolean
+}>(), { tone: 'default', wide: false, closeButton: false, elevated: false })
 
 const open = defineModel<boolean>('open', { default: false })
 const slots = useSlots()
@@ -26,11 +28,12 @@ const close = () => { open.value = false }
       <slot name="trigger" />
     </DialogTrigger>
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-[100] bg-oi-scrim backdrop-blur-[3px] data-[state=open]:animate-oi-fade motion-reduce:animate-none" />
+      <DialogOverlay :class="['fixed inset-0 bg-oi-scrim backdrop-blur-[3px] data-[state=open]:animate-oi-fade motion-reduce:animate-none', elevated ? 'z-[190]' : 'z-[100]']" />
       <DialogContent
         v-bind="hasDescription ? {} : { 'aria-describedby': undefined }"
         :class="[
-          'fixed left-1/2 top-1/2 z-[101] max-h-[calc(100dvh-32px)] -translate-x-1/2 -translate-y-1/2 overflow-auto',
+          'fixed left-1/2 top-1/2 max-h-[calc(100dvh-32px)] -translate-x-1/2 -translate-y-1/2 overflow-auto',
+          elevated ? 'z-[191]' : 'z-[101]',
           'rounded-[20px] border border-oi-line bg-oi-raised font-oi text-oi-text shadow-oi-lg outline-none',
           'data-[state=open]:animate-oi-dialog-in motion-reduce:animate-none',
           wide ? 'w-[min(620px,calc(100vw-32px))]' : 'w-[min(480px,calc(100vw-32px))]',
